@@ -242,14 +242,8 @@ class TokenGatedAPI {
         
         let session;
         
-        // Check if bypass mode (for testing)
-        if (sessionToken && sessionToken.startsWith('bypass-')) {
-          console.log('Bypass mode - using provided wallet/contract directly');
-          session = {
-            wallet_address: walletAddress || '0x0000000000000000000000000000000000000000',
-            contract_address: contractAddress || process.env.CONTRACT_ADDRESS
-          };
-        } else if (sessionToken) {
+        // Require valid session token - NO BYPASS
+        if (sessionToken) {
           // Normal JWT verification
           const jwtSecret = process.env.JWT_SECRET;
           try {
@@ -266,10 +260,7 @@ class TokenGatedAPI {
           
           // Additional database validation for session tracking
           const dbSession = await this.db.validateSession(sessionToken);
-          if (!dbSession && !sessionToken.startsWith('bypass-')) {
-            // Session is already set from JWT decode above
-            // No need to override it
-          }
+          // Session is already set from JWT decode above
         } else {
           return res.status(400).json({ 
             error: 'Session token required' 
@@ -304,15 +295,11 @@ class TokenGatedAPI {
           if (result.success) {
             const claim = await this.db.submitClaim(
               session.contract_address,
-              session.wallet_address,
-              cleanUsername
+              session.wallet_address
             );
             
             // Mark session as used
             await this.db.markSessionClaimed(sessionToken);
-            
-            // Update claim status to success
-            await this.db.updateClaimStatus(claim.id, 'success');
             
             res.json({
               success: true,
