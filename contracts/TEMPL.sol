@@ -22,6 +22,10 @@ contract TEMPL {
     uint256 public memberPoolBalance;
     bool public paused;
     
+    // Priest voting weight configuration
+    uint256 public immutable priestVoteWeight; // Weight of priest's vote when below threshold
+    uint256 public immutable priestWeightThreshold; // Member count threshold for priest weight reduction
+    
     // Track purchases
     mapping(address => bool) public hasPurchased;
     mapping(address => uint256) public purchaseTimestamp;
@@ -55,7 +59,7 @@ contract TEMPL {
     mapping(address => uint256) public activeProposalId; // Track active proposal per user (0 = no active proposal)
     mapping(address => bool) public hasActiveProposal; // Quick check if user has active proposal
     uint256 public constant DEFAULT_VOTING_PERIOD = 7 days;
-    uint256 public constant MIN_VOTING_PERIOD = 1 days;
+    uint256 public constant MIN_VOTING_PERIOD = 7 days;
     uint256 public constant MAX_VOTING_PERIOD = 30 days;
     
     // Totals
@@ -151,20 +155,28 @@ contract TEMPL {
      * @param _priest Address that receives protocol fees (NOT treasury control)
      * @param _token Address of the ERC20 token
      * @param _entryFee Total entry fee in wei (absolute value)
+     * @param _priestVoteWeight Weight of priest's vote when below threshold (default 10)
+     * @param _priestWeightThreshold Member count threshold for priest weight reduction (default 10)
      */
     constructor(
         address _priest,
         address _token,
-        uint256 _entryFee
+        uint256 _entryFee,
+        uint256 _priestVoteWeight,
+        uint256 _priestWeightThreshold
     ) {
         require(_priest != address(0), "Invalid priest address");
         require(_token != address(0), "Invalid token address");
         require(_entryFee > 0, "Entry fee must be greater than 0");
         require(_entryFee >= 10, "Entry fee too small for distribution");
+        require(_priestVoteWeight > 0, "Priest vote weight must be greater than 0");
+        require(_priestWeightThreshold > 0, "Priest weight threshold must be greater than 0");
         
         priest = _priest;
         accessToken = _token;
         entryFee = _entryFee;
+        priestVoteWeight = _priestVoteWeight;
+        priestWeightThreshold = _priestWeightThreshold;
         paused = false;
     }
     
@@ -338,10 +350,16 @@ contract TEMPL {
         proposal.hasVoted[msg.sender] = true;
         proposal.voteChoice[msg.sender] = _support;
         
+        // Calculate vote weight (priest gets special weight if below threshold)
+        uint256 voteWeight = 1;
+        if (msg.sender == priest && members.length < priestWeightThreshold) {
+            voteWeight = priestVoteWeight;
+        }
+        
         if (_support) {
-            proposal.yesVotes++;
+            proposal.yesVotes += voteWeight;
         } else {
-            proposal.noVotes++;
+            proposal.noVotes += voteWeight;
         }
         
         emit VoteCast(_proposalId, msg.sender, _support, block.timestamp);
@@ -645,6 +663,20 @@ contract TEMPL {
      */
     function getMemberCount() external view returns (uint256) {
         return members.length;
+    }
+    
+    /**
+     * @dev Get current vote weight for an address
+     * @param voter The address to check
+     */
+    function getVoteWeight(address voter) external view returns (uint256) {
+        if (!hasPurchased[voter]) {
+            return 0;
+        }
+        if (voter == priest && members.length < priestWeightThreshold) {
+            return priestVoteWeight;
+        }
+        return 1;
     }
     
     /**

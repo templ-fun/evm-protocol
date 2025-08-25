@@ -7,9 +7,12 @@
 **Deployed on BASE Chain** - Users pay tokens to join exclusive Telegram groups:
 - **30% Burned**: Permanently removed from circulation
 - **30% to DAO Treasury**: Controlled by member voting, not priest
-- **30% to Member Pool**: Distributed pro-rata to existing members
+- **30% to Member Pool**: Distributed pro-rata to existing members (30% to 1st member, 15% each to 2 members, 10% each to 3+ members)
 - **10% Protocol Fee**: Goes directly to priest address
 - **DAO Governance**: Members vote on treasury withdrawals and config changes
+- **Priest Voting Power**: Priest's vote has configurable weight (default 10x) until member threshold is reached (default 10 members)
+- **Single Active Proposal**: Each member can only have one active proposal at a time
+- **Voting Eligibility**: Only members who joined before a proposal was created can vote on it
 - **One Purchase Per Wallet**: Enforced on-chain and off-chain
 - **Direct Invitations**: No public invite links for maximum security
 - **BASE Network**: Fast & low-cost transactions
@@ -19,10 +22,12 @@
 
 - ✅ DAO-controlled treasury (voting required for withdrawals)
 - ✅ 30/30/30/10 fee split (burn/DAO treasury/pool/protocol)
-- ✅ Pro-rata member rewards system
+- ✅ Pro-rata member rewards system with fair distribution
 - ✅ Member-driven governance with proposals and voting
 - ✅ Executable on-chain proposals
-- ✅ >50% yes votes required to pass proposals
+- ✅ >50% yes votes required to pass proposals (simple majority)
+- ✅ Single active proposal per member (prevents spam)
+- ✅ Voting restricted to members who joined before proposal creation (prevents gaming)
 - ✅ Payment enforcement before access
 - ✅ JWT authentication with required secrets
 - ✅ Nonce-based signature verification (replay attack prevention)
@@ -85,6 +90,13 @@ Use the all-in-one interface at `https://yoursite.com/purchase.html?contract=0x.
 3. **Purchase Access** - Pay entry fee (30% burned, 30% treasury, 30% member pool, 10% protocol)
 4. **Enter Username** - Submit your Telegram username
 5. **Receive Invitation** - Bot sends group invite
+6. **Claim Rewards** - Check and claim your member pool rewards anytime
+
+### Member Pool Distribution
+The 30% member pool is distributed based on member count:
+- **1 Member**: Gets full 30% from next joiner
+- **2 Members**: Each gets 15% from next joiner
+- **3+ Members**: Each gets equal share (10% each for 3, 7.5% each for 4, etc.)
 
 ### Alternative: Direct Contract + Claim
 1. Call `contract.purchaseAccess()` directly via Etherscan/wallet
@@ -106,27 +118,42 @@ Visit `https://yoursite.com/propose.html?contract=0x...`
   - Config updates
   - Pause/unpause contract
   - Custom actions
-- Set voting period (default 7 days)
+- Set voting period (7-30 days, default 7 days)
 - Submit proposal
+- **Note**: Each member can only have one active proposal at a time
 
 ### Voting on Proposals
 Visit `https://yoursite.com/vote.html?contract=0x...`
 - View active proposals
-- Cast yes/no votes
+- Cast yes/no votes (one vote per member)
 - Track voting progress
-- Execute passed proposals
+- Execute passed proposals (requires >50% yes votes)
+- **Note**: Only members who joined before the proposal was created can vote
 
 ### Treasury Info
 ```javascript
 // Check treasury balance
 const info = await contract.getTreasuryInfo()
 
-// Treasury withdrawals require passed proposals
-await contract.withdrawTreasury(recipient, amount)
+// Treasury withdrawals require passed DAO proposals
+// These functions will revert with error message directing to DAO
+await contract.withdrawTreasury(recipient, amount) // DEPRECATED - use DAO
 
-// Withdraw all funds
-await contract.withdrawAllTreasury(recipient)
+// DAO-controlled treasury functions (called via proposals)
+await contract.withdrawTreasuryDAO(recipient, amount, reason)
+await contract.withdrawAllTreasuryDAO(recipient, reason)
 ```
+
+### Governance Rules
+- **Proposal Limits**: One active proposal per member at a time
+- **Voting Eligibility**: Only members who joined before proposal creation can vote
+- **Passing Threshold**: Simple majority (>50% of votes cast)
+- **Voting Period**: Configurable from 7 to 30 days
+- **Priest Vote Weight**: 
+  - Priest's vote counts as multiple votes (configurable, default 10)
+  - Weight applies when member count is below threshold (configurable, default 10 members)
+  - Once threshold is reached, priest's vote counts as 1 like everyone else
+- **Execution**: Anyone can execute passed proposals after voting ends
 
 ## 🔧 API Endpoints
 
@@ -187,14 +214,35 @@ function getPurchaseDetails(address) view returns (purchased, timestamp, block)
 function getClaimablePoolAmount(address member) view returns (uint256)
 function claimMemberPool() external
 
-// Treasury Functions (Priest Only)
-function withdrawTreasury(address recipient, uint256 amount) external
-function withdrawAllTreasury(address recipient) external
-function getTreasuryInfo() view returns (treasury, memberPool, totalReceived, totalBurned, totalProtocol, priest)
+// DAO Governance Functions (Members Only)
+function createProposal(string title, string description, bytes callData, uint256 votingPeriod) returns (uint256)
+function vote(uint256 proposalId, bool support) external
+function executeProposal(uint256 proposalId) external
+function getProposal(uint256 proposalId) view returns (proposer, title, description, yesVotes, noVotes, endTime, executed, passed)
+function hasVoted(uint256 proposalId, address voter) view returns (bool voted, bool support)
+function getActiveProposals() view returns (uint256[] memory)
+function hasActiveProposal(address member) view returns (bool)
+function activeProposalId(address member) view returns (uint256)
+function getVoteWeight(address voter) view returns (uint256)
 
-// Admin Functions (Priest Only)
-function setPaused(bool) external
-function updateConfig(address token, uint256 fee) external
+// DAO-Controlled Treasury Functions (Called via Proposals)
+function withdrawTreasuryDAO(address recipient, uint256 amount, string reason) external
+function withdrawAllTreasuryDAO(address recipient, string reason) external
+function updateConfigDAO(address token, uint256 fee) external
+function setPausedDAO(bool paused) external
+
+// Legacy Functions (Now Require DAO Approval - Will Revert)
+function withdrawTreasury(address recipient, uint256 amount) external // DEPRECATED
+function withdrawAllTreasury(address recipient) external // DEPRECATED
+function updateConfig(address token, uint256 fee) external // DEPRECATED
+function setPaused(bool) external // DEPRECATED
+
+// Info Functions
+function getTreasuryInfo() view returns (treasury, memberPool, totalReceived, totalBurned, totalProtocol, priest)
+function getConfig() view returns (token, fee, isPaused, purchases, treasury, pool)
+function getMemberCount() view returns (uint256)
+
+// Emergency Recovery (Priest Only - for wrong tokens)
 function recoverWrongToken(address token, address to) external
 ```
 
@@ -231,6 +279,8 @@ TOKEN_ADDRESS=0x...   # ERC20 token on BASE
 ENTRY_FEE=420         # Must be at least 10 for proper distribution
 CONTRACT_ADDRESS=0x...  # After deployment
 CHAIN_ID=8453        # BASE mainnet
+PRIEST_VOTE_WEIGHT=10   # Optional: Priest vote multiplier (default 10)
+PRIEST_WEIGHT_THRESHOLD=10  # Optional: Member count for priest weight reduction (default 10)
 
 # DATABASE (Required)
 DB_HOST=localhost

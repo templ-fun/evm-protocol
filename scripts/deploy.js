@@ -59,7 +59,9 @@ async function main() {
   const contract = await TEMPL.deploy(
     PRIEST_ADDRESS,
     TOKEN_ADDRESS,
-    ENTRY_FEE
+    ENTRY_FEE,
+    process.env.PRIEST_VOTE_WEIGHT || 10,  // Default to 10 if not specified
+    process.env.PRIEST_WEIGHT_THRESHOLD || 10  // Default to 10 members if not specified
   );
   await contract.waitForDeployment();
   const contractAddress = await contract.getAddress();

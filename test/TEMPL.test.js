@@ -21,7 +21,9 @@ describe("TEMPL Contract with DAO Governance", function () {
         templ = await TEMPL.deploy(
             priest.address,
             await token.getAddress(),
-            ENTRY_FEE
+            ENTRY_FEE,
+            10, // priestVoteWeight
+            10  // priestWeightThreshold
         );
         await templ.waitForDeployment();
 
@@ -138,7 +140,7 @@ describe("TEMPL Contract with DAO Governance", function () {
                 "Test",
                 "Description",
                 "0x1234",
-                60 // 1 minute (too short)
+                6 * 24 * 60 * 60 // 6 days (less than minimum 7 days)
             )).to.be.revertedWith("Voting period too short");
         });
 
@@ -257,7 +259,7 @@ describe("TEMPL Contract with DAO Governance", function () {
                 "Treasury Withdrawal",
                 "Withdraw 10 tokens",
                 callData,
-                1 * 24 * 60 * 60 // 1 day
+                7 * 24 * 60 * 60 // 7 days
             );
 
             // Vote yes (majority)
@@ -265,7 +267,7 @@ describe("TEMPL Contract with DAO Governance", function () {
             await templ.connect(user2).vote(0, true);
 
             // Fast forward past voting period
-            await ethers.provider.send("evm_increaseTime", [2 * 24 * 60 * 60]);
+            await ethers.provider.send("evm_increaseTime", [8 * 24 * 60 * 60]);
             await ethers.provider.send("evm_mine");
 
             const treasuryBefore = await templ.treasuryBalance();
@@ -300,7 +302,7 @@ describe("TEMPL Contract with DAO Governance", function () {
                 "Test",
                 "Test proposal",
                 callData,
-                1 * 24 * 60 * 60
+                7 * 24 * 60 * 60
             );
 
             // Vote no (majority)
@@ -309,7 +311,7 @@ describe("TEMPL Contract with DAO Governance", function () {
             await templ.connect(user3).vote(0, true);
 
             // Fast forward
-            await ethers.provider.send("evm_increaseTime", [2 * 24 * 60 * 60]);
+            await ethers.provider.send("evm_increaseTime", [8 * 24 * 60 * 60]);
             await ethers.provider.send("evm_mine");
 
             // Try to execute
@@ -328,7 +330,7 @@ describe("TEMPL Contract with DAO Governance", function () {
                 "Pause",
                 "Pause contract",
                 callData,
-                1 * 24 * 60 * 60
+                7 * 24 * 60 * 60
             );
 
             // Vote yes
@@ -354,7 +356,7 @@ describe("TEMPL Contract with DAO Governance", function () {
                 "Update Fee",
                 "Change entry fee to 200",
                 callData,
-                1 * 24 * 60 * 60
+                7 * 24 * 60 * 60
             );
 
             // Vote yes
@@ -362,7 +364,7 @@ describe("TEMPL Contract with DAO Governance", function () {
             await templ.connect(user2).vote(0, true);
 
             // Fast forward and execute
-            await ethers.provider.send("evm_increaseTime", [2 * 24 * 60 * 60]);
+            await ethers.provider.send("evm_increaseTime", [8 * 24 * 60 * 60]);
             await ethers.provider.send("evm_mine");
 
             await templ.executeProposal(0);
@@ -380,7 +382,7 @@ describe("TEMPL Contract with DAO Governance", function () {
                 "Pause Contract",
                 "Emergency pause",
                 callData,
-                1 * 24 * 60 * 60
+                7 * 24 * 60 * 60
             );
 
             // Vote yes
@@ -388,7 +390,7 @@ describe("TEMPL Contract with DAO Governance", function () {
             await templ.connect(user2).vote(0, true);
 
             // Fast forward and execute
-            await ethers.provider.send("evm_increaseTime", [2 * 24 * 60 * 60]);
+            await ethers.provider.send("evm_increaseTime", [8 * 24 * 60 * 60]);
             await ethers.provider.send("evm_mine");
 
             await templ.executeProposal(0);
@@ -411,13 +413,13 @@ describe("TEMPL Contract with DAO Governance", function () {
                 "Test",
                 "Test",
                 callData,
-                1 * 24 * 60 * 60
+                7 * 24 * 60 * 60
             );
 
             await templ.connect(user1).vote(0, true);
             await templ.connect(user2).vote(0, true);
 
-            await ethers.provider.send("evm_increaseTime", [2 * 24 * 60 * 60]);
+            await ethers.provider.send("evm_increaseTime", [8 * 24 * 60 * 60]);
             await ethers.provider.send("evm_mine");
 
             await templ.executeProposal(0);
@@ -471,14 +473,14 @@ describe("TEMPL Contract with DAO Governance", function () {
                 "Treasury Transfer",
                 "Transfer half treasury",
                 callData,
-                1 * 24 * 60 * 60
+                7 * 24 * 60 * 60
             );
 
             // Pass the proposal
             await templ.connect(user1).vote(0, true);
             await templ.connect(user2).vote(0, true);
 
-            await ethers.provider.send("evm_increaseTime", [2 * 24 * 60 * 60]);
+            await ethers.provider.send("evm_increaseTime", [8 * 24 * 60 * 60]);
             await ethers.provider.send("evm_mine");
 
             const treasuryBefore = await templ.treasuryBalance();
@@ -524,7 +526,7 @@ describe("TEMPL Contract with DAO Governance", function () {
                 "Active 2",
                 "Second active",
                 "0x5678",
-                3 * 24 * 60 * 60
+                10 * 24 * 60 * 60
             );
 
             const activeProposals = await templ.getActiveProposals();
@@ -538,18 +540,18 @@ describe("TEMPL Contract with DAO Governance", function () {
                 "Short",
                 "Expires soon",
                 "0x1234",
-                1 * 24 * 60 * 60 // 1 day
+                7 * 24 * 60 * 60 // 7 days
             );
 
             await templ.connect(user2).createProposal(
                 "Long",
                 "Active longer",
                 "0x5678",
-                7 * 24 * 60 * 60 // 7 days
+                14 * 24 * 60 * 60 // 14 days
             );
 
-            // Fast forward 2 days
-            await ethers.provider.send("evm_increaseTime", [2 * 24 * 60 * 60]);
+            // Fast forward 8 days (first proposal expires, second still active)
+            await ethers.provider.send("evm_increaseTime", [8 * 24 * 60 * 60]);
             await ethers.provider.send("evm_mine");
 
             const activeProposals = await templ.getActiveProposals();
@@ -567,14 +569,14 @@ describe("TEMPL Contract with DAO Governance", function () {
                 "Execute Me",
                 "Will be executed",
                 callData,
-                1 * 24 * 60 * 60
+                7 * 24 * 60 * 60
             );
 
             await templ.connect(user2).createProposal(
                 "Still Active",
                 "Not executed",
                 "0x5678",
-                7 * 24 * 60 * 60
+                14 * 24 * 60 * 60
             );
 
             // Need to wait a bit for voting timestamps
@@ -584,7 +586,7 @@ describe("TEMPL Contract with DAO Governance", function () {
             // Vote and execute first proposal
             await templ.connect(user1).vote(0, true);
             
-            await ethers.provider.send("evm_increaseTime", [1 * 24 * 60 * 60]);
+            await ethers.provider.send("evm_increaseTime", [7 * 24 * 60 * 60]);
             await ethers.provider.send("evm_mine");
             
             await templ.executeProposal(0);
@@ -683,7 +685,9 @@ describe("TEMPL Contract with DAO Governance", function () {
             const minTempl = await ethers.deployContract("TEMPL", [
                 priest.address,
                 await token.getAddress(),
-                10 // Minimum allowed
+                10, // Minimum allowed
+                10, // priestVoteWeight
+                10  // priestWeightThreshold
             ]);
 
             await token.connect(user1).approve(await minTempl.getAddress(), 10);
@@ -697,7 +701,9 @@ describe("TEMPL Contract with DAO Governance", function () {
             await expect(ethers.deployContract("TEMPL", [
                 priest.address,
                 await token.getAddress(),
-                9 // Below minimum
+                9, // Below minimum
+                10, // priestVoteWeight
+                10  // priestWeightThreshold
             ])).to.be.revertedWith("Entry fee too small for distribution");
         });
 
@@ -735,12 +741,12 @@ describe("TEMPL Contract with DAO Governance", function () {
                 "Bad Proposal",
                 "This will fail",
                 badCallData,
-                1 * 24 * 60 * 60
+                7 * 24 * 60 * 60
             );
 
             await templ.connect(user1).vote(0, true);
 
-            await ethers.provider.send("evm_increaseTime", [2 * 24 * 60 * 60]);
+            await ethers.provider.send("evm_increaseTime", [8 * 24 * 60 * 60]);
             await ethers.provider.send("evm_mine");
 
             // Execution should revert
@@ -803,13 +809,13 @@ describe("TEMPL Contract with DAO Governance", function () {
                 "Empty Treasury",
                 "Withdraw all funds",
                 callData,
-                1 * 24 * 60 * 60
+                7 * 24 * 60 * 60
             );
 
             await templ.connect(user1).vote(0, true);
             await templ.connect(user2).vote(0, true);
 
-            await ethers.provider.send("evm_increaseTime", [2 * 24 * 60 * 60]);
+            await ethers.provider.send("evm_increaseTime", [8 * 24 * 60 * 60]);
             await ethers.provider.send("evm_mine");
 
             const treasuryBefore = await templ.treasuryBalance();
@@ -916,7 +922,7 @@ describe("TEMPL Contract with DAO Governance", function () {
                 "Community Fund",
                 "Withdraw for community",
                 callData,
-                1 * 24 * 60 * 60
+                7 * 24 * 60 * 60
             );
 
             // Both vote
@@ -924,7 +930,7 @@ describe("TEMPL Contract with DAO Governance", function () {
             await templ.connect(user2).vote(0, true);
 
             // Fast forward and execute
-            await ethers.provider.send("evm_increaseTime", [2 * 24 * 60 * 60]);
+            await ethers.provider.send("evm_increaseTime", [8 * 24 * 60 * 60]);
             await ethers.provider.send("evm_mine");
 
             await templ.executeProposal(0);

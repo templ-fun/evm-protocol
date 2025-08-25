@@ -21,7 +21,9 @@ describe("Member Pool Distribution - Exhaustive Tests", function () {
         templ = await TEMPL.deploy(
             priest.address,
             await token.getAddress(),
-            ENTRY_FEE
+            ENTRY_FEE,
+            10, // priestVoteWeight
+            10  // priestWeightThreshold
         );
         await templ.waitForDeployment();
 
@@ -275,7 +277,9 @@ describe("Member Pool Distribution - Exhaustive Tests", function () {
             const oddTempl = await TEMPL.deploy(
                 priest.address,
                 await token.getAddress(),
-                ODD_FEE
+                ODD_FEE,
+                10, // priestVoteWeight
+                10  // priestWeightThreshold
             );
             await oddTempl.waitForDeployment();
 

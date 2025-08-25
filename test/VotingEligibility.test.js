@@ -21,7 +21,9 @@ describe("Voting Eligibility Based on Join Time", function () {
         templ = await TEMPL.deploy(
             priest.address,
             await token.getAddress(),
-            ENTRY_FEE
+            ENTRY_FEE,
+            10, // priestVoteWeight
+            10  // priestWeightThreshold
         );
         await templ.waitForDeployment();
 
@@ -162,7 +164,7 @@ describe("Voting Eligibility Based on Join Time", function () {
                 "Pause Proposal",
                 "Test eligible voters",
                 callData,
-                1 * 24 * 60 * 60
+                7 * 24 * 60 * 60
             );
 
             // Now more members join AFTER proposal
@@ -223,7 +225,7 @@ describe("Voting Eligibility Based on Join Time", function () {
                 "Contentious Proposal",
                 "Member1 wants treasury funds",
                 callData,
-                2 * 24 * 60 * 60
+                7 * 24 * 60 * 60
             );
 
             // Member1 tries to game by adding friendly members AFTER proposal
@@ -254,7 +256,7 @@ describe("Voting Eligibility Based on Join Time", function () {
             expect(proposal.noVotes).to.equal(1);
 
             // Fast forward to end
-            await ethers.provider.send("evm_increaseTime", [2 * 24 * 60 * 60]);
+            await ethers.provider.send("evm_increaseTime", [7 * 24 * 60 * 60]);
             await ethers.provider.send("evm_mine");
 
             // Proposal should fail execution (not pass with yes <= no)
@@ -283,7 +285,7 @@ describe("Voting Eligibility Based on Join Time", function () {
                 "Proposal 1",
                 "With 2 members",
                 iface.encodeFunctionData("setPausedDAO", [true]),
-                1 * 24 * 60 * 60
+                7 * 24 * 60 * 60
             );
 
             // Member 3 joins
@@ -291,7 +293,7 @@ describe("Voting Eligibility Based on Join Time", function () {
             await templ.connect(member3).purchaseAccess();
 
             // Wait for first proposal to end
-            await ethers.provider.send("evm_increaseTime", [2 * 24 * 60 * 60]);
+            await ethers.provider.send("evm_increaseTime", [8 * 24 * 60 * 60]);
             await ethers.provider.send("evm_mine");
 
             // Second proposal - 3 eligible voters
@@ -299,7 +301,7 @@ describe("Voting Eligibility Based on Join Time", function () {
                 "Proposal 2",
                 "With 3 members",
                 iface.encodeFunctionData("setPausedDAO", [false]),
-                1 * 24 * 60 * 60
+                7 * 24 * 60 * 60
             );
 
             // Member 4 joins
@@ -346,7 +348,7 @@ describe("Voting Eligibility Based on Join Time", function () {
                 "Quick Proposal",
                 "Same block test",
                 iface.encodeFunctionData("setPausedDAO", [true]),
-                1 * 24 * 60 * 60
+                7 * 24 * 60 * 60
             );
 
             // member2 joined before the proposal, so should be able to vote

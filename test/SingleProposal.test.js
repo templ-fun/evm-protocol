@@ -21,7 +21,9 @@ describe("Single Active Proposal Restriction", function () {
         templ = await TEMPL.deploy(
             priest.address,
             await token.getAddress(),
-            ENTRY_FEE
+            ENTRY_FEE,
+            10, // priestVoteWeight
+            10  // priestWeightThreshold
         );
         await templ.waitForDeployment();
 
@@ -145,7 +147,7 @@ describe("Single Active Proposal Restriction", function () {
                 "First Proposal",
                 "Pause contract",
                 callData1,
-                1 * 24 * 60 * 60 // 1 day
+                7 * 24 * 60 * 60 // 7 days
             );
 
             // Vote to pass
@@ -153,7 +155,7 @@ describe("Single Active Proposal Restriction", function () {
             await templ.connect(member2).vote(0, true);
 
             // Fast forward and execute
-            await ethers.provider.send("evm_increaseTime", [2 * 24 * 60 * 60]);
+            await ethers.provider.send("evm_increaseTime", [8 * 24 * 60 * 60]);
             await ethers.provider.send("evm_mine");
 
             await templ.executeProposal(0);
@@ -167,7 +169,7 @@ describe("Single Active Proposal Restriction", function () {
                 "Second Proposal",
                 "Unpause contract",
                 callData2,
-                1 * 24 * 60 * 60
+                7 * 24 * 60 * 60
             )).to.emit(templ, "ProposalCreated");
 
             expect(await templ.hasActiveProposal(member1.address)).to.be.true;
@@ -189,11 +191,11 @@ describe("Single Active Proposal Restriction", function () {
                 "First Proposal",
                 "Will expire",
                 callData,
-                1 * 24 * 60 * 60 // 1 day
+                7 * 24 * 60 * 60 // 7 days
             );
 
             // Don't vote, let it expire
-            await ethers.provider.send("evm_increaseTime", [2 * 24 * 60 * 60]);
+            await ethers.provider.send("evm_increaseTime", [8 * 24 * 60 * 60]);
             await ethers.provider.send("evm_mine");
 
             // Try to create second proposal - should succeed because first one expired
@@ -201,7 +203,7 @@ describe("Single Active Proposal Restriction", function () {
                 "Second Proposal",
                 "After expiry",
                 callData,
-                1 * 24 * 60 * 60
+                7 * 24 * 60 * 60
             )).to.emit(templ, "ProposalCreated");
 
             expect(await templ.hasActiveProposal(member1.address)).to.be.true;
@@ -223,7 +225,7 @@ describe("Single Active Proposal Restriction", function () {
                 "First Proposal",
                 "Will fail",
                 callData,
-                1 * 24 * 60 * 60
+                7 * 24 * 60 * 60
             );
 
             // Vote no to make it fail
@@ -232,7 +234,7 @@ describe("Single Active Proposal Restriction", function () {
             await templ.connect(member3).vote(0, false);
 
             // Fast forward past voting period
-            await ethers.provider.send("evm_increaseTime", [2 * 24 * 60 * 60]);
+            await ethers.provider.send("evm_increaseTime", [8 * 24 * 60 * 60]);
             await ethers.provider.send("evm_mine");
 
             // Proposal failed, should be able to create new one
@@ -240,7 +242,7 @@ describe("Single Active Proposal Restriction", function () {
                 "Second Proposal",
                 "After failed proposal",
                 callData,
-                1 * 24 * 60 * 60
+                7 * 24 * 60 * 60
             )).to.emit(templ, "ProposalCreated");
 
             expect(await templ.hasActiveProposal(member1.address)).to.be.true;
@@ -255,7 +257,7 @@ describe("Single Active Proposal Restriction", function () {
                 "Bad Proposal",
                 "Will fail execution",
                 badCallData,
-                1 * 24 * 60 * 60
+                7 * 24 * 60 * 60
             );
 
             // Need to wait a bit to ensure voting timestamps are after proposal creation
@@ -267,7 +269,7 @@ describe("Single Active Proposal Restriction", function () {
             await templ.connect(member2).vote(0, true);
 
             // Fast forward
-            await ethers.provider.send("evm_increaseTime", [1 * 24 * 60 * 60]);
+            await ethers.provider.send("evm_increaseTime", [7 * 24 * 60 * 60]);
             await ethers.provider.send("evm_mine");
 
             // Try to execute - should fail
@@ -300,7 +302,7 @@ describe("Single Active Proposal Restriction", function () {
                 "Another Proposal",
                 "After expiry",
                 callData,
-                1 * 24 * 60 * 60
+                7 * 24 * 60 * 60
             )).to.emit(templ, "ProposalCreated");
         });
     });
@@ -317,7 +319,7 @@ describe("Single Active Proposal Restriction", function () {
                 "Proposal Zero",
                 "First proposal",
                 callData,
-                1 * 24 * 60 * 60
+                7 * 24 * 60 * 60
             );
 
             expect(await templ.hasActiveProposal(member1.address)).to.be.true;
@@ -327,7 +329,7 @@ describe("Single Active Proposal Restriction", function () {
             await templ.connect(member1).vote(0, true);
             await templ.connect(member2).vote(0, true);
             
-            await ethers.provider.send("evm_increaseTime", [2 * 24 * 60 * 60]);
+            await ethers.provider.send("evm_increaseTime", [8 * 24 * 60 * 60]);
             await ethers.provider.send("evm_mine");
             
             await templ.executeProposal(0);
@@ -348,12 +350,12 @@ describe("Single Active Proposal Restriction", function () {
                 "Cycle 1",
                 "First cycle",
                 iface.encodeFunctionData("setPausedDAO", [true]),
-                1 * 24 * 60 * 60
+                7 * 24 * 60 * 60
             );
             
             await templ.connect(member1).vote(0, true);
             await templ.connect(member2).vote(0, true);
-            await ethers.provider.send("evm_increaseTime", [2 * 24 * 60 * 60]);
+            await ethers.provider.send("evm_increaseTime", [8 * 24 * 60 * 60]);
             await ethers.provider.send("evm_mine");
             await templ.executeProposal(0);
 
@@ -362,10 +364,10 @@ describe("Single Active Proposal Restriction", function () {
                 "Cycle 2",
                 "Second cycle",
                 iface.encodeFunctionData("setPausedDAO", [false]),
-                1 * 24 * 60 * 60
+                7 * 24 * 60 * 60
             );
             
-            await ethers.provider.send("evm_increaseTime", [2 * 24 * 60 * 60]);
+            await ethers.provider.send("evm_increaseTime", [8 * 24 * 60 * 60]);
             await ethers.provider.send("evm_mine");
 
             // Cycle 3: Create new one after expiry
@@ -373,7 +375,7 @@ describe("Single Active Proposal Restriction", function () {
                 "Cycle 3",
                 "Third cycle",
                 iface.encodeFunctionData("setPausedDAO", [true]),
-                1 * 24 * 60 * 60
+                7 * 24 * 60 * 60
             );
 
             expect(await templ.hasActiveProposal(member1.address)).to.be.true;
