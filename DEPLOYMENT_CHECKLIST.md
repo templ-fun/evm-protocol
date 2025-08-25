@@ -1,8 +1,8 @@
-# TEMPL Protocol Deployment Checklist
+# TEMPL Protocol Deployment Checklist (with DAO Governance)
 
 ## Token Distribution Model: 30/30/30/10
 - 30% Burned permanently
-- 30% Treasury (priest-controlled)
+- 30% DAO Treasury (controlled by member voting)
 - 30% Member Pool (pro-rata distribution)
 - 10% Protocol fee (to priest)
 
@@ -21,11 +21,15 @@
 - [ ] Set `PRIEST_ADDRESS` (receives 10% fees + controls treasury)
 - [ ] Set `TOKEN_ADDRESS` for payment token
 
-### 3. Telegram Group Setup
-- [ ] Create Telegram group manually
-- [ ] Add bot as admin with restricted permissions (no invite)
-- [ ] Get group ID (use @userinfobot)
-- [ ] Update `TELEGRAM_GROUP_ID` in .env
+### 3. Temple Creation (NEW - Automatic Flow)
+- [ ] Open http://localhost:3002/priest.html
+- [ ] Connect priest wallet
+- [ ] Enter deployed contract address
+- [ ] Enter desired group name
+- [ ] Enter your Telegram username
+- [ ] Click "Create Temple"
+- [ ] System auto-creates group and links to contract
+- [ ] Copy the purchase URL for members
 
 ## Deployment Steps
 
@@ -42,7 +46,7 @@ npm run compile
 ### 3. Run Tests
 ```bash
 npm test
-# Should show: 25 passing
+# Should show: 49 passing (comprehensive DAO + legacy compatibility tests)
 ```
 
 ### 4. Deploy Contract to BASE
@@ -51,6 +55,7 @@ npm run deploy
 ```
 This will:
 - Deploy TEMPL contract with 30/30/30/10 split
+- DAO-controlled treasury (voting required)
 - Register contract in database
 - Update CONTRACT_ADDRESS in .env
 - Display deployment info
@@ -69,12 +74,21 @@ This will:
 - Generate SESSION_STRING
 - Update .env automatically
 
-### 7. Initialize Database
+### 7. Create Your Temple (NEW!)
+Open http://localhost:3002/priest.html and:
+- Connect priest wallet
+- Enter contract address from step 4
+- Enter group name
+- Enter your Telegram username
+- Click "Create Temple"
+- Get your purchase URL!
+
+### 8. Initialize Database
 ```bash
 npm run init-db
 ```
 
-### 8. Verify System
+### 9. Verify System
 ```bash
 npm run verify
 ```
@@ -84,7 +98,7 @@ Check that all components are working:
 - Database connection
 - Telegram connection
 
-### 9. Start Service
+### 10. Start Service
 ```bash
 npm start
 ```

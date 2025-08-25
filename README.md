@@ -1,14 +1,15 @@
-# TEMPL - Telegram Entry Management Protocol
+# TEMPL - Telegram Entry Management Protocol with DAO Governance
 
-**Production-Ready** token-gated Telegram group access system with priest-controlled treasury on BASE.
+**Production-Ready** token-gated Telegram group access system with DAO-controlled treasury on BASE.
 
 ## 🎯 Overview
 
 **Deployed on BASE Chain** - Users pay tokens to join exclusive Telegram groups:
 - **30% Burned**: Permanently removed from circulation
-- **30% to Treasury**: Accumulates for priest-controlled withdrawals
+- **30% to DAO Treasury**: Controlled by member voting, not priest
 - **30% to Member Pool**: Distributed pro-rata to existing members
 - **10% Protocol Fee**: Goes directly to priest address
+- **DAO Governance**: Members vote on treasury withdrawals and config changes
 - **One Purchase Per Wallet**: Enforced on-chain and off-chain
 - **Direct Invitations**: No public invite links for maximum security
 - **BASE Network**: Fast & low-cost transactions
@@ -16,9 +17,12 @@
 
 ## 🔒 Security Features
 
-- ✅ Single priest authority (controls treasury & admin)
-- ✅ 30/30/30/10 fee split (burn/treasury/pool/protocol)
+- ✅ DAO-controlled treasury (voting required for withdrawals)
+- ✅ 30/30/30/10 fee split (burn/DAO treasury/pool/protocol)
 - ✅ Pro-rata member rewards system
+- ✅ Member-driven governance with proposals and voting
+- ✅ Executable on-chain proposals
+- ✅ >50% yes votes required to pass proposals
 - ✅ Payment enforcement before access
 - ✅ JWT authentication with required secrets
 - ✅ Nonce-based signature verification (replay attack prevention)
@@ -89,15 +93,35 @@ Use the all-in-one interface at `https://yoursite.com/purchase.html?contract=0x.
 4. Enter Telegram username
 5. Receive group invitation
 
-## 👑 Treasury Management
+## 🗳️ DAO Treasury Management
 
-The priest (set at deployment) has complete control:
+Treasury is controlled by member voting, not the priest:
 
+### Creating Proposals
+Visit `https://yoursite.com/propose.html?contract=0x...`
+- Connect as a member
+- Enter proposal title and description
+- Choose action type:
+  - Treasury withdrawal
+  - Config updates
+  - Pause/unpause contract
+  - Custom actions
+- Set voting period (default 7 days)
+- Submit proposal
+
+### Voting on Proposals
+Visit `https://yoursite.com/vote.html?contract=0x...`
+- View active proposals
+- Cast yes/no votes
+- Track voting progress
+- Execute passed proposals
+
+### Treasury Info
 ```javascript
 // Check treasury balance
 const info = await contract.getTreasuryInfo()
 
-// Withdraw specific amount
+// Treasury withdrawals require passed proposals
 await contract.withdrawTreasury(recipient, amount)
 
 // Withdraw all funds
