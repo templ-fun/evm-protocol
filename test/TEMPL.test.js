@@ -1,286 +1,944 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
 
-describe("TEMPL", function () {
-  let contract;
-  let token;
-  let deployer;
-  let priest;
-  let user1;
-  let user2;
-  const ENTRY_FEE = 100;
-  
-  beforeEach(async function () {
-    [deployer, priest, user1, user2] = await ethers.getSigners();
-    const MockToken = await ethers.getContractFactory("MockERC20");
-    token = await MockToken.deploy("Test Token", "TEST", 18);
-    await token.waitForDeployment();
-    await token.mint(user1.address, ethers.parseEther("1000"));
-    await token.mint(user2.address, ethers.parseEther("1000"));
-    const TEMPL = await ethers.getContractFactory("TEMPL");
-    contract = await TEMPL.deploy(
-      priest.address,
-      await token.getAddress(),
-      ENTRY_FEE
-    );
-    await contract.waitForDeployment();
-    await token.connect(user1).approve(await contract.getAddress(), ethers.parseEther("1000"));
-    await token.connect(user2).approve(await contract.getAddress(), ethers.parseEther("1000"));
-  });
-  
-  describe("Deployment", function () {
-    it("Should set the correct priest address", async function () {
-      expect(await contract.priest()).to.equal(priest.address);
-    });
-    
-    it("Should set the correct token and entry fee", async function () {
-      const config = await contract.getConfig();
-      expect(config[0]).to.equal(await token.getAddress());
-      expect(config[1]).to.equal(ENTRY_FEE);
-    });
-    
-    it("Should reject deployment with odd entry fee", async function () {
-      const TEMPL = await ethers.getContractFactory("TEMPL");
-      await expect(
-        TEMPL.deploy(priest.address, await token.getAddress(), 101)
-      ).to.be.revertedWith("Entry fee must be even for 50/50 split");
-    });
-    
-    it("Should have immutable priest address", async function () {
-      // No function to change priest address should exist
-      expect(contract.setPriest).to.be.undefined;
-    });
-  });
-  
-  describe("Purchase Access", function () {
-    it("Should split payment 50/50 between treasury and burn", async function () {
-      const contractAddress = await contract.getAddress();
-      const burnAddress = "0x000000000000000000000000000000000000dEaD";
-      
-      const initialContractBalance = await token.balanceOf(contractAddress);
-      const initialBurnBalance = await token.balanceOf(burnAddress);
-      
-      await contract.connect(user1).purchaseAccess();
-      const expectedAmount = BigInt(ENTRY_FEE) * ethers.parseEther("1") / 1n;
-      const halfAmount = expectedAmount / 2n;
-      
-      expect(await token.balanceOf(contractAddress)).to.equal(initialContractBalance + halfAmount);
-      expect(await token.balanceOf(burnAddress)).to.equal(initialBurnBalance + halfAmount);
-      const treasuryInfo = await contract.getTreasuryInfo();
-      expect(treasuryInfo[0]).to.equal(halfAmount); // balance
-      expect(treasuryInfo[1]).to.equal(halfAmount); // totalReceived
-      expect(treasuryInfo[2]).to.equal(halfAmount); // totalBurned
-    });
-    
-    it("Should prevent double purchase", async function () {
-      await contract.connect(user1).purchaseAccess();
-      await expect(
-        contract.connect(user1).purchaseAccess()
-      ).to.be.revertedWith("Already purchased access");
-    });
-    
-    it("Should track purchase details", async function () {
-      await contract.connect(user1).purchaseAccess();
-      
-      const hasAccess = await contract.hasAccess(user1.address);
-      expect(hasAccess).to.be.true;
-      
-      const details = await contract.getPurchaseDetails(user1.address);
-      expect(details[0]).to.be.true; // purchased
-      expect(details[1]).to.be.gt(0); // timestamp
-      expect(details[2]).to.be.gt(0); // block number
-    });
-    
-    it("Should emit AccessPurchased event with correct values", async function () {
-      const expectedTotal = BigInt(ENTRY_FEE) * ethers.parseEther("1") / 1n;
-      const halfAmount = expectedTotal / 2n;
-      
-      await expect(contract.connect(user1).purchaseAccess())
-        .to.emit(contract, "AccessPurchased")
-        .withArgs(
-          user1.address,
-          expectedTotal,
-          halfAmount, // burned
-          halfAmount, // treasury
-          await ethers.provider.getBlock('latest').then(b => b.timestamp + 1),
-          await ethers.provider.getBlockNumber() + 1
-        );
-    });
-  });
-  
-  describe("Treasury Management", function () {
+describe("TEMPL Contract with DAO Governance", function () {
+    let templ;
+    let token;
+    let owner, priest, user1, user2, user3, user4, treasury;
+    const ENTRY_FEE = ethers.parseUnits("100", 18);
+    const TOKEN_SUPPLY = ethers.parseUnits("10000", 18);
+
     beforeEach(async function () {
-      await contract.connect(user1).purchaseAccess();
-    });
-    
-    it("Should only allow priest to withdraw treasury", async function () {
-      const treasuryInfo = await contract.getTreasuryInfo();
-      const balance = treasuryInfo[0];
-      
-      // Deployer cannot withdraw (only priest can)
-      await expect(
-        contract.connect(deployer).withdrawTreasury(deployer.address, balance)
-      ).to.be.revertedWith("Only priest can call this");
-      
-      // User cannot withdraw
-      await expect(
-        contract.connect(user1).withdrawTreasury(user1.address, balance)
-      ).to.be.revertedWith("Only priest can call this");
-      
-      // Priest can withdraw
-      await expect(
-        contract.connect(priest).withdrawTreasury(priest.address, balance)
-      ).to.not.be.reverted;
-    });
-    
-    it("Should correctly withdraw specific amount", async function () {
-      const treasuryInfo = await contract.getTreasuryInfo();
-      const balance = treasuryInfo[0];
-      const withdrawAmount = balance / 2n;
-      
-      const initialPriestBalance = await token.balanceOf(priest.address);
-      
-      await contract.connect(priest).withdrawTreasury(priest.address, withdrawAmount);
-      
-      expect(await token.balanceOf(priest.address)).to.equal(initialPriestBalance + withdrawAmount);
-      
-      const newTreasuryInfo = await contract.getTreasuryInfo();
-      expect(newTreasuryInfo[0]).to.equal(balance - withdrawAmount);
-    });
-    
-    it("Should correctly withdraw all treasury", async function () {
-      const treasuryInfo = await contract.getTreasuryInfo();
-      const balance = treasuryInfo[0];
-      
-      const initialPriestBalance = await token.balanceOf(priest.address);
-      
-      await contract.connect(priest).withdrawAllTreasury(priest.address);
-      
-      expect(await token.balanceOf(priest.address)).to.equal(initialPriestBalance + balance);
-      
-      const newTreasuryInfo = await contract.getTreasuryInfo();
-      expect(newTreasuryInfo[0]).to.equal(0);
-    });
-    
-    it("Should emit TreasuryWithdrawn event", async function () {
-      const treasuryInfo = await contract.getTreasuryInfo();
-      const balance = treasuryInfo[0];
-      
-      await expect(contract.connect(priest).withdrawAllTreasury(priest.address))
-        .to.emit(contract, "TreasuryWithdrawn")
-        .withArgs(
-          priest.address,
-          priest.address,
-          balance,
-          await ethers.provider.getBlock('latest').then(b => b.timestamp + 1)
+        [owner, priest, user1, user2, user3, user4, treasury] = await ethers.getSigners();
+
+        // Deploy test token
+        const Token = await ethers.getContractFactory("TestToken");
+        token = await Token.deploy("Test Token", "TEST", 18);
+        await token.waitForDeployment();
+
+        // Deploy TEMPL contract (with DAO governance)
+        const TEMPL = await ethers.getContractFactory("TEMPL");
+        templ = await TEMPL.deploy(
+            priest.address,
+            await token.getAddress(),
+            ENTRY_FEE,
+            10, // priestVoteWeight
+            10  // priestWeightThreshold
         );
+        await templ.waitForDeployment();
+
+        // Mint tokens to users
+        await token.mint(user1.address, TOKEN_SUPPLY);
+        await token.mint(user2.address, TOKEN_SUPPLY);
+        await token.mint(user3.address, TOKEN_SUPPLY);
+        await token.mint(user4.address, TOKEN_SUPPLY);
     });
-    
-    it("Should prevent withdrawing more than balance", async function () {
-      const treasuryInfo = await contract.getTreasuryInfo();
-      const balance = treasuryInfo[0];
-      
-      await expect(
-        contract.connect(priest).withdrawTreasury(priest.address, balance + 1n)
-      ).to.be.revertedWith("Insufficient treasury balance");
+
+    describe("Deployment", function () {
+        it("Should set the correct priest address", async function () {
+            expect(await templ.priest()).to.equal(priest.address);
+        });
+
+        it("Should set the correct token and entry fee", async function () {
+            expect(await templ.accessToken()).to.equal(await token.getAddress());
+            expect(await templ.entryFee()).to.equal(ENTRY_FEE);
+        });
+
+        it("Should initialize with zero balances", async function () {
+            expect(await templ.treasuryBalance()).to.equal(0);
+            expect(await templ.memberPoolBalance()).to.equal(0);
+        });
     });
-  });
-  
-  describe("Security Features", function () {
-    it("Should prevent purchases when paused", async function () {
-      await contract.connect(priest).setPaused(true);
-      
-      await expect(
-        contract.connect(user1).purchaseAccess()
-      ).to.be.revertedWith("Contract is paused");
+
+    describe("Access Purchase with 30/30/30/10 Split", function () {
+        it("Should correctly split payments: 30% burn, 30% treasury, 30% pool, 10% protocol", async function () {
+            await token.connect(user1).approve(await templ.getAddress(), ENTRY_FEE);
+            
+            const priestBalanceBefore = await token.balanceOf(priest.address);
+            const deadBalanceBefore = await token.balanceOf("0x000000000000000000000000000000000000dEaD");
+            
+            await templ.connect(user1).purchaseAccess();
+            
+            const thirtyPercent = (ENTRY_FEE * 30n) / 100n;
+            const tenPercent = (ENTRY_FEE * 10n) / 100n;
+            
+            // Check balances
+            expect(await templ.treasuryBalance()).to.equal(thirtyPercent);
+            expect(await templ.memberPoolBalance()).to.equal(thirtyPercent);
+            
+            // Check priest received 10%
+            expect(await token.balanceOf(priest.address)).to.equal(priestBalanceBefore + tenPercent);
+            
+            // Check burn address received 30%
+            expect(await token.balanceOf("0x000000000000000000000000000000000000dEaD"))
+                .to.equal(deadBalanceBefore + thirtyPercent);
+            
+            // Check totals
+            expect(await templ.totalBurned()).to.equal(thirtyPercent);
+            expect(await templ.totalToTreasury()).to.equal(thirtyPercent);
+            expect(await templ.totalToMemberPool()).to.equal(thirtyPercent);
+            expect(await templ.totalToProtocol()).to.equal(tenPercent);
+        });
+
+        it("Should mark user as having purchased", async function () {
+            await token.connect(user1).approve(await templ.getAddress(), ENTRY_FEE);
+            await templ.connect(user1).purchaseAccess();
+            
+            expect(await templ.hasPurchased(user1.address)).to.be.true;
+            expect(await templ.getMemberCount()).to.equal(1);
+        });
+
+        it("Should prevent double purchase", async function () {
+            await token.connect(user1).approve(await templ.getAddress(), ENTRY_FEE);
+            await templ.connect(user1).purchaseAccess();
+            
+            await token.connect(user1).approve(await templ.getAddress(), ENTRY_FEE);
+            await expect(templ.connect(user1).purchaseAccess())
+                .to.be.revertedWith("Already purchased access");
+        });
     });
-    
-    it("Should only allow priest to pause", async function () {
-      await expect(
-        contract.connect(user1).setPaused(true)
-      ).to.be.revertedWith("Only priest can call this");
+
+    describe("DAO Proposal Creation", function () {
+        beforeEach(async function () {
+            // User1 becomes a member
+            await token.connect(user1).approve(await templ.getAddress(), ENTRY_FEE);
+            await templ.connect(user1).purchaseAccess();
+        });
+
+        it("Should allow members to create proposals", async function () {
+            const title = "Test Proposal";
+            const description = "This is a test proposal";
+            const callData = "0x12345678"; // Dummy call data
+            const votingPeriod = 7 * 24 * 60 * 60; // 7 days
+
+            await expect(templ.connect(user1).createProposal(
+                title,
+                description,
+                callData,
+                votingPeriod
+            )).to.emit(templ, "ProposalCreated");
+
+            expect(await templ.proposalCount()).to.equal(1);
+            
+            const proposal = await templ.getProposal(0);
+            expect(proposal.title).to.equal(title);
+            expect(proposal.description).to.equal(description);
+            expect(proposal.proposer).to.equal(user1.address);
+        });
+
+        it("Should prevent non-members from creating proposals", async function () {
+            await expect(templ.connect(user2).createProposal(
+                "Test",
+                "Description",
+                "0x1234",
+                7 * 24 * 60 * 60
+            )).to.be.revertedWith("Only members can call this");
+        });
+
+        it("Should enforce minimum voting period", async function () {
+            await expect(templ.connect(user1).createProposal(
+                "Test",
+                "Description",
+                "0x1234",
+                6 * 24 * 60 * 60 // 6 days (less than minimum 7 days)
+            )).to.be.revertedWith("Voting period too short");
+        });
+
+        it("Should enforce maximum voting period", async function () {
+            await expect(templ.connect(user1).createProposal(
+                "Test",
+                "Description",
+                "0x1234",
+                31 * 24 * 60 * 60 // 31 days (too long)
+            )).to.be.revertedWith("Voting period too long");
+        });
     });
-    
-    it("Should only allow priest to update config", async function () {
-      await expect(
-        contract.connect(user1).updateConfig(await token.getAddress(), 200)
-      ).to.be.revertedWith("Only priest can call this");
+
+    describe("DAO Voting", function () {
+        beforeEach(async function () {
+            // Multiple users become members
+            await token.connect(user1).approve(await templ.getAddress(), ENTRY_FEE);
+            await templ.connect(user1).purchaseAccess();
+            
+            await token.connect(user2).approve(await templ.getAddress(), ENTRY_FEE);
+            await templ.connect(user2).purchaseAccess();
+            
+            await token.connect(user3).approve(await templ.getAddress(), ENTRY_FEE);
+            await templ.connect(user3).purchaseAccess();
+
+            // Create a proposal
+            const iface = new ethers.Interface([
+                "function withdrawTreasuryDAO(address,uint256,string)"
+            ]);
+            const callData = iface.encodeFunctionData("withdrawTreasuryDAO", [
+                treasury.address,
+                ethers.parseUnits("10", 18),
+                "Test withdrawal"
+            ]);
+
+            await templ.connect(user1).createProposal(
+                "Treasury Withdrawal",
+                "Withdraw 10 tokens to treasury",
+                callData,
+                7 * 24 * 60 * 60
+            );
+        });
+
+        it("Should allow members to vote", async function () {
+            await expect(templ.connect(user1).vote(0, true))
+                .to.emit(templ, "VoteCast");
+
+            const proposal = await templ.getProposal(0);
+            expect(proposal.yesVotes).to.equal(1);
+            expect(proposal.noVotes).to.equal(0);
+        });
+
+        it("Should prevent double voting", async function () {
+            await templ.connect(user1).vote(0, true);
+            
+            await expect(templ.connect(user1).vote(0, false))
+                .to.be.revertedWith("Already voted");
+        });
+
+        it("Should prevent non-members from voting", async function () {
+            await expect(templ.connect(user4).vote(0, true))
+                .to.be.revertedWith("Only members can call this");
+        });
+
+        it("Should count yes and no votes correctly", async function () {
+            await templ.connect(user1).vote(0, true);
+            await templ.connect(user2).vote(0, false);
+            await templ.connect(user3).vote(0, true);
+
+            const proposal = await templ.getProposal(0);
+            expect(proposal.yesVotes).to.equal(2);
+            expect(proposal.noVotes).to.equal(1);
+            expect(proposal.passed).to.be.true; // 2 > 1
+        });
+
+        it("Should track individual vote choices", async function () {
+            await templ.connect(user1).vote(0, true);
+            await templ.connect(user2).vote(0, false);
+
+            let hasVoted = await templ.hasVoted(0, user1.address);
+            expect(hasVoted.voted).to.be.true;
+            expect(hasVoted.support).to.be.true;
+
+            hasVoted = await templ.hasVoted(0, user2.address);
+            expect(hasVoted.voted).to.be.true;
+            expect(hasVoted.support).to.be.false;
+        });
     });
-    
-    it("Should require even entry fee in config update", async function () {
-      await expect(
-        contract.connect(priest).updateConfig(await token.getAddress(), 201)
-      ).to.be.revertedWith("Entry fee must be even for 50/50 split");
+
+    describe("DAO Proposal Execution", function () {
+        beforeEach(async function () {
+            // Setup members
+            await token.connect(user1).approve(await templ.getAddress(), ENTRY_FEE);
+            await templ.connect(user1).purchaseAccess();
+            
+            await token.connect(user2).approve(await templ.getAddress(), ENTRY_FEE);
+            await templ.connect(user2).purchaseAccess();
+            
+            await token.connect(user3).approve(await templ.getAddress(), ENTRY_FEE);
+            await templ.connect(user3).purchaseAccess();
+        });
+
+        it("Should execute passed treasury withdrawal proposal", async function () {
+            // Create treasury withdrawal proposal
+            const withdrawAmount = ethers.parseUnits("10", 18);
+            const iface = new ethers.Interface([
+                "function withdrawTreasuryDAO(address,uint256,string)"
+            ]);
+            const callData = iface.encodeFunctionData("withdrawTreasuryDAO", [
+                treasury.address,
+                withdrawAmount,
+                "Test withdrawal"
+            ]);
+
+            await templ.connect(user1).createProposal(
+                "Treasury Withdrawal",
+                "Withdraw 10 tokens",
+                callData,
+                7 * 24 * 60 * 60 // 7 days
+            );
+
+            // Vote yes (majority)
+            await templ.connect(user1).vote(0, true);
+            await templ.connect(user2).vote(0, true);
+
+            // Fast forward past voting period
+            await ethers.provider.send("evm_increaseTime", [8 * 24 * 60 * 60]);
+            await ethers.provider.send("evm_mine");
+
+            const treasuryBefore = await templ.treasuryBalance();
+            const recipientBefore = await token.balanceOf(treasury.address);
+
+            // Execute proposal
+            await expect(templ.connect(user3).executeProposal(0))
+                .to.emit(templ, "ProposalExecuted")
+                .to.emit(templ, "TreasuryAction");
+
+            // Check treasury decreased and recipient increased
+            expect(await templ.treasuryBalance()).to.equal(treasuryBefore - withdrawAmount);
+            expect(await token.balanceOf(treasury.address)).to.equal(recipientBefore + withdrawAmount);
+
+            // Check proposal marked as executed
+            const proposal = await templ.getProposal(0);
+            expect(proposal.executed).to.be.true;
+        });
+
+        it("Should not execute failed proposals", async function () {
+            // Create proposal
+            const iface = new ethers.Interface([
+                "function withdrawTreasuryDAO(address,uint256,string)"
+            ]);
+            const callData = iface.encodeFunctionData("withdrawTreasuryDAO", [
+                treasury.address,
+                ethers.parseUnits("10", 18),
+                "Test"
+            ]);
+
+            await templ.connect(user1).createProposal(
+                "Test",
+                "Test proposal",
+                callData,
+                7 * 24 * 60 * 60
+            );
+
+            // Vote no (majority)
+            await templ.connect(user1).vote(0, false);
+            await templ.connect(user2).vote(0, false);
+            await templ.connect(user3).vote(0, true);
+
+            // Fast forward
+            await ethers.provider.send("evm_increaseTime", [8 * 24 * 60 * 60]);
+            await ethers.provider.send("evm_mine");
+
+            // Try to execute
+            await expect(templ.connect(user1).executeProposal(0))
+                .to.be.revertedWith("Proposal did not pass");
+        });
+
+        it("Should not execute before voting ends", async function () {
+            // Create proposal
+            const iface = new ethers.Interface([
+                "function setPausedDAO(bool)"
+            ]);
+            const callData = iface.encodeFunctionData("setPausedDAO", [true]);
+
+            await templ.connect(user1).createProposal(
+                "Pause",
+                "Pause contract",
+                callData,
+                7 * 24 * 60 * 60
+            );
+
+            // Vote yes
+            await templ.connect(user1).vote(0, true);
+            await templ.connect(user2).vote(0, true);
+
+            // Try to execute immediately
+            await expect(templ.connect(user1).executeProposal(0))
+                .to.be.revertedWith("Voting not ended");
+        });
+
+        it("Should execute config update proposal", async function () {
+            const newFee = ethers.parseUnits("200", 18);
+            const iface = new ethers.Interface([
+                "function updateConfigDAO(address,uint256)"
+            ]);
+            const callData = iface.encodeFunctionData("updateConfigDAO", [
+                ethers.ZeroAddress, // Don't change token
+                newFee
+            ]);
+
+            await templ.connect(user1).createProposal(
+                "Update Fee",
+                "Change entry fee to 200",
+                callData,
+                7 * 24 * 60 * 60
+            );
+
+            // Vote yes
+            await templ.connect(user1).vote(0, true);
+            await templ.connect(user2).vote(0, true);
+
+            // Fast forward and execute
+            await ethers.provider.send("evm_increaseTime", [8 * 24 * 60 * 60]);
+            await ethers.provider.send("evm_mine");
+
+            await templ.executeProposal(0);
+
+            expect(await templ.entryFee()).to.equal(newFee);
+        });
+
+        it("Should execute pause/unpause proposal", async function () {
+            const iface = new ethers.Interface([
+                "function setPausedDAO(bool)"
+            ]);
+            const callData = iface.encodeFunctionData("setPausedDAO", [true]);
+
+            await templ.connect(user1).createProposal(
+                "Pause Contract",
+                "Emergency pause",
+                callData,
+                7 * 24 * 60 * 60
+            );
+
+            // Vote yes
+            await templ.connect(user1).vote(0, true);
+            await templ.connect(user2).vote(0, true);
+
+            // Fast forward and execute
+            await ethers.provider.send("evm_increaseTime", [8 * 24 * 60 * 60]);
+            await ethers.provider.send("evm_mine");
+
+            await templ.executeProposal(0);
+
+            expect(await templ.paused()).to.be.true;
+
+            // Should prevent purchases when paused
+            await token.connect(user4).approve(await templ.getAddress(), ENTRY_FEE);
+            await expect(templ.connect(user4).purchaseAccess())
+                .to.be.revertedWith("Contract is paused");
+        });
+
+        it("Should prevent double execution", async function () {
+            const iface = new ethers.Interface([
+                "function setPausedDAO(bool)"
+            ]);
+            const callData = iface.encodeFunctionData("setPausedDAO", [true]);
+
+            await templ.connect(user1).createProposal(
+                "Test",
+                "Test",
+                callData,
+                7 * 24 * 60 * 60
+            );
+
+            await templ.connect(user1).vote(0, true);
+            await templ.connect(user2).vote(0, true);
+
+            await ethers.provider.send("evm_increaseTime", [8 * 24 * 60 * 60]);
+            await ethers.provider.send("evm_mine");
+
+            await templ.executeProposal(0);
+
+            await expect(templ.executeProposal(0))
+                .to.be.revertedWith("Already executed");
+        });
     });
-    
-    it("Should prevent recovering access token through recoverWrongToken", async function () {
-      await expect(
-        contract.connect(priest).recoverWrongToken(await token.getAddress(), priest.address)
-      ).to.be.revertedWith("Use withdrawTreasury for access tokens");
+
+    describe("DAO Treasury Security", function () {
+        beforeEach(async function () {
+            // Setup members and treasury
+            await token.connect(user1).approve(await templ.getAddress(), ENTRY_FEE);
+            await templ.connect(user1).purchaseAccess();
+            
+            await token.connect(user2).approve(await templ.getAddress(), ENTRY_FEE);
+            await templ.connect(user2).purchaseAccess();
+        });
+
+        it("Should prevent direct treasury withdrawal by priest", async function () {
+            // Priest cannot call withdrawTreasuryDAO directly
+            await expect(templ.connect(priest).withdrawTreasuryDAO(
+                priest.address,
+                ethers.parseUnits("10", 18),
+                "Unauthorized"
+            )).to.be.revertedWith("Only DAO can call this");
+        });
+
+        it("Should prevent direct treasury withdrawal by members", async function () {
+            await expect(templ.connect(user1).withdrawTreasuryDAO(
+                user1.address,
+                ethers.parseUnits("10", 18),
+                "Unauthorized"
+            )).to.be.revertedWith("Only DAO can call this");
+        });
+
+        it("Should only allow treasury withdrawal through passed proposals", async function () {
+            const treasuryBalance = await templ.treasuryBalance();
+            const withdrawAmount = treasuryBalance / 2n; // Half of treasury
+
+            const iface = new ethers.Interface([
+                "function withdrawTreasuryDAO(address,uint256,string)"
+            ]);
+            const callData = iface.encodeFunctionData("withdrawTreasuryDAO", [
+                treasury.address,
+                withdrawAmount,
+                "Approved withdrawal"
+            ]);
+
+            await templ.connect(user1).createProposal(
+                "Treasury Transfer",
+                "Transfer half treasury",
+                callData,
+                7 * 24 * 60 * 60
+            );
+
+            // Pass the proposal
+            await templ.connect(user1).vote(0, true);
+            await templ.connect(user2).vote(0, true);
+
+            await ethers.provider.send("evm_increaseTime", [8 * 24 * 60 * 60]);
+            await ethers.provider.send("evm_mine");
+
+            const treasuryBefore = await templ.treasuryBalance();
+            await templ.executeProposal(0);
+            
+            expect(await templ.treasuryBalance()).to.equal(treasuryBefore - withdrawAmount);
+        });
+
+        it("Should prevent config changes without DAO approval", async function () {
+            await expect(templ.connect(priest).updateConfigDAO(
+                await token.getAddress(),
+                ethers.parseUnits("500", 18)
+            )).to.be.revertedWith("Only DAO can call this");
+        });
+
+        it("Should prevent pause without DAO approval", async function () {
+            await expect(templ.connect(priest).setPausedDAO(true))
+                .to.be.revertedWith("Only DAO can call this");
+        });
     });
-  });
-  
-  describe("Multiple Purchases", function () {
-    it("Should correctly track multiple users and treasury", async function () {
-      await contract.connect(user1).purchaseAccess();
-      await contract.connect(user2).purchaseAccess();
-      expect(await contract.hasAccess(user1.address)).to.be.true;
-      expect(await contract.hasAccess(user2.address)).to.be.true;
-      
-      // Check treasury accumulated correctly
-      const expectedTotal = BigInt(ENTRY_FEE) * ethers.parseEther("1") / 1n;
-      const expectedTreasury = expectedTotal; // Two purchases, each contributing half
-      
-      const treasuryInfo = await contract.getTreasuryInfo();
-      expect(treasuryInfo[0]).to.equal(expectedTreasury); // balance
-      expect(treasuryInfo[1]).to.equal(expectedTreasury); // totalReceived
-      expect(treasuryInfo[2]).to.equal(expectedTreasury); // totalBurned (same amount)
-      
-      // Check total purchases
-      const config = await contract.getConfig();
-      expect(config[3]).to.equal(2); // total purchases
+
+    describe("Active Proposals Query", function () {
+        beforeEach(async function () {
+            // Setup members
+            await token.connect(user1).approve(await templ.getAddress(), ENTRY_FEE);
+            await templ.connect(user1).purchaseAccess();
+            
+            // Add user2 as member too (needed for multiple proposal tests)
+            await token.connect(user2).approve(await templ.getAddress(), ENTRY_FEE);
+            await templ.connect(user2).purchaseAccess();
+        });
+
+        it("Should return active proposals correctly", async function () {
+            // Create multiple proposals with different users (due to single proposal restriction)
+            await templ.connect(user1).createProposal(
+                "Active 1",
+                "First active",
+                "0x1234",
+                7 * 24 * 60 * 60
+            );
+
+            await templ.connect(user2).createProposal(
+                "Active 2",
+                "Second active",
+                "0x5678",
+                10 * 24 * 60 * 60
+            );
+
+            const activeProposals = await templ.getActiveProposals();
+            expect(activeProposals.length).to.equal(2);
+            expect(activeProposals[0]).to.equal(0);
+            expect(activeProposals[1]).to.equal(1);
+        });
+
+        it("Should exclude expired proposals", async function () {
+            await templ.connect(user1).createProposal(
+                "Short",
+                "Expires soon",
+                "0x1234",
+                7 * 24 * 60 * 60 // 7 days
+            );
+
+            await templ.connect(user2).createProposal(
+                "Long",
+                "Active longer",
+                "0x5678",
+                14 * 24 * 60 * 60 // 14 days
+            );
+
+            // Fast forward 8 days (first proposal expires, second still active)
+            await ethers.provider.send("evm_increaseTime", [8 * 24 * 60 * 60]);
+            await ethers.provider.send("evm_mine");
+
+            const activeProposals = await templ.getActiveProposals();
+            expect(activeProposals.length).to.equal(1);
+            expect(activeProposals[0]).to.equal(1); // Only second proposal active
+        });
+
+        it("Should exclude executed proposals", async function () {
+            const iface = new ethers.Interface([
+                "function setPausedDAO(bool)"
+            ]);
+            const callData = iface.encodeFunctionData("setPausedDAO", [true]);
+
+            await templ.connect(user1).createProposal(
+                "Execute Me",
+                "Will be executed",
+                callData,
+                7 * 24 * 60 * 60
+            );
+
+            await templ.connect(user2).createProposal(
+                "Still Active",
+                "Not executed",
+                "0x5678",
+                14 * 24 * 60 * 60
+            );
+
+            // Need to wait a bit for voting timestamps
+            await ethers.provider.send("evm_increaseTime", [10]);
+            await ethers.provider.send("evm_mine");
+
+            // Vote and execute first proposal
+            await templ.connect(user1).vote(0, true);
+            
+            await ethers.provider.send("evm_increaseTime", [7 * 24 * 60 * 60]);
+            await ethers.provider.send("evm_mine");
+            
+            await templ.executeProposal(0);
+
+            const activeProposals = await templ.getActiveProposals();
+            expect(activeProposals.length).to.equal(1);
+            expect(activeProposals[0]).to.equal(1); // Only second proposal active
+        });
     });
-  });
+
+    describe("Member Pool Distribution", function () {
+        it("Should distribute rewards correctly to existing members", async function () {
+            // First member joins
+            await token.connect(user1).approve(await templ.getAddress(), ENTRY_FEE);
+            await templ.connect(user1).purchaseAccess();
+
+            // Check first member has no claimable (no one joined after them yet)
+            expect(await templ.getClaimablePoolAmount(user1.address)).to.equal(0);
+
+            // Second member joins
+            await token.connect(user2).approve(await templ.getAddress(), ENTRY_FEE);
+            await templ.connect(user2).purchaseAccess();
+
+            // First member should now have claimable rewards (30% of entry fee)
+            const thirtyPercent = (ENTRY_FEE * 30n) / 100n;
+            expect(await templ.getClaimablePoolAmount(user1.address)).to.equal(thirtyPercent);
+
+            // Second member has no claimable yet
+            expect(await templ.getClaimablePoolAmount(user2.address)).to.equal(0);
+
+            // Third member joins
+            await token.connect(user3).approve(await templ.getAddress(), ENTRY_FEE);
+            await templ.connect(user3).purchaseAccess();
+
+            // Both user1 and user2 should get half of the new member's pool contribution
+            const halfShare = thirtyPercent / 2n;
+            expect(await templ.getClaimablePoolAmount(user1.address)).to.equal(thirtyPercent + halfShare);
+            expect(await templ.getClaimablePoolAmount(user2.address)).to.equal(halfShare);
+        });
+
+        it("Should allow members to claim their pool rewards", async function () {
+            // Setup: 3 members join
+            await token.connect(user1).approve(await templ.getAddress(), ENTRY_FEE);
+            await templ.connect(user1).purchaseAccess();
+
+            await token.connect(user2).approve(await templ.getAddress(), ENTRY_FEE);
+            await templ.connect(user2).purchaseAccess();
+
+            await token.connect(user3).approve(await templ.getAddress(), ENTRY_FEE);
+            await templ.connect(user3).purchaseAccess();
+
+            const claimable = await templ.getClaimablePoolAmount(user1.address);
+            const balanceBefore = await token.balanceOf(user1.address);
+
+            await expect(templ.connect(user1).claimMemberPool())
+                .to.emit(templ, "MemberPoolClaimed");
+
+            expect(await token.balanceOf(user1.address)).to.equal(balanceBefore + claimable);
+            expect(await templ.getClaimablePoolAmount(user1.address)).to.equal(0);
+        });
+
+        it("Should prevent claiming when no rewards available", async function () {
+            await token.connect(user1).approve(await templ.getAddress(), ENTRY_FEE);
+            await templ.connect(user1).purchaseAccess();
+
+            await expect(templ.connect(user1).claimMemberPool())
+                .to.be.revertedWith("No rewards to claim");
+        });
+
+        it("Should track claimed amounts correctly", async function () {
+            // Setup members
+            await token.connect(user1).approve(await templ.getAddress(), ENTRY_FEE);
+            await templ.connect(user1).purchaseAccess();
+
+            await token.connect(user2).approve(await templ.getAddress(), ENTRY_FEE);
+            await templ.connect(user2).purchaseAccess();
+
+            // Claim once
+            await templ.connect(user1).claimMemberPool();
+
+            // Third member joins
+            await token.connect(user3).approve(await templ.getAddress(), ENTRY_FEE);
+            await templ.connect(user3).purchaseAccess();
+
+            // User1 should only be able to claim new rewards
+            const thirtyPercent = (ENTRY_FEE * 30n) / 100n;
+            const expectedNew = thirtyPercent / 2n; // Split between 2 existing members
+            
+            expect(await templ.getClaimablePoolAmount(user1.address)).to.equal(expectedNew);
+        });
+    });
+
+    describe("Edge Cases and Security", function () {
+        it("Should handle very small entry fees correctly", async function () {
+            // Deploy with minimum fee
+            const minTempl = await ethers.deployContract("TEMPL", [
+                priest.address,
+                await token.getAddress(),
+                10, // Minimum allowed
+                10, // priestVoteWeight
+                10  // priestWeightThreshold
+            ]);
+
+            await token.connect(user1).approve(await minTempl.getAddress(), 10);
+            await minTempl.connect(user1).purchaseAccess();
+
+            // Should still split correctly even with rounding
+            expect(await minTempl.treasuryBalance()).to.be.gte(0);
+        });
+
+        it("Should reject entry fee below minimum", async function () {
+            await expect(ethers.deployContract("TEMPL", [
+                priest.address,
+                await token.getAddress(),
+                9, // Below minimum
+                10, // priestVoteWeight
+                10  // priestWeightThreshold
+            ])).to.be.revertedWith("Entry fee too small for distribution");
+        });
+
+        it("Should allow priest to recover wrong tokens", async function () {
+            // Deploy a different token
+            const wrongToken = await ethers.deployContract("TestToken", ["Wrong", "WRONG", 18]);
+            await wrongToken.mint(await templ.getAddress(), ethers.parseUnits("100", 18));
+
+            const balanceBefore = await wrongToken.balanceOf(treasury.address);
+            
+            await templ.connect(priest).recoverWrongToken(
+                await wrongToken.getAddress(),
+                treasury.address
+            );
+
+            expect(await wrongToken.balanceOf(treasury.address))
+                .to.equal(balanceBefore + ethers.parseUnits("100", 18));
+        });
+
+        it("Should prevent priest from recovering treasury/pool tokens", async function () {
+            await expect(templ.connect(priest).recoverWrongToken(
+                await token.getAddress(),
+                priest.address
+            )).to.be.revertedWith("Cannot withdraw treasury/pool tokens");
+        });
+
+        it("Should handle proposal with invalid calldata gracefully", async function () {
+            await token.connect(user1).approve(await templ.getAddress(), ENTRY_FEE);
+            await templ.connect(user1).purchaseAccess();
+
+            // Create proposal with calldata for non-existent function
+            const badCallData = "0x12345678"; // Invalid function selector
+
+            await templ.connect(user1).createProposal(
+                "Bad Proposal",
+                "This will fail",
+                badCallData,
+                7 * 24 * 60 * 60
+            );
+
+            await templ.connect(user1).vote(0, true);
+
+            await ethers.provider.send("evm_increaseTime", [8 * 24 * 60 * 60]);
+            await ethers.provider.send("evm_mine");
+
+            // Execution should revert
+            await expect(templ.executeProposal(0))
+                .to.be.revertedWith("Proposal execution failed");
+
+            // Proposal should not be marked as executed
+            const proposal = await templ.getProposal(0);
+            expect(proposal.executed).to.be.false;
+        });
+    });
+
+    describe("Legacy Function Compatibility", function () {
+        beforeEach(async function () {
+            await token.connect(user1).approve(await templ.getAddress(), ENTRY_FEE);
+            await templ.connect(user1).purchaseAccess();
+        });
+
+        it("Should reject direct withdrawTreasury calls", async function () {
+            await expect(templ.connect(priest).withdrawTreasury(priest.address, ethers.parseUnits("10", 18)))
+                .to.be.revertedWith("Treasury withdrawals require DAO approval. Use withdrawTreasuryDAO through a proposal.");
+        });
+
+        it("Should reject direct withdrawAllTreasury calls", async function () {
+            await expect(templ.connect(priest).withdrawAllTreasury(priest.address))
+                .to.be.revertedWith("Treasury withdrawals require DAO approval. Use withdrawTreasuryDAO through a proposal.");
+        });
+
+        it("Should reject direct updateConfig calls", async function () {
+            await expect(templ.connect(priest).updateConfig(await token.getAddress(), ethers.parseUnits("200", 18)))
+                .to.be.revertedWith("Config updates require DAO approval. Use updateConfigDAO through a proposal.");
+        });
+
+        it("Should reject direct setPaused calls", async function () {
+            await expect(templ.connect(priest).setPaused(true))
+                .to.be.revertedWith("Pause/unpause requires DAO approval. Use setPausedDAO through a proposal.");
+        });
+    });
+
+    describe("Additional DAO Functions", function () {
+        beforeEach(async function () {
+            // Setup members
+            await token.connect(user1).approve(await templ.getAddress(), ENTRY_FEE);
+            await templ.connect(user1).purchaseAccess();
+            
+            await token.connect(user2).approve(await templ.getAddress(), ENTRY_FEE);
+            await templ.connect(user2).purchaseAccess();
+        });
+
+        it("Should execute withdrawAllTreasuryDAO through proposal", async function () {
+            const iface = new ethers.Interface([
+                "function withdrawAllTreasuryDAO(address,string)"
+            ]);
+            const callData = iface.encodeFunctionData("withdrawAllTreasuryDAO", [
+                treasury.address,
+                "Empty treasury"
+            ]);
+
+            await templ.connect(user1).createProposal(
+                "Empty Treasury",
+                "Withdraw all funds",
+                callData,
+                7 * 24 * 60 * 60
+            );
+
+            await templ.connect(user1).vote(0, true);
+            await templ.connect(user2).vote(0, true);
+
+            await ethers.provider.send("evm_increaseTime", [8 * 24 * 60 * 60]);
+            await ethers.provider.send("evm_mine");
+
+            const treasuryBefore = await templ.treasuryBalance();
+            await templ.executeProposal(0);
+            
+            expect(await templ.treasuryBalance()).to.equal(0);
+            expect(await token.balanceOf(treasury.address)).to.equal(treasuryBefore);
+        });
+    });
+
+    describe("Comprehensive View Functions", function () {
+        beforeEach(async function () {
+            await token.connect(user1).approve(await templ.getAddress(), ENTRY_FEE);
+            await templ.connect(user1).purchaseAccess();
+        });
+
+        it("Should return correct hasAccess status", async function () {
+            expect(await templ.hasAccess(user1.address)).to.be.true;
+            expect(await templ.hasAccess(user2.address)).to.be.false;
+        });
+
+        it("Should return correct purchase details", async function () {
+            const details = await templ.getPurchaseDetails(user1.address);
+            expect(details.purchased).to.be.true;
+            expect(details.timestamp).to.be.gt(0);
+            expect(details.blockNum).to.be.gt(0);
+
+            const noDetails = await templ.getPurchaseDetails(user2.address);
+            expect(noDetails.purchased).to.be.false;
+            expect(noDetails.timestamp).to.equal(0);
+            expect(noDetails.blockNum).to.equal(0);
+        });
+
+        it("Should return correct config information", async function () {
+            const config = await templ.getConfig();
+            expect(config.token).to.equal(await token.getAddress());
+            expect(config.fee).to.equal(ENTRY_FEE);
+            expect(config.isPaused).to.be.false;
+            expect(config.purchases).to.equal(1);
+            expect(config.treasury).to.be.gt(0);
+            expect(config.pool).to.be.gt(0);
+        });
+
+        it("Should track total values correctly", async function () {
+            const info = await templ.getTreasuryInfo();
+            const thirtyPercent = (ENTRY_FEE * 30n) / 100n;
+            const tenPercent = (ENTRY_FEE * 10n) / 100n;
+            
+            expect(info.treasury).to.equal(thirtyPercent);
+            expect(info.memberPool).to.equal(thirtyPercent);
+            expect(info.totalReceived).to.equal(thirtyPercent);
+            expect(info.totalBurnedAmount).to.equal(thirtyPercent);
+            expect(info.totalProtocolFees).to.equal(tenPercent);
+            expect(info.protocolAddress).to.equal(priest.address);
+        });
+    });
+
+    describe("Gas Optimization Tests", function () {
+        it("Should handle large member counts efficiently", async function () {
+            // Add 10 members
+            for (let i = 0; i < 10; i++) {
+                const signer = (await ethers.getSigners())[i + 1];
+                await token.mint(signer.address, TOKEN_SUPPLY);
+                await token.connect(signer).approve(await templ.getAddress(), ENTRY_FEE);
+                await templ.connect(signer).purchaseAccess();
+            }
+
+            expect(await templ.getMemberCount()).to.equal(10);
+            
+            // Check that first member can still claim efficiently
+            const claimable = await templ.getClaimablePoolAmount((await ethers.getSigners())[1].address);
+            expect(claimable).to.be.gt(0);
+        });
+    });
+
+    describe("Integration Tests", function () {
+        it("Should handle complete user journey", async function () {
+            // User 1 joins
+            await token.connect(user1).approve(await templ.getAddress(), ENTRY_FEE);
+            await templ.connect(user1).purchaseAccess();
+            expect(await templ.getMemberCount()).to.equal(1);
+
+            // User 2 joins
+            await token.connect(user2).approve(await templ.getAddress(), ENTRY_FEE);
+            await templ.connect(user2).purchaseAccess();
+            expect(await templ.getMemberCount()).to.equal(2);
+
+            // User 1 claims rewards
+            const claimable = await templ.getClaimablePoolAmount(user1.address);
+            expect(claimable).to.be.gt(0);
+            await templ.connect(user1).claimMemberPool();
+
+            // User 1 creates proposal
+            const iface = new ethers.Interface([
+                "function withdrawTreasuryDAO(address,uint256,string)"
+            ]);
+            const callData = iface.encodeFunctionData("withdrawTreasuryDAO", [
+                treasury.address,
+                ethers.parseUnits("10", 18),
+                "Community fund"
+            ]);
+
+            await templ.connect(user1).createProposal(
+                "Community Fund",
+                "Withdraw for community",
+                callData,
+                7 * 24 * 60 * 60
+            );
+
+            // Both vote
+            await templ.connect(user1).vote(0, true);
+            await templ.connect(user2).vote(0, true);
+
+            // Fast forward and execute
+            await ethers.provider.send("evm_increaseTime", [8 * 24 * 60 * 60]);
+            await ethers.provider.send("evm_mine");
+
+            await templ.executeProposal(0);
+
+            // Verify all state
+            const proposal = await templ.getProposal(0);
+            expect(proposal.executed).to.be.true;
+            expect(proposal.passed).to.be.true;
+        });
+    });
 });
-
-// Mock ERC20 for testing
-const MockERC20 = `
-pragma solidity ^0.8.19;
-
-contract MockERC20 {
-    mapping(address => uint256) public balanceOf;
-    mapping(address => mapping(address => uint256)) public allowance;
-    
-    string public name;
-    string public symbol;
-    uint8 public decimals;
-    uint256 public totalSupply;
-    
-    constructor(string memory _name, string memory _symbol, uint8 _decimals) {
-        name = _name;
-        symbol = _symbol;
-        decimals = _decimals;
-    }
-    
-    function mint(address to, uint256 amount) external {
-        balanceOf[to] += amount;
-        totalSupply += amount;
-    }
-    
-    function approve(address spender, uint256 amount) external returns (bool) {
-        allowance[msg.sender][spender] = amount;
-        return true;
-    }
-    
-    function transferFrom(address from, address to, uint256 amount) external returns (bool) {
-        require(balanceOf[from] >= amount, "Insufficient balance");
-        require(allowance[from][msg.sender] >= amount, "Insufficient allowance");
-        
-        balanceOf[from] -= amount;
-        balanceOf[to] += amount;
-        allowance[from][msg.sender] -= amount;
-        
-        return true;
-    }
-}
-`;

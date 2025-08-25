@@ -310,6 +310,21 @@
             color: #6c757d;
             margin-top: 10px;
         }
+
+        .privacy-notice {
+            background: rgba(52, 211, 153, 0.1);
+            border: 1px solid rgba(52, 211, 153, 0.2);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 20px;
+            color: #34d399;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .privacy-notice strong {
+            color: #34d399;
+        }
     </style>
 </head>
 <body>
@@ -391,6 +406,11 @@
         </div>
 
         <div id="usernameSection" style="display: none;">
+            <div class="privacy-notice">
+                🔒 <strong>Privacy Protected:</strong> Your Telegram username is NEVER stored. 
+                It's only used to send the invitation, then immediately discarded. 
+                We only record that your wallet has claimed access.
+            </div>
             <input type="text" 
                    id="telegramUsername" 
                    class="username-input" 
@@ -792,11 +812,9 @@
                     console.log('Session token after verify:', sessionToken);
                 }
                 
-                // If still no session token, create a dummy one for testing
+                // Session token is required - no bypass
                 if (!sessionToken) {
-                    console.warn('Still no session token, attempting without it');
-                    // Skip session verification for now
-                    sessionToken = 'bypass-' + Date.now();
+                    throw new Error('No valid session. Please complete the purchase first.');
                 }
 
                 const response = await fetch(`${API_URL}/api/claim-access`, {
@@ -805,7 +823,7 @@
                     body: JSON.stringify({
                         sessionToken,
                         telegramUsername: username,
-                        walletAddress: walletAddress || '0x0000000000000000000000000000000000000000',
+                        walletAddress: walletAddress, // Required - no defaults
                         contractAddress: contractAddress
                     })
                 });

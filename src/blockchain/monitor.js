@@ -60,7 +60,7 @@ class BlockchainMonitor {
       // Connect to blockchain
       this.provider = new ethers.JsonRpcProvider(RPC_URL);
       
-      // Contract ABI with treasury management
+      // Contract ABI with treasury management and member pool
       const abi = [
         {
           "anonymous": false,
@@ -69,10 +69,23 @@ class BlockchainMonitor {
             {"indexed": false, "internalType": "uint256", "name": "totalAmount", "type": "uint256"},
             {"indexed": false, "internalType": "uint256", "name": "burnedAmount", "type": "uint256"},
             {"indexed": false, "internalType": "uint256", "name": "treasuryAmount", "type": "uint256"},
+            {"indexed": false, "internalType": "uint256", "name": "memberPoolAmount", "type": "uint256"},
+            {"indexed": false, "internalType": "uint256", "name": "protocolAmount", "type": "uint256"},
             {"indexed": false, "internalType": "uint256", "name": "timestamp", "type": "uint256"},
-            {"indexed": false, "internalType": "uint256", "name": "blockNumber", "type": "uint256"}
+            {"indexed": false, "internalType": "uint256", "name": "blockNumber", "type": "uint256"},
+            {"indexed": false, "internalType": "uint256", "name": "purchaseId", "type": "uint256"}
           ],
           "name": "AccessPurchased",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {"indexed": true, "internalType": "address", "name": "member", "type": "address"},
+            {"indexed": false, "internalType": "uint256", "name": "amount", "type": "uint256"},
+            {"indexed": false, "internalType": "uint256", "name": "timestamp", "type": "uint256"}
+          ],
+          "name": "MemberPoolClaimed",
           "type": "event"
         },
         {
@@ -97,10 +110,12 @@ class BlockchainMonitor {
           "inputs": [],
           "name": "getTreasuryInfo",
           "outputs": [
-            {"internalType": "uint256", "name": "balance", "type": "uint256"},
+            {"internalType": "uint256", "name": "treasury", "type": "uint256"},
+            {"internalType": "uint256", "name": "memberPool", "type": "uint256"},
             {"internalType": "uint256", "name": "totalReceived", "type": "uint256"},
             {"internalType": "uint256", "name": "totalBurnedAmount", "type": "uint256"},
-            {"internalType": "address", "name": "priestAddress", "type": "address"}
+            {"internalType": "uint256", "name": "totalProtocolFees", "type": "uint256"},
+            {"internalType": "address", "name": "protocolAddress", "type": "address"}
           ],
           "stateMutability": "view",
           "type": "function"
@@ -113,7 +128,8 @@ class BlockchainMonitor {
             {"internalType": "uint256", "name": "fee", "type": "uint256"},
             {"internalType": "bool", "name": "isPaused", "type": "bool"},
             {"internalType": "uint256", "name": "purchases", "type": "uint256"},
-            {"internalType": "uint256", "name": "treasury", "type": "uint256"}
+            {"internalType": "uint256", "name": "treasury", "type": "uint256"},
+            {"internalType": "uint256", "name": "pool", "type": "uint256"}
           ],
           "stateMutability": "view",
           "type": "function"
@@ -131,12 +147,14 @@ class BlockchainMonitor {
       // Get initial treasury info
       const treasuryInfo = await this.contract.getTreasuryInfo();
       this.treasuryBalance = treasuryInfo[0];
+      this.memberPoolBalance = treasuryInfo[1];
       
       console.log('✅ Blockchain Monitor (SECURE) initialized');
       console.log('Contract:', CONTRACT_ADDRESS);
       console.log('Network:', (await this.provider.getNetwork()).name);
       console.log('Priest Address:', this.priestAddress);
       console.log('Current Treasury Balance:', ethers.formatEther(this.treasuryBalance), 'tokens');
+      console.log('Current Member Pool Balance:', ethers.formatEther(this.memberPoolBalance), 'tokens');
       
     } catch (error) {
       console.error('Failed to initialize monitor:', error);
@@ -163,7 +181,7 @@ class BlockchainMonitor {
     this.startTreasuryMonitoring();
 
     console.log('✅ Secure monitoring active');
-    console.log('📊 Monitoring: Purchases, Treasury deposits, Treasury withdrawals');
+    console.log('📊 Monitoring: Purchases, Treasury, Member Pool, Protocol fees');
   }
   
   async startEventPolling() {
@@ -177,7 +195,7 @@ class BlockchainMonitor {
     }, 30000); // 30 seconds
   }
 
-  async handlePurchase(purchaser, totalAmount, burnedAmount, treasuryAmount, timestamp, blockNumber, event) {
+  async handlePurchase(purchaser, totalAmount, burnedAmount, treasuryAmount, memberPoolAmount, protocolAmount, timestamp, blockNumber, purchaseId, event) {
     try {
       const txHash = event.log.transactionHash;
       const contractAddress = event.log.address.toLowerCase();
@@ -185,14 +203,21 @@ class BlockchainMonitor {
       console.log('\n💰 New Purchase Detected!');
       console.log('Purchaser:', purchaser);
       console.log('Total Amount:', ethers.formatEther(totalAmount));
-      console.log('  - Burned:', ethers.formatEther(burnedAmount));
-      console.log('  - To Treasury:', ethers.formatEther(treasuryAmount));
+      console.log('  - Burned (30%):', ethers.formatEther(burnedAmount));
+      console.log('  - To Treasury (30%):', ethers.formatEther(treasuryAmount));
+      console.log('  - To Member Pool (30%):', ethers.formatEther(memberPoolAmount));
+      console.log('  - Protocol Fee (10%):', ethers.formatEther(protocolAmount));
+      console.log('Purchase ID:', purchaseId.toString());
       console.log('Block:', blockNumber.toString());
       console.log('Tx Hash:', txHash);
       
-      // Verify the split is correct (50/50)
-      if (burnedAmount !== treasuryAmount) {
-        console.error('⚠️  WARNING: Burn/Treasury split is not 50/50!');
+      // Verify the split is correct (30/30/30/10)
+      const expectedThirty = (totalAmount * 30n) / 100n;
+      const expectedTen = (totalAmount * 10n) / 100n;
+      
+      if (burnedAmount !== expectedThirty || treasuryAmount !== expectedThirty || 
+          memberPoolAmount !== expectedThirty || protocolAmount !== expectedTen) {
+        console.error('⚠️  WARNING: Fee split is not 30/30/30/10!');
       }
       
       // Record purchase in database
@@ -208,9 +233,11 @@ class BlockchainMonitor {
       if (purchase) {
         console.log('✅ Purchase recorded in database');
         
-        // Update treasury balance tracking
+        // Update balance tracking
         this.treasuryBalance = this.treasuryBalance + treasuryAmount;
+        this.memberPoolBalance = this.memberPoolBalance + memberPoolAmount;
         console.log('💰 New Treasury Balance:', ethers.formatEther(this.treasuryBalance));
+        console.log('💰 New Member Pool Balance:', ethers.formatEther(this.memberPoolBalance));
       } else {
         console.log('ℹ️  Purchase already recorded (duplicate)');
       }
@@ -251,6 +278,25 @@ class BlockchainMonitor {
       console.error('Error handling treasury withdrawal:', error);
     }
   }
+  
+  async handleMemberPoolClaim(member, amount, timestamp, event) {
+    try {
+      const txHash = event.log.transactionHash;
+      
+      console.log('\n🎁 Member Pool Claim Detected!');
+      console.log('Member:', member);
+      console.log('Amount:', ethers.formatEther(amount));
+      console.log('Timestamp:', new Date(Number(timestamp) * 1000).toISOString());
+      console.log('Tx Hash:', txHash);
+      
+      // Update member pool balance tracking
+      this.memberPoolBalance = this.memberPoolBalance - amount;
+      console.log('💰 New Member Pool Balance:', ethers.formatEther(this.memberPoolBalance));
+      
+    } catch (error) {
+      console.error('Error handling member pool claim:', error);
+    }
+  }
 
   async processPastEvents() {
     try {
@@ -262,8 +308,8 @@ class BlockchainMonitor {
         fromBlock = this.lastProcessedBlock + 1;
         console.log(`Resuming from block ${fromBlock}`);
       } else {
-        // Look back up to 1000 blocks
-        fromBlock = Math.max(0, currentBlock - 1000);
+        // Look back up to 100 blocks (reduced from 1000 to avoid RPC issues)
+        fromBlock = Math.max(0, currentBlock - 100);
         console.log(`Processing past events from block ${fromBlock}`);
       }
       
@@ -272,31 +318,65 @@ class BlockchainMonitor {
         return;
       }
       
-      // Get past purchase events
-      const purchaseFilter = this.contract.filters.AccessPurchased();
-      const purchaseEvents = await this.contract.queryFilter(purchaseFilter, fromBlock, currentBlock);
+      // Process in smaller chunks to avoid RPC limits
+      const CHUNK_SIZE = 50;
+      let processedBlock = fromBlock;
       
-      console.log(`Found ${purchaseEvents.length} past purchase events`);
-      
-      for (const event of purchaseEvents) {
-        const [purchaser, totalAmount, burnedAmount, treasuryAmount, timestamp, blockNumber] = event.args;
-        await this.handlePurchase(purchaser, totalAmount, burnedAmount, treasuryAmount, timestamp, blockNumber, { log: event });
+      while (processedBlock < currentBlock) {
+        const toBlock = Math.min(processedBlock + CHUNK_SIZE, currentBlock);
+        
+        try {
+          // Get past purchase events
+          const purchaseFilter = this.contract.filters.AccessPurchased();
+          const purchaseEvents = await this.contract.queryFilter(purchaseFilter, processedBlock, toBlock);
+          
+          if (purchaseEvents.length > 0) {
+            console.log(`Found ${purchaseEvents.length} purchase events in blocks ${processedBlock}-${toBlock}`);
+          }
+          
+          for (const event of purchaseEvents) {
+            const [purchaser, totalAmount, burnedAmount, treasuryAmount, memberPoolAmount, protocolAmount, timestamp, blockNumber, purchaseId] = event.args;
+            await this.handlePurchase(purchaser, totalAmount, burnedAmount, treasuryAmount, memberPoolAmount, protocolAmount, timestamp, blockNumber, purchaseId, { log: event });
+          }
+          
+          // Get past withdrawal events
+          const withdrawalFilter = this.contract.filters.TreasuryWithdrawn();
+          const withdrawalEvents = await this.contract.queryFilter(withdrawalFilter, processedBlock, toBlock);
+          
+          if (withdrawalEvents.length > 0) {
+            console.log(`Found ${withdrawalEvents.length} withdrawal events`);
+          }
+          
+          for (const event of withdrawalEvents) {
+            const [priest, recipient, amount, timestamp] = event.args;
+            await this.handleTreasuryWithdrawal(priest, recipient, amount, timestamp, { log: event });
+          }
+          
+          // Get past member pool claim events
+          const poolClaimFilter = this.contract.filters.MemberPoolClaimed();
+          const poolClaimEvents = await this.contract.queryFilter(poolClaimFilter, processedBlock, toBlock);
+          
+          if (poolClaimEvents.length > 0) {
+            console.log(`Found ${poolClaimEvents.length} member pool claim events`);
+          }
+          
+          for (const event of poolClaimEvents) {
+            const [member, amount, timestamp] = event.args;
+            await this.handleMemberPoolClaim(member, amount, timestamp, { log: event });
+          }
+          
+          processedBlock = toBlock;
+          
+          // Save state after each chunk
+          this.lastProcessedBlock = toBlock;
+          await this.saveState();
+          
+        } catch (chunkError) {
+          console.error(`Error processing blocks ${processedBlock}-${toBlock}:`, chunkError.message);
+          // Skip this chunk and continue
+          processedBlock = toBlock;
+        }
       }
-      
-      // Get past withdrawal events
-      const withdrawalFilter = this.contract.filters.TreasuryWithdrawn();
-      const withdrawalEvents = await this.contract.queryFilter(withdrawalFilter, fromBlock, currentBlock);
-      
-      console.log(`Found ${withdrawalEvents.length} past withdrawal events`);
-      
-      for (const event of withdrawalEvents) {
-        const [priest, recipient, amount, timestamp] = event.args;
-        await this.handleTreasuryWithdrawal(priest, recipient, amount, timestamp, { log: event });
-      }
-      
-      // Update last processed block
-      this.lastProcessedBlock = currentBlock;
-      await this.saveState();
       
     } catch (error) {
       console.error('Error processing past events:', error);
@@ -330,15 +410,17 @@ class BlockchainMonitor {
         const treasuryInfo = await this.contract.getTreasuryInfo();
         const config = await this.contract.getConfig();
         
-        console.log('\n📊 Treasury Status Report');
-        console.log('========================');
-        console.log('Current Balance:', ethers.formatEther(treasuryInfo[0]), 'tokens');
-        console.log('Total Received:', ethers.formatEther(treasuryInfo[1]), 'tokens');
-        console.log('Total Burned:', ethers.formatEther(treasuryInfo[2]), 'tokens');
+        console.log('\n📊 Treasury & Pool Status Report');
+        console.log('===================================');
+        console.log('Treasury Balance:', ethers.formatEther(treasuryInfo[0]), 'tokens');
+        console.log('Member Pool Balance:', ethers.formatEther(treasuryInfo[1]), 'tokens');
+        console.log('Total to Treasury:', ethers.formatEther(treasuryInfo[2]), 'tokens');
+        console.log('Total Burned:', ethers.formatEther(treasuryInfo[3]), 'tokens');
+        console.log('Total Protocol Fees:', ethers.formatEther(treasuryInfo[4]), 'tokens');
         console.log('Total Purchases:', config[3].toString());
         console.log('Contract Paused:', config[2]);
-        console.log('Priest Address:', treasuryInfo[3]);
-        console.log('========================\n');
+        console.log('Protocol Address:', treasuryInfo[5]);
+        console.log('===================================\n');
         
       } catch (error) {
         console.error('Error checking treasury status:', error);
@@ -362,7 +444,8 @@ class BlockchainMonitor {
       const state = {
         lastProcessedBlock: this.lastProcessedBlock,
         savedAt: new Date().toISOString(),
-        treasuryBalance: this.treasuryBalance.toString()
+        treasuryBalance: this.treasuryBalance.toString(),
+        memberPoolBalance: this.memberPoolBalance ? this.memberPoolBalance.toString() : '0'
       };
       await fs.writeFile(this.stateFile, JSON.stringify(state, null, 2));
     } catch (error) {

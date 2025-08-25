@@ -33,15 +33,9 @@ CREATE TABLE IF NOT EXISTS access_claims (
     id SERIAL PRIMARY KEY,
     contract_address VARCHAR(42) NOT NULL,
     wallet_address VARCHAR(42) NOT NULL,
-    telegram_username VARCHAR(100) NOT NULL,
-    telegram_user_id VARCHAR(100),
     claim_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    invitation_status VARCHAR(50) DEFAULT 'pending', -- pending, inviting, success, failed, retry_needed
-    invitation_attempts INTEGER DEFAULT 0,
-    last_invitation_attempt TIMESTAMP,
-    invitation_error TEXT,
-    user_joined BOOLEAN DEFAULT false,
-    joined_at TIMESTAMP,
+    invitation_sent BOOLEAN DEFAULT false,
+    invitation_timestamp TIMESTAMP,
     UNIQUE(contract_address, wallet_address),
     FOREIGN KEY (contract_address) REFERENCES contracts(contract_address)
 );
