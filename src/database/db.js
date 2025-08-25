@@ -148,7 +148,7 @@ class Database {
   /**
    * Submit access claim with Telegram username
    */
-  async submitClaim(contractAddress, walletAddress, telegramUsername) {
+  async submitClaim(contractAddress, walletAddress) {
     // First verify purchase exists
     const purchase = await this.hasPurchased(contractAddress, walletAddress);
     if (!purchase) {
@@ -163,15 +163,14 @@ class Database {
     
     const query = `
       INSERT INTO access_claims (
-        contract_address, wallet_address, telegram_username
-      ) VALUES ($1, $2, $3)
+        contract_address, wallet_address, invitation_sent, invitation_timestamp
+      ) VALUES ($1, $2, true, CURRENT_TIMESTAMP)
       RETURNING *
     `;
     
     const result = await this.pool.query(query, [
       contractAddress.toLowerCase(),
-      walletAddress.toLowerCase(),
-      telegramUsername
+      walletAddress.toLowerCase()
     ]);
     
     return result.rows[0];
