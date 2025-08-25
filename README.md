@@ -283,36 +283,3 @@ journalctl -u templ -f
 # Database queries
 psql -d telegram_access -c "SELECT * FROM purchases ORDER BY created_at DESC LIMIT 10;"
 ```
-
-## 🐛 Troubleshooting
-
-### Cannot Withdraw Treasury
-- Verify calling from priest address
-- Check treasury has balance
-- Ensure contract not paused
-
-### User Can't Join
-- Check Telegram privacy settings
-- Verify purchase on-chain
-- Check username format
-
-### Session Expired
-- Run `./first-run.sh` to re-authenticate
-- SESSION_STRING will be updated automatically
-
-## 🔐 Security Notes
-
-- **Priest is the sole authority** (no separate owner role)
-- Priest address is **immutable** after deployment
-- All sensitive operations logged
-- Nonce prevents replay attacks
-- JWT sessions expire after 1 hour
-- No automatic group creation - manual control only
-
-## 📝 License
-
-MIT License - Use responsibly and in accordance with Telegram's Terms of Service.
-
----
-
-**Important**: This system uses direct API invitations for maximum security. No public invite links are generated. Groups must be created manually.
