@@ -79,13 +79,15 @@ prompt_with_default "RPC URL for BASE" "${RPC_URL:-$DEFAULT_RPC}" RPC_URL
 # Addresses
 prompt_with_default "Priest Address (controls treasury)" "$PRIEST_ADDRESS" PRIEST_ADDRESS
 prompt_with_default "Token Contract Address" "$TOKEN_ADDRESS" TOKEN_ADDRESS
-prompt_with_default "Entry Fee (must be even number)" "${ENTRY_FEE:-420}" ENTRY_FEE
+prompt_with_default "Entry Fee (must be at least 10 wei)" "${ENTRY_FEE:-420}" ENTRY_FEE
 
-# Validate entry fee is even
-if [ $((ENTRY_FEE % 2)) -ne 0 ]; then
-    echo -e "${RED}Error: Entry fee must be an even number for 50/50 split${NC}"
+# Validate entry fee is at least 10
+if [ $ENTRY_FEE -lt 10 ]; then
+    echo -e "${RED}Error: Entry fee must be at least 10 wei for 30/30/30/10 distribution${NC}"
     exit 1
 fi
+
+echo -e "${GREEN}Fee Distribution: 30% burn, 30% treasury, 30% member pool, 10% protocol${NC}"
 
 # Contract deployment
 if [ -z "$CONTRACT_ADDRESS" ]; then
@@ -129,6 +131,7 @@ echo ""
 echo -e "${YELLOW}IMPORTANT: Manual Group Setup Required${NC}"
 echo "1. Create a Telegram group manually using the account with phone: $PHONE_NUMBER"
 echo "2. Add your bot as admin (with restricted permissions - no invite)"
+echo "   Note: New members will share 30% of future entry fees pro-rata"
 echo "3. Get the group ID (it will look like -1001234567890)"
 echo ""
 
@@ -159,6 +162,7 @@ cat > .env << EOF
 # ========================================
 # TEMPL Protocol Configuration
 # Generated: $(date)
+# Token Distribution: 30% burn, 30% treasury, 30% member pool, 10% protocol
 # ========================================
 
 # SECURITY (Required)

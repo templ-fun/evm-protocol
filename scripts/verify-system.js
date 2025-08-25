@@ -70,8 +70,8 @@ async function verifySystem() {
     const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
     const contractABI = [
       "function priest() view returns (address)",
-      "function getTreasuryInfo() view returns (uint256, uint256, uint256, address)",
-      "function getConfig() view returns (address, uint256, bool, uint256, uint256)",
+      "function getTreasuryInfo() view returns (uint256, uint256, uint256, uint256, uint256, address)",
+      "function getConfig() view returns (address, uint256, bool, uint256, uint256, uint256)",
       "function hasAccess(address) view returns (bool)"
     ];
     
@@ -95,8 +95,10 @@ async function verifySystem() {
     // Check treasury info
     const treasuryInfo = await contract.getTreasuryInfo();
     console.log(`  ${CHECKS.INFO} Treasury Balance: ${ethers.formatEther(treasuryInfo[0])} tokens`);
-    console.log(`  ${CHECKS.INFO} Total Received: ${ethers.formatEther(treasuryInfo[1])} tokens`);
-    console.log(`  ${CHECKS.INFO} Total Burned: ${ethers.formatEther(treasuryInfo[2])} tokens`);
+    console.log(`  ${CHECKS.INFO} Member Pool Balance: ${ethers.formatEther(treasuryInfo[1])} tokens`);
+    console.log(`  ${CHECKS.INFO} Total to Treasury: ${ethers.formatEther(treasuryInfo[2])} tokens`);
+    console.log(`  ${CHECKS.INFO} Total Burned: ${ethers.formatEther(treasuryInfo[3])} tokens`);
+    console.log(`  ${CHECKS.INFO} Total Protocol Fees: ${ethers.formatEther(treasuryInfo[4])} tokens`);
     
     // Check config
     const config = await contract.getConfig();

@@ -5,16 +5,20 @@
 ## 🎯 Overview
 
 **Deployed on BASE Chain** - Users pay tokens to join exclusive Telegram groups:
-- **50% to Treasury**: Accumulates for priest-controlled withdrawals
-- **50% Burned**: Permanently removed from circulation  
+- **30% Burned**: Permanently removed from circulation
+- **30% to Treasury**: Accumulates for priest-controlled withdrawals
+- **30% to Member Pool**: Distributed pro-rata to existing members
+- **10% Protocol Fee**: Goes directly to priest address
 - **One Purchase Per Wallet**: Enforced on-chain and off-chain
 - **Direct Invitations**: No public invite links for maximum security
 - **BASE Network**: Fast & low-cost transactions
+- **Member Rewards**: Earlier members earn from new members joining
 
 ## 🔒 Security Features
 
 - ✅ Single priest authority (controls treasury & admin)
-- ✅ 50/50 fee split (treasury/burn)
+- ✅ 30/30/30/10 fee split (burn/treasury/pool/protocol)
+- ✅ Pro-rata member rewards system
 - ✅ Payment enforcement before access
 - ✅ JWT authentication with required secrets
 - ✅ Nonce-based signature verification (replay attack prevention)
@@ -63,11 +67,18 @@ The setup script will:
 
 ## 💰 User Flow
 
+### Priest Dashboard (NEW)
+Priests can create and manage temples at `https://yoursite.com/priest.html`
+- Auto-creates Telegram groups
+- Links groups to contracts
+- Adds priest as admin
+- Generates purchase URLs
+
 ### Complete Purchase Flow
 Use the all-in-one interface at `https://yoursite.com/purchase.html?contract=0x...`
 1. **Connect Wallet** - MetaMask or any Web3 wallet (ensure BASE network)
 2. **Approve Tokens** - One-time approval for the contract
-3. **Purchase Access** - Pay entry fee (50% treasury, 50% burned)
+3. **Purchase Access** - Pay entry fee (30% burned, 30% treasury, 30% member pool, 10% protocol)
 4. **Enter Username** - Submit your Telegram username
 5. **Receive Invitation** - Bot sends group invite
 
@@ -100,6 +111,8 @@ await contract.withdrawAllTreasury(recipient)
 | `/api/verify-purchase` | POST | Verify wallet purchase (requires signature) |
 | `/api/claim-access` | POST | Submit Telegram username (requires JWT) |
 | `/api/retry-invitation` | POST | Retry failed invitation |
+| `/api/create-temple` | POST | Create new group for contract (priest only) |
+| `/api/group-contract/:id` | GET | Get contract info for a group |
 | `/api/invite-rosie-bot` | POST | Invite Rosie bot to group (admin only) |
 | `/api/claim-status/:wallet/:contract` | GET | Check claim status |
 | `/api/contract-stats/:contract` | GET | Contract statistics |
@@ -129,6 +142,7 @@ tgbot-group/
 │   └── first-run.sh              # Telegram authentication
 ├── public/
 │   ├── index.html                # Landing page
+│   ├── priest.html               # Priest dashboard (NEW)
 │   ├── purchase.html             # Complete purchase flow
 │   └── claim.html                # Claim-only interface
 ├── test/
@@ -146,11 +160,13 @@ tgbot-group/
 function purchaseAccess() external
 function hasAccess(address user) view returns (bool)
 function getPurchaseDetails(address) view returns (purchased, timestamp, block)
+function getClaimablePoolAmount(address member) view returns (uint256)
+function claimMemberPool() external
 
 // Treasury Functions (Priest Only)
 function withdrawTreasury(address recipient, uint256 amount) external
 function withdrawAllTreasury(address recipient) external
-function getTreasuryInfo() view returns (balance, received, burned, priest)
+function getTreasuryInfo() view returns (treasury, memberPool, totalReceived, totalBurned, totalProtocol, priest)
 
 // Admin Functions (Priest Only)
 function setPaused(bool) external
@@ -188,7 +204,7 @@ FRONTEND_URL=https://yoursite.com
 # BLOCKCHAIN (Required)
 RPC_URL=https://mainnet.base.org
 TOKEN_ADDRESS=0x...   # ERC20 token on BASE
-ENTRY_FEE=420         # Must be even
+ENTRY_FEE=420         # Must be at least 10 for proper distribution
 CONTRACT_ADDRESS=0x...  # After deployment
 CHAIN_ID=8453        # BASE mainnet
 

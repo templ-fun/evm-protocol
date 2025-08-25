@@ -215,6 +215,124 @@ class TelegramService {
       this.isConnected = false;
     }
   }
+  
+  /**
+   * Create a new Telegram group
+   */
+  async createGroup(title, about = '') {
+    try {
+      if (!this.client) {
+        throw new Error('Telegram client not initialized');
+      }
+      
+      const result = await this.client.invoke(
+        new Api.messages.CreateChat({
+          users: [], // Empty initially
+          title: title
+        })
+      );
+      
+      // Get the created chat ID
+      const chatId = result.updates.chats[0].id;
+      const groupId = `-${chatId}`; // Basic group format
+      
+      console.log(`Created group: ${title} with ID: ${groupId}`);
+      
+      return {
+        success: true,
+        groupId,
+        title
+      };
+      
+    } catch (error) {
+      console.error('Error creating group:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+  
+  /**
+   * Add user as admin to group
+   */
+  async addGroupAdmin(groupId, username, permissions = {}) {
+    try {
+      if (!this.client) {
+        throw new Error('Telegram client not initialized');
+      }
+      
+      // Get entities
+      const groupEntity = await this.getGroupEntity(groupId);
+      const userEntity = await this.client.getEntity(username);
+      
+      // For basic groups, we can't set admin rights
+      // We need to migrate to supergroup first
+      try {
+        // Try to migrate to supergroup
+        await this.client.invoke(
+          new Api.messages.MigrateChat({
+            chatId: groupEntity
+          })
+        );
+      } catch (e) {
+        console.log('Group might already be a supergroup or migration not needed');
+      }
+      
+      // Add user to group first
+      try {
+        await this.client.invoke(
+          new Api.messages.AddChatUser({
+            chatId: groupEntity,
+            userId: userEntity,
+            fwdLimit: 0
+          })
+        );
+      } catch (e) {
+        console.log('User might already be in group');
+      }
+      
+      // Try to set admin rights (works for supergroups)
+      try {
+        const adminRights = new Api.ChatAdminRights({
+          changeInfo: permissions.canChangeInfo || false,
+          deleteMessages: permissions.canDeleteMessages || true,
+          banUsers: permissions.canRestrictMembers || true,
+          inviteUsers: permissions.canInviteUsers || false,
+          pinMessages: permissions.canPinMessages || true,
+          addAdmins: permissions.canPromoteMembers || false,
+          anonymous: false,
+          manageCall: false,
+          other: false
+        });
+        
+        await this.client.invoke(
+          new Api.channels.EditAdmin({
+            channel: groupEntity,
+            userId: userEntity,
+            adminRights: adminRights,
+            rank: 'Admin'
+          })
+        );
+      } catch (e) {
+        console.log('Could not set admin rights - group might be basic group');
+      }
+      
+      console.log(`Added ${username} as admin to group ${groupId}`);
+      
+      return {
+        success: true,
+        message: 'Admin added successfully'
+      };
+      
+    } catch (error) {
+      console.error('Error adding admin:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
 }
 
 module.exports = TelegramService;

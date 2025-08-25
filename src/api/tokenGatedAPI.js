@@ -475,6 +475,147 @@ class TokenGatedAPI {
       }
     });
 
+    /**
+     * Create new temple (group) for a contract
+     * POST /api/create-temple
+     */
+    this.app.post('/api/create-temple', async (req, res) => {
+      try {
+        const { 
+          contractAddress, 
+          groupName, 
+          priestUsername,
+          priestAddress,
+          tokenAddress,
+          entryFee,
+          signature,
+          message 
+        } = req.body;
+        
+        // Verify signature
+        const recoveredAddress = ethers.verifyMessage(message, signature);
+        if (recoveredAddress.toLowerCase() !== priestAddress.toLowerCase()) {
+          return res.status(401).json({ error: 'Invalid signature' });
+        }
+        
+        // Verify priest owns the contract
+        const contract = new ethers.Contract(
+          contractAddress,
+          ['function priest() view returns (address)'],
+          this.provider
+        );
+        
+        const onChainPriest = await contract.priest();
+        if (onChainPriest.toLowerCase() !== priestAddress.toLowerCase()) {
+          return res.status(403).json({ 
+            error: 'You are not the priest of this contract' 
+          });
+        }
+        
+        // Create Telegram group
+        const groupResult = await this.telegramService.createGroup(
+          groupName,
+          `Token-gated access group for contract ${contractAddress}`
+        );
+        
+        if (!groupResult.success) {
+          return res.status(500).json({ 
+            error: 'Failed to create Telegram group',
+            details: groupResult.error 
+          });
+        }
+        
+        const groupId = groupResult.groupId;
+        
+        // Add priest as admin (with limited permissions)
+        const addAdminResult = await this.telegramService.addGroupAdmin(
+          groupId,
+          `@${priestUsername}`,
+          {
+            canDeleteMessages: true,
+            canRestrictMembers: true,
+            canInviteUsers: false, // No invite permission
+            canPinMessages: true,
+            canPromoteMembers: false
+          }
+        );
+        
+        if (!addAdminResult.success) {
+          console.error('Failed to add priest as admin:', addAdminResult.error);
+        }
+        
+        // Add TEMPL bot to group
+        const botUsername = process.env.BOT_USERNAME;
+        if (botUsername) {
+          const addBotResult = await this.telegramService.inviteUserToGroup(
+            groupId,
+            `@${botUsername}`
+          );
+          
+          if (!addBotResult.success) {
+            console.error('Failed to add bot:', addBotResult.error);
+          }
+        }
+        
+        // Register in database
+        await this.db.registerContract(
+          contractAddress.toLowerCase(),
+          8453, // BASE chain ID
+          tokenAddress.toLowerCase(),
+          entryFee,
+          groupId,
+          groupName
+        );
+        
+        res.json({
+          success: true,
+          groupId,
+          groupName,
+          inviteLink: `https://t.me/${groupName.replace(/\s+/g, '_')}`,
+          message: 'Temple created successfully'
+        });
+        
+      } catch (error) {
+        console.error('Error creating temple:', error);
+        res.status(500).json({ error: error.message });
+      }
+    });
+    
+    /**
+     * Get contract for a group
+     * GET /api/group-contract/:groupId
+     */
+    this.app.get('/api/group-contract/:groupId', async (req, res) => {
+      try {
+        const { groupId } = req.params;
+        
+        const query = `
+          SELECT contract_address, group_title, token_address, burn_amount 
+          FROM contracts 
+          WHERE telegram_group_id = $1
+        `;
+        
+        const result = await this.db.pool.query(query, [groupId]);
+        
+        if (result.rows.length === 0) {
+          return res.status(404).json({ error: 'No contract found for this group' });
+        }
+        
+        const contract = result.rows[0];
+        res.json({
+          contractAddress: contract.contract_address,
+          groupTitle: contract.group_title,
+          tokenAddress: contract.token_address,
+          entryFee: contract.burn_amount,
+          purchaseUrl: `${process.env.FRONTEND_URL.split(',')[0]}/purchase.html?contract=${contract.contract_address}`
+        });
+        
+      } catch (error) {
+        console.error('Error getting group contract:', error);
+        res.status(500).json({ error: error.message });
+      }
+    });
+    
     // Health check
     this.app.get('/health', (req, res) => {
       res.json({ 

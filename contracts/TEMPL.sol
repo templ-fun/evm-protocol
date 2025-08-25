@@ -10,22 +10,34 @@ interface IERC20 {
 
 /**
  * @title TEMPL - Telegram Entry Management Protocol
+ * @dev Splits: 30% burn, 30% treasury, 30% member pool, 10% protocol
  */
 contract TEMPL {
     // State variables
-    address public immutable priest;
+    address public immutable priest; // Protocol address for 10% fee
     address public accessToken;
     uint256 public entryFee;
     uint256 public treasuryBalance;
+    uint256 public memberPoolBalance;
     bool public paused;
     
     // Track purchases
     mapping(address => bool) public hasPurchased;
     mapping(address => uint256) public purchaseTimestamp;
     mapping(address => uint256) public purchaseBlock;
+    
+    // Member pool tracking - simplified
+    address[] public members; // List of all members in order
+    mapping(address => uint256) public memberIndex; // Index in members array
+    mapping(address => uint256) public memberPoolClaims; // Track claimed amounts
+    uint256[] public poolDeposits; // Pool amount from each purchase
+    
+    // Totals
     uint256 public totalPurchases;
     uint256 public totalBurned;
     uint256 public totalToTreasury;
+    uint256 public totalToMemberPool;
+    uint256 public totalToProtocol;
     
     // Events
     event AccessPurchased(
@@ -33,8 +45,17 @@ contract TEMPL {
         uint256 totalAmount,
         uint256 burnedAmount,
         uint256 treasuryAmount,
+        uint256 memberPoolAmount,
+        uint256 protocolAmount,
         uint256 timestamp,
-        uint256 blockNumber
+        uint256 blockNumber,
+        uint256 purchaseId
+    );
+    
+    event MemberPoolClaimed(
+        address indexed member,
+        uint256 amount,
+        uint256 timestamp
     );
     
     event TreasuryWithdrawn(
@@ -64,9 +85,9 @@ contract TEMPL {
     
     /**
      * @dev Constructor
-     * @param _priest Address that controls treasury and admin functions (immutable)
+     * @param _priest Address that receives protocol fees and controls admin functions
      * @param _token Address of the ERC20 token
-     * @param _entryFee Total entry fee in wei (absolute value) - half burned, half to treasury
+     * @param _entryFee Total entry fee in wei (absolute value)
      */
     constructor(
         address _priest,
@@ -76,7 +97,7 @@ contract TEMPL {
         require(_priest != address(0), "Invalid priest address");
         require(_token != address(0), "Invalid token address");
         require(_entryFee > 0, "Entry fee must be greater than 0");
-        require(_entryFee % 2 == 0, "Entry fee must be even for 50/50 split");
+        require(_entryFee >= 10, "Entry fee too small for distribution");
         
         priest = _priest;
         accessToken = _token;
@@ -86,57 +107,139 @@ contract TEMPL {
     
     /**
      * @dev Purchase group access
-     * Splits payment: 50% to treasury, 50% burned
-     * Can only purchase once per wallet
+     * Splits: 30% burn, 30% treasury, 30% member pool, 10% protocol
      */
     function purchaseAccess() external whenNotPaused {
         require(!hasPurchased[msg.sender], "Already purchased access");
         
-        // entryFee is already in wei (absolute value)
-        uint256 halfAmount = entryFee / 2;
+        // Calculate splits (30%, 30%, 30%, 10%)
+        uint256 thirtyPercent = (entryFee * 30) / 100;
+        uint256 tenPercent = (entryFee * 10) / 100;
+        
+        // Ensure we have the full amount
+        uint256 totalRequired = thirtyPercent * 3 + tenPercent;
+        require(totalRequired <= entryFee, "Calculation error");
         
         require(
             IERC20(accessToken).balanceOf(msg.sender) >= entryFee,
             "Insufficient token balance"
         );
         
-        bool treasurySuccess = IERC20(accessToken).transferFrom(
-            msg.sender,
-            address(this),
-            halfAmount
-        );
-        require(treasurySuccess, "Treasury transfer failed");
-        
+        // 1. Burn 30%
         bool burnSuccess = IERC20(accessToken).transferFrom(
             msg.sender,
             address(0x000000000000000000000000000000000000dEaD),
-            halfAmount
+            thirtyPercent
         );
         require(burnSuccess, "Burn transfer failed");
         
-        treasuryBalance += halfAmount;
-        totalToTreasury += halfAmount;
-        totalBurned += halfAmount;
+        // 2. Treasury 30%
+        bool treasurySuccess = IERC20(accessToken).transferFrom(
+            msg.sender,
+            address(this),
+            thirtyPercent
+        );
+        require(treasurySuccess, "Treasury transfer failed");
         
+        // 3. Member Pool 30% (stays in contract)
+        bool poolSuccess = IERC20(accessToken).transferFrom(
+            msg.sender,
+            address(this),
+            thirtyPercent
+        );
+        require(poolSuccess, "Pool transfer failed");
+        
+        // 4. Protocol fee 10% (to priest)
+        bool protocolSuccess = IERC20(accessToken).transferFrom(
+            msg.sender,
+            priest,
+            tenPercent
+        );
+        require(protocolSuccess, "Protocol transfer failed");
+        
+        // Update balances
+        treasuryBalance += thirtyPercent;
+        memberPoolBalance += thirtyPercent;
+        totalBurned += thirtyPercent;
+        totalToTreasury += thirtyPercent;
+        totalToMemberPool += thirtyPercent;
+        totalToProtocol += tenPercent;
+        
+        // Record pool deposit for existing members (before adding new member)
+        if (members.length > 0) {
+            poolDeposits.push(thirtyPercent);
+        } else {
+            poolDeposits.push(0); // First member doesn't get rewards from their own purchase
+        }
+        
+        // Mark purchase and add to members list
         hasPurchased[msg.sender] = true;
         purchaseTimestamp[msg.sender] = block.timestamp;
         purchaseBlock[msg.sender] = block.number;
+        memberIndex[msg.sender] = members.length;
+        members.push(msg.sender);
         totalPurchases++;
         
         emit AccessPurchased(
             msg.sender,
             entryFee,
-            halfAmount,
-            halfAmount,
+            thirtyPercent,
+            thirtyPercent,
+            thirtyPercent,
+            tenPercent,
             block.timestamp,
-            block.number
+            block.number,
+            totalPurchases - 1
         );
     }
     
     /**
+     * @dev Calculate claimable amount from member pool
+     */
+    function getClaimablePoolAmount(address member) public view returns (uint256) {
+        if (!hasPurchased[member]) {
+            return 0;
+        }
+        
+        uint256 memberIdx = memberIndex[member];
+        uint256 totalClaimable = 0;
+        
+        // Calculate share from each deposit after this member joined
+        for (uint256 i = memberIdx + 1; i < poolDeposits.length; i++) {
+            if (poolDeposits[i] > 0) {
+                // Number of members who share this deposit (all who joined before deposit i)
+                uint256 eligibleMembers = i; // i members existed when deposit i was made
+                if (eligibleMembers > 0) {
+                    uint256 sharePerMember = poolDeposits[i] / eligibleMembers;
+                    totalClaimable += sharePerMember;
+                }
+            }
+        }
+        
+        // Subtract already claimed amount
+        return totalClaimable > memberPoolClaims[member] ? 
+               totalClaimable - memberPoolClaims[member] : 0;
+    }
+    
+    /**
+     * @dev Claim member pool rewards
+     */
+    function claimMemberPool() external {
+        uint256 claimable = getClaimablePoolAmount(msg.sender);
+        require(claimable > 0, "No rewards to claim");
+        require(memberPoolBalance >= claimable, "Insufficient pool balance");
+        
+        memberPoolClaims[msg.sender] += claimable;
+        memberPoolBalance -= claimable;
+        
+        bool success = IERC20(accessToken).transfer(msg.sender, claimable);
+        require(success, "Pool claim transfer failed");
+        
+        emit MemberPoolClaimed(msg.sender, claimable, block.timestamp);
+    }
+    
+    /**
      * @dev Withdraw treasury funds - ONLY PRIEST CAN CALL
-     * @param recipient Address to receive the funds
-     * @param amount Amount to withdraw (with decimals)
      */
     function withdrawTreasury(address recipient, uint256 amount) external onlyPriest {
         require(recipient != address(0), "Invalid recipient");
@@ -157,8 +260,7 @@ contract TEMPL {
     }
     
     /**
-     * @dev Withdraw all treasury funds - ONLY PRIEST CAN CALL
-     * @param recipient Address to receive all treasury funds
+     * @dev Withdraw all treasury funds
      */
     function withdrawAllTreasury(address recipient) external onlyPriest {
         require(recipient != address(0), "Invalid recipient");
@@ -180,8 +282,6 @@ contract TEMPL {
     
     /**
      * @dev Check if an address has purchased access
-     * @param user Address to check
-     * @return bool Whether the address has purchased
      */
     function hasAccess(address user) external view returns (bool) {
         return hasPurchased[user];
@@ -189,10 +289,6 @@ contract TEMPL {
     
     /**
      * @dev Get purchase details for an address
-     * @param user Address to query
-     * @return purchased Whether purchased
-     * @return timestamp When purchased (0 if not)
-     * @return blockNum Block number of purchase (0 if not)
      */
     function getPurchaseDetails(address user) external view returns (
         bool purchased,
@@ -207,30 +303,28 @@ contract TEMPL {
     }
     
     /**
-     * @dev Get treasury information
-     * @return balance Current treasury balance
-     * @return totalReceived Total ever sent to treasury
-     * @return totalBurnedAmount Total ever burned
-     * @return priestAddress The priest who controls everything
+     * @dev Get treasury and pool information
      */
     function getTreasuryInfo() external view returns (
-        uint256 balance,
+        uint256 treasury,
+        uint256 memberPool,
         uint256 totalReceived,
         uint256 totalBurnedAmount,
-        address priestAddress
+        uint256 totalProtocolFees,
+        address protocolAddress
     ) {
         return (
             treasuryBalance,
+            memberPoolBalance,
             totalToTreasury,
             totalBurned,
+            totalToProtocol,
             priest
         );
     }
     
     /**
      * @dev Update contract configuration (priest only)
-     * @param _token New token address (use address(0) to keep current)
-     * @param _entryFee New entry fee (use 0 to keep current)
      */
     function updateConfig(
         address _token,
@@ -240,7 +334,7 @@ contract TEMPL {
             accessToken = _token;
         }
         if (_entryFee > 0) {
-            require(_entryFee % 2 == 0, "Entry fee must be even for 50/50 split");
+            require(_entryFee >= 10, "Entry fee too small for distribution");
             entryFee = _entryFee;
         }
         
@@ -248,7 +342,7 @@ contract TEMPL {
     }
     
     /**
-     * @dev Pause or unpause the contract (priest only)
+     * @dev Pause or unpause the contract
      */
     function setPaused(bool _paused) external onlyPriest {
         paused = _paused;
@@ -257,28 +351,20 @@ contract TEMPL {
     
     /**
      * @dev Get current configuration
-     * @return token Token address
-     * @return fee Entry fee (without decimals)
-     * @return isPaused Contract pause status
-     * @return purchases Total number of purchases
-     * @return treasury Current treasury balance
      */
     function getConfig() external view returns (
         address token,
         uint256 fee,
         bool isPaused,
         uint256 purchases,
-        uint256 treasury
+        uint256 treasury,
+        uint256 pool
     ) {
-        return (accessToken, entryFee, paused, totalPurchases, treasuryBalance);
+        return (accessToken, entryFee, paused, totalPurchases, treasuryBalance, memberPoolBalance);
     }
     
     /**
-     * @dev Emergency recovery for tokens sent by mistake (priest only)
-     * This is ONLY for recovering wrong tokens sent to the contract by accident
-     * Cannot be used to withdraw the treasury (use withdrawTreasury instead)
-     * @param token Token to recover (must not be the access token)
-     * @param to Address to send tokens to
+     * @dev Emergency recovery for wrong tokens sent by mistake
      */
     function recoverWrongToken(address token, address to) external onlyPriest {
         require(token != accessToken, "Use withdrawTreasury for access tokens");

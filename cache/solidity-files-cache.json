@@ -2,7 +2,7 @@
   "_format": "hh-sol-cache-2",
   "files": {
     "/Users/worms/Downloads/tgbot-group/contracts/MockERC20.sol": {
-      "lastModificationDate": 1755617499477,
+      "lastModificationDate": 1756129900071,
       "contentHash": "0c72186d44544888709ea914bb58bda6",
       "sourceName": "contracts/MockERC20.sol",
       "solcConfig": {
@@ -37,8 +37,8 @@
       ]
     },
     "/Users/worms/Downloads/tgbot-group/contracts/TEMPL.sol": {
-      "lastModificationDate": 1755713102720,
-      "contentHash": "e35bf6df560cbba41835aaffc871bf5e",
+      "lastModificationDate": 1756130050876,
+      "contentHash": "95c3ded0313d24cfdd0742030959c8db",
       "sourceName": "contracts/TEMPL.sol",
       "solcConfig": {
         "version": "0.8.19",
