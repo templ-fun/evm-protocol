@@ -43,6 +43,8 @@ contract TEMPL {
         uint256 yesVotes;
         uint256 noVotes;
         uint256 endTime;
+        uint256 createdAt; // Timestamp when proposal was created
+        uint256 eligibleVoters; // Number of members who can vote (joined before proposal)
         bool executed;
         mapping(address => bool) hasVoted;
         mapping(address => bool) voteChoice; // true = yes, false = no
@@ -50,6 +52,8 @@ contract TEMPL {
     
     uint256 public proposalCount;
     mapping(uint256 => Proposal) public proposals;
+    mapping(address => uint256) public activeProposalId; // Track active proposal per user (0 = no active proposal)
+    mapping(address => bool) public hasActiveProposal; // Quick check if user has active proposal
     uint256 public constant DEFAULT_VOTING_PERIOD = 7 days;
     uint256 public constant MIN_VOTING_PERIOD = 1 days;
     uint256 public constant MAX_VOTING_PERIOD = 30 days;
@@ -269,6 +273,20 @@ contract TEMPL {
         require(bytes(_description).length > 0, "Description required");
         require(_callData.length > 0, "Call data required");
         
+        // Check if user has an active proposal
+        if (hasActiveProposal[msg.sender]) {
+            uint256 existingId = activeProposalId[msg.sender];
+            Proposal storage existingProposal = proposals[existingId];
+            // Check if the existing proposal is still active (not executed and not expired)
+            if (!existingProposal.executed && block.timestamp < existingProposal.endTime) {
+                revert("You already have an active proposal");
+            } else {
+                // Clear the stale active proposal flag
+                hasActiveProposal[msg.sender] = false;
+                activeProposalId[msg.sender] = 0;
+            }
+        }
+        
         // Validate voting period
         uint256 period = _votingPeriod;
         if (period == 0) {
@@ -286,9 +304,15 @@ contract TEMPL {
         proposal.description = _description;
         proposal.callData = _callData;
         proposal.endTime = block.timestamp + period;
+        proposal.createdAt = block.timestamp;
+        proposal.eligibleVoters = members.length; // Current member count = eligible voters
         proposal.executed = false;
         proposal.yesVotes = 0;
         proposal.noVotes = 0;
+        
+        // Mark this proposal as the user's active proposal
+        hasActiveProposal[msg.sender] = true;
+        activeProposalId[msg.sender] = proposalId;
         
         emit ProposalCreated(proposalId, msg.sender, _title, proposal.endTime);
         
@@ -306,6 +330,10 @@ contract TEMPL {
         
         require(block.timestamp < proposal.endTime, "Voting ended");
         require(!proposal.hasVoted[msg.sender], "Already voted");
+        
+        // Check if voter joined before proposal was created
+        require(purchaseTimestamp[msg.sender] < proposal.createdAt, 
+            "You cannot vote on proposals created before you joined");
         
         proposal.hasVoted[msg.sender] = true;
         proposal.voteChoice[msg.sender] = _support;
@@ -329,9 +357,20 @@ contract TEMPL {
         
         require(block.timestamp >= proposal.endTime, "Voting not ended");
         require(!proposal.executed, "Already executed");
+        
+        // Check if proposal passed: >50% of eligible voters voted yes
+        // Note: Using simple majority of votes cast (yes > no) as 50% threshold
+        // Could be changed to require yes > eligibleVoters/2 for absolute majority
         require(proposal.yesVotes > proposal.noVotes, "Proposal did not pass");
         
         proposal.executed = true;
+        
+        // Clear the proposer's active proposal status
+        address proposer = proposal.proposer;
+        if (hasActiveProposal[proposer] && activeProposalId[proposer] == _proposalId) {
+            hasActiveProposal[proposer] = false;
+            activeProposalId[proposer] = 0;
+        }
         
         // Execute the proposal
         (bool success, bytes memory returnData) = address(this).call(proposal.callData);
@@ -339,8 +378,10 @@ contract TEMPL {
         emit ProposalExecuted(_proposalId, success, returnData);
         
         if (!success) {
-            // If execution failed, revert the executed flag
+            // If execution failed, revert the executed flag and restore active status
             proposal.executed = false;
+            hasActiveProposal[proposer] = true;
+            activeProposalId[proposer] = _proposalId;
             revert("Proposal execution failed");
         }
     }

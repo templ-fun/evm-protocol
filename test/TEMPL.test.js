@@ -505,10 +505,14 @@ describe("TEMPL Contract with DAO Governance", function () {
             // Setup members
             await token.connect(user1).approve(await templ.getAddress(), ENTRY_FEE);
             await templ.connect(user1).purchaseAccess();
+            
+            // Add user2 as member too (needed for multiple proposal tests)
+            await token.connect(user2).approve(await templ.getAddress(), ENTRY_FEE);
+            await templ.connect(user2).purchaseAccess();
         });
 
         it("Should return active proposals correctly", async function () {
-            // Create multiple proposals with different timings
+            // Create multiple proposals with different users (due to single proposal restriction)
             await templ.connect(user1).createProposal(
                 "Active 1",
                 "First active",
@@ -516,7 +520,7 @@ describe("TEMPL Contract with DAO Governance", function () {
                 7 * 24 * 60 * 60
             );
 
-            await templ.connect(user1).createProposal(
+            await templ.connect(user2).createProposal(
                 "Active 2",
                 "Second active",
                 "0x5678",
@@ -537,7 +541,7 @@ describe("TEMPL Contract with DAO Governance", function () {
                 1 * 24 * 60 * 60 // 1 day
             );
 
-            await templ.connect(user1).createProposal(
+            await templ.connect(user2).createProposal(
                 "Long",
                 "Active longer",
                 "0x5678",
@@ -566,17 +570,21 @@ describe("TEMPL Contract with DAO Governance", function () {
                 1 * 24 * 60 * 60
             );
 
-            await templ.connect(user1).createProposal(
+            await templ.connect(user2).createProposal(
                 "Still Active",
                 "Not executed",
                 "0x5678",
                 7 * 24 * 60 * 60
             );
 
+            // Need to wait a bit for voting timestamps
+            await ethers.provider.send("evm_increaseTime", [10]);
+            await ethers.provider.send("evm_mine");
+
             // Vote and execute first proposal
             await templ.connect(user1).vote(0, true);
             
-            await ethers.provider.send("evm_increaseTime", [2 * 24 * 60 * 60]);
+            await ethers.provider.send("evm_increaseTime", [1 * 24 * 60 * 60]);
             await ethers.provider.send("evm_mine");
             
             await templ.executeProposal(0);
