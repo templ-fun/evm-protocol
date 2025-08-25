@@ -24,10 +24,11 @@
 - ✅ 30/30/30/10 fee split (burn/DAO treasury/pool/protocol)
 - ✅ Pro-rata member rewards system with fair distribution
 - ✅ Member-driven governance with proposals and voting
-- ✅ Executable on-chain proposals
+- ✅ Executable on-chain proposals via executeDAO function
 - ✅ >50% yes votes required to pass proposals (simple majority)
 - ✅ Single active proposal per member (prevents spam)
 - ✅ Voting restricted to members who joined before proposal creation (prevents gaming)
+- ✅ No backdoor functions - all tokens only movable via DAO votes
 - ✅ Payment enforcement before access
 - ✅ JWT authentication with required secrets
 - ✅ Nonce-based signature verification (replay attack prevention)
@@ -62,26 +63,19 @@ The setup script will:
 - Optionally deploy contracts
 - Create systemd service
 
-## 🎯 Important: Manual Group Setup
-
-**You must manually create the Telegram group first:**
-
-1. **Create Group**: Use the Telegram account associated with your API credentials
-2. **Add Bot**: Add your bot (@YourBotUsername) as admin with these permissions:
-   - Delete messages: ✅
-   - Ban users: ✅ 
-   - Invite users: ❌ (disabled to enforce token payments)
-3. **Get Group ID**: Send a message in the group, then use [@userinfobot](https://t.me/userinfobot) to get the group ID
-4. **Update .env**: Set `TELEGRAM_GROUP_ID` to your group ID (e.g., -1001234567890)
-
 ## 💰 User Flow
 
-### Priest Dashboard (NEW)
-Priests can create and manage temples at `https://yoursite.com/priest.html`
-- Auto-creates Telegram groups
-- Links groups to contracts
-- Adds priest as admin
-- Generates purchase URLs
+### Temple Creation - Priest Dashboard
+Priests create and manage temples at `https://yoursite.com/priest.html`:
+1. **Deploy Contract**: First deploy your TEMPL contract on BASE
+2. **Connect Wallet**: Use the priest wallet to authenticate
+3. **Enter Details**: Provide group name and your Telegram username
+4. **Auto-Creation**: The system automatically:
+   - Creates the Telegram group
+   - Links it to your contract
+   - Adds you as admin
+   - Configures all bot permissions
+   - Generates purchase URLs for users
 
 ### Complete Purchase Flow
 Use the all-in-one interface at `https://yoursite.com/purchase.html?contract=0x...`
@@ -98,11 +92,11 @@ The 30% member pool is distributed based on member count:
 - **2 Members**: Each gets 15% from next joiner
 - **3+ Members**: Each gets equal share (10% each for 3, 7.5% each for 4, etc.)
 
-### Alternative: Direct Contract + Claim
+### Alternative: Direct Contract Purchase
 1. Call `contract.purchaseAccess()` directly via Etherscan/wallet
-2. Visit `https://yoursite.com/claim.html?contract=0x...`
-3. Connect wallet and verify purchase
-4. Enter Telegram username
+2. Visit `https://yoursite.com/purchase.html?contract=0x...`
+3. Connect wallet (it will detect your existing purchase)
+4. Enter Telegram username to claim access
 5. Receive group invitation
 
 ## 🗳️ DAO Treasury Management
@@ -263,7 +257,8 @@ const callData = iface.encodeFunctionData("setPausedDAO", [
 tgbot-group/
 ├── contracts/
 │   ├── TEMPL.sol                  # Main smart contract
-│   └── MockERC20.sol              # Test ERC20 token
+│   ├── TestToken.sol              # Test ERC20 token for testing
+│   └── MockERC20.sol              # Mock ERC20 token (alternative)
 ├── src/
 │   ├── tokenGatedService.js      # Main service
 │   ├── api/
@@ -281,12 +276,16 @@ tgbot-group/
 │   ├── setup.sh                  # One-command setup
 │   └── first-run.sh              # Telegram authentication
 ├── public/
-│   ├── index.html                # Landing page
-│   ├── priest.html               # Priest dashboard (NEW)
-│   ├── purchase.html             # Complete purchase flow
-│   └── claim.html                # Claim-only interface
+│   ├── priest.html               # Priest dashboard for temple creation
+│   ├── purchase.html             # Complete purchase flow with claim
+│   ├── propose.html              # Create DAO proposals
+│   └── vote.html                 # Vote on DAO proposals
 ├── test/
-│   └── TEMPL.test.js             # Smart contract tests
+│   ├── TEMPL.test.js             # Main smart contract tests
+│   ├── MemberPool.test.js        # Member pool distribution tests
+│   ├── SingleProposal.test.js    # Single proposal restriction tests
+│   ├── VotingEligibility.test.js # Voting eligibility tests
+│   └── PriestVoteWeight.test.js   # Priest voting weight tests
 ├── docker-compose.token-gated.yml # Docker configuration
 ├── Dockerfile                    # Container definition
 ├── hardhat.config.js             # Hardhat configuration
@@ -384,7 +383,7 @@ API_HASH=your_api_hash
 PHONE_NUMBER=+1234567890
 SESSION_STRING=       # Generated on first run
 BOT_USERNAME=botname  # Without @
-TELEGRAM_GROUP_ID=-1001234567890
+TELEGRAM_GROUP_ID=-1001234567890  # Optional: Only needed for manual group setup
 ```
 
 ### Deployment Steps
