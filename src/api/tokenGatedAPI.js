@@ -199,7 +199,8 @@ class TokenGatedAPI {
           { expiresIn: '1h' }
         );
         
-        const session = await this.db.createSession(
+        await this.db.createSession(
+          sessionToken,
           walletAddress,
           contractAddress,
           req.ip,
@@ -215,7 +216,7 @@ class TokenGatedAPI {
         
       } catch (error) {
         console.error('Error verifying purchase:', error);
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ error: 'Internal server error' });
       }
     });
 
@@ -241,29 +242,32 @@ class TokenGatedAPI {
         }
         
         let session;
-        
-        // Require valid session token - NO BYPASS
+
         if (sessionToken) {
-          // Normal JWT verification
           const jwtSecret = process.env.JWT_SECRET;
           try {
             const jwtSession = jwt.verify(sessionToken, jwtSecret);
-            session = {
-              wallet_address: jwtSession.walletAddress,
-              contract_address: jwtSession.contractAddress
-            };
+            const dbSession = await this.db.validateSession(sessionToken);
+            if (
+              !dbSession ||
+              dbSession.wallet_address !== jwtSession.walletAddress.toLowerCase() ||
+              dbSession.contract_address !== jwtSession.contractAddress.toLowerCase() ||
+              dbSession.ip_address !== req.ip ||
+              dbSession.user_agent !== req.get('user-agent')
+            ) {
+              return res.status(401).json({
+                error: 'Invalid or expired session token'
+              });
+            }
+            session = dbSession;
           } catch (error) {
-            return res.status(401).json({ 
-              error: 'Invalid or expired session token' 
+            return res.status(401).json({
+              error: 'Invalid or expired session token'
             });
           }
-          
-          // Additional database validation for session tracking
-          const dbSession = await this.db.validateSession(sessionToken);
-          // Session is already set from JWT decode above
         } else {
-          return res.status(400).json({ 
-            error: 'Session token required' 
+          return res.status(400).json({
+            error: 'Session token required'
           });
         }
         
@@ -313,16 +317,14 @@ class TokenGatedAPI {
           }
         } catch (inviteError) {
           console.error('Telegram invitation failed:', inviteError);
-          // Don't mark as claimed if invitation fails
-          res.status(500).json({ 
-            error: 'Failed to send Telegram invitation. Please try again or contact support.',
-            details: inviteError.message 
+          res.status(500).json({
+            error: 'Failed to send Telegram invitation. Please try again later.'
           });
         }
-        
+
       } catch (error) {
         console.error('Error claiming access:', error);
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ error: 'Internal server error' });
       }
     });
 
@@ -351,7 +353,7 @@ class TokenGatedAPI {
         
       } catch (error) {
         console.error('Error checking status:', error);
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ error: 'Internal server error' });
       }
     });
 
@@ -402,7 +404,7 @@ class TokenGatedAPI {
         
       } catch (error) {
         console.error('Error retrying invitation:', error);
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ error: 'Internal server error' });
       }
     });
 
@@ -413,16 +415,30 @@ class TokenGatedAPI {
     this.app.post('/api/invite-rosie-bot', async (req, res) => {
       try {
         const { contractAddress, adminSignature } = req.body;
-        
+
         if (!contractAddress || !adminSignature) {
-          return res.status(400).json({ 
-            error: 'Contract address and admin signature required' 
+          return res.status(400).json({
+            error: 'Contract address and admin signature required'
           });
         }
-        
-        // Verify this is from the priest/admin
-        // In production, implement proper signature verification
-        
+
+        const priestAddress = process.env.PRIEST_ADDRESS;
+        if (!priestAddress) {
+          return res.status(500).json({ error: 'Server misconfigured' });
+        }
+
+        const message = `Invite Rosie bot to ${contractAddress.toLowerCase()}`;
+        let recovered;
+        try {
+          recovered = ethers.verifyMessage(message, adminSignature);
+        } catch (e) {
+          return res.status(401).json({ error: 'Invalid admin signature' });
+        }
+
+        if (recovered.toLowerCase() !== priestAddress.toLowerCase()) {
+          return res.status(401).json({ error: 'Invalid admin signature' });
+        }
+
         const contract = await this.db.getContract(contractAddress);
         if (!contract || !contract.telegram_group_id) {
           return res.status(404).json({ error: 'Contract or group not found' });
@@ -437,7 +453,7 @@ class TokenGatedAPI {
         
       } catch (error) {
         console.error('Error inviting Rosie bot:', error);
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ error: 'Internal server error' });
       }
     });
 
@@ -471,7 +487,7 @@ class TokenGatedAPI {
         
       } catch (error) {
         console.error('Error getting stats:', error);
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ error: 'Internal server error' });
       }
     });
 
@@ -519,9 +535,8 @@ class TokenGatedAPI {
         );
         
         if (!groupResult.success) {
-          return res.status(500).json({ 
-            error: 'Failed to create Telegram group',
-            details: groupResult.error 
+          return res.status(500).json({
+            error: 'Failed to create Telegram group'
           });
         }
         
@@ -577,7 +592,7 @@ class TokenGatedAPI {
         
       } catch (error) {
         console.error('Error creating temple:', error);
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ error: 'Internal server error' });
       }
     });
     
@@ -612,7 +627,7 @@ class TokenGatedAPI {
         
       } catch (error) {
         console.error('Error getting group contract:', error);
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ error: 'Internal server error' });
       }
     });
     
@@ -633,52 +648,52 @@ class TokenGatedAPI {
       // Attempt invitation using Telegram service
       const result = await this.telegramService.inviteUserToGroup(groupId, `@${username}`);
       
-      if (result.success) {
-        await this.db.updateClaimStatus(claimId, 'success');
-        return {
-          success: true,
-          status: 'success',
-          message: 'Successfully invited to group'
-        };
-      } else {
-        // Check if it's a privacy issue
-        if (result.error && result.error.toLowerCase().includes('privacy')) {
-          await this.db.updateClaimStatus(claimId, 'retry_needed', 'Privacy settings prevent invitation');
-          
+        if (result.success) {
+          await this.db.updateClaimStatus(claimId, 'success');
           return {
-            success: false,
-            status: 'retry_needed',
-            message: 'Please update your Telegram privacy settings to allow invitations',
-            requiresAction: {
-              type: 'privacy_settings',
-              instructions: [
-                '1. Open Telegram and go to Settings',
-                '2. Navigate to Privacy and Security',
-                '3. Select Groups & Channels',
-                '4. Set to "Everybody" or add our bot as exception',
-                '5. Click retry button below'
-              ]
-            }
+            success: true,
+            status: 'success',
+            message: 'Successfully invited to group'
           };
         } else {
-          await this.db.updateClaimStatus(claimId, 'failed', result.error);
-          
-          return {
-            success: false,
-            status: 'failed',
-            message: `Failed to invite: ${result.error}`
-          };
+          if (result.error && result.error.toLowerCase().includes('privacy')) {
+            await this.db.updateClaimStatus(claimId, 'retry_needed', 'Privacy settings prevent invitation');
+
+            return {
+              success: false,
+              status: 'retry_needed',
+              message: 'Please update your Telegram privacy settings to allow invitations',
+              requiresAction: {
+                type: 'privacy_settings',
+                instructions: [
+                  '1. Open Telegram and go to Settings',
+                  '2. Navigate to Privacy and Security',
+                  '3. Select Groups & Channels',
+                  '4. Set to "Everybody" or add our bot as exception',
+                  '5. Click retry button below'
+                ]
+              }
+            };
+          } else {
+            await this.db.updateClaimStatus(claimId, 'failed', result.error);
+
+            return {
+              success: false,
+              status: 'failed',
+              message: 'Failed to invite user'
+            };
+          }
         }
+      } catch (error) {
+        await this.db.updateClaimStatus(claimId, 'failed', error.message);
+        console.error('Error inviting user:', error);
+
+        return {
+          success: false,
+          status: 'failed',
+          message: 'Failed to invite user. Please try again later.'
+        };
       }
-    } catch (error) {
-      await this.db.updateClaimStatus(claimId, 'failed', error.message);
-      
-      return {
-        success: false,
-        status: 'failed',
-        message: error.message
-      };
-    }
   }
 
   /**

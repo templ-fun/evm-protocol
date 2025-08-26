@@ -242,18 +242,17 @@ class Database {
   /**
    * Create a claim session
    */
-  async createSession(walletAddress, contractAddress, ipAddress, userAgent) {
-    const sessionToken = require('crypto').randomBytes(32).toString('hex');
+  async createSession(sessionToken, walletAddress, contractAddress, ipAddress, userAgent) {
     const expiresAt = new Date(Date.now() + 3600000); // 1 hour
-    
+
     const query = `
       INSERT INTO claim_sessions (
-        session_token, wallet_address, contract_address, 
+        session_token, wallet_address, contract_address,
         ip_address, user_agent, expires_at
       ) VALUES ($1, $2, $3, $4, $5, $6)
       RETURNING *
     `;
-    
+
     const result = await this.pool.query(query, [
       sessionToken,
       walletAddress.toLowerCase(),
@@ -262,7 +261,7 @@ class Database {
       userAgent,
       expiresAt
     ]);
-    
+
     return result.rows[0];
   }
 
