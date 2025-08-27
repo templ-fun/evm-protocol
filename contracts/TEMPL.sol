@@ -563,7 +563,7 @@ contract TEMPL {
      * @return noVotes Total weighted no votes
      * @return endTime Timestamp when voting ends
      * @return executed Whether proposal has been executed
-     * @return passed Whether proposal has enough votes to pass
+     * @return passed Whether proposal has passed (voting ended and yes votes exceed no votes)
      */
     function getProposal(uint256 _proposalId) external view returns (
         address proposer,
@@ -577,7 +577,8 @@ contract TEMPL {
     ) {
         if (_proposalId >= proposalCount) revert InvalidProposal();
         Proposal storage proposal = proposals[_proposalId];
-        
+        passed = block.timestamp >= proposal.endTime && proposal.yesVotes > proposal.noVotes;
+
         return (
             proposal.proposer,
             proposal.title,
@@ -586,7 +587,7 @@ contract TEMPL {
             proposal.noVotes,
             proposal.endTime,
             proposal.executed,
-            proposal.yesVotes > proposal.noVotes
+            passed
         );
     }
     
