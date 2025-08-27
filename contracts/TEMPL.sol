@@ -193,62 +193,62 @@ contract TEMPL {
         require(!hasPurchased[msg.sender], "Already purchased access");
         
         uint256 thirtyPercent = (entryFee * 30) / 100;
-        uint256 tenPercent = (entryFee * 10) / 100;
-        
-        uint256 totalRequired = thirtyPercent * 3 + tenPercent;
-        require(totalRequired <= entryFee, "Calculation error");
-        
+        uint256 tenPercent = entryFee - (thirtyPercent * 3);
+
         require(
             IERC20(accessToken).balanceOf(msg.sender) >= entryFee,
             "Insufficient token balance"
         );
-        
-        bool burnSuccess = IERC20(accessToken).transferFrom(
-            msg.sender,
-            address(0x000000000000000000000000000000000000dEaD),
-            thirtyPercent
-        );
-        require(burnSuccess, "Burn transfer failed");
-        
-        bool treasurySuccess = IERC20(accessToken).transferFrom(
-            msg.sender,
-            address(this),
-            thirtyPercent
-        );
-        require(treasurySuccess, "Treasury transfer failed");
-        
-        bool poolSuccess = IERC20(accessToken).transferFrom(
-            msg.sender,
-            address(this),
-            thirtyPercent
-        );
-        require(poolSuccess, "Pool transfer failed");
-        
-        bool protocolSuccess = IERC20(accessToken).transferFrom(
-            msg.sender,
-            protocolFeeRecipient,
-            tenPercent
-        );
-        require(protocolSuccess, "Protocol transfer failed");
-        
-        treasuryBalance += thirtyPercent;
-        memberPoolBalance += thirtyPercent;
-        totalBurned += thirtyPercent;
-        totalToTreasury += thirtyPercent;
-        totalToMemberPool += thirtyPercent;
-        totalToProtocol += tenPercent;
-        
-        if (members.length > 0) {
-            poolDeposits.push(thirtyPercent);
-        } else {
-            poolDeposits.push(0);
-        }
+
+        // Effects: update membership state before external calls
         hasPurchased[msg.sender] = true;
         purchaseTimestamp[msg.sender] = block.timestamp;
         purchaseBlock[msg.sender] = block.number;
         memberIndex[msg.sender] = members.length;
         members.push(msg.sender);
         totalPurchases++;
+
+        if (members.length > 1) {
+            poolDeposits.push(thirtyPercent);
+        } else {
+            poolDeposits.push(0);
+        }
+
+        treasuryBalance += thirtyPercent;
+        memberPoolBalance += thirtyPercent;
+        totalBurned += thirtyPercent;
+        totalToTreasury += thirtyPercent;
+        totalToMemberPool += thirtyPercent;
+        totalToProtocol += tenPercent;
+
+        // Interactions: execute external token transfers
+        bool burnSuccess = IERC20(accessToken).transferFrom(
+            msg.sender,
+            address(0x000000000000000000000000000000000000dEaD),
+            thirtyPercent
+        );
+        require(burnSuccess, "Burn transfer failed");
+
+        bool treasurySuccess = IERC20(accessToken).transferFrom(
+            msg.sender,
+            address(this),
+            thirtyPercent
+        );
+        require(treasurySuccess, "Treasury transfer failed");
+
+        bool poolSuccess = IERC20(accessToken).transferFrom(
+            msg.sender,
+            address(this),
+            thirtyPercent
+        );
+        require(poolSuccess, "Pool transfer failed");
+
+        bool protocolSuccess = IERC20(accessToken).transferFrom(
+            msg.sender,
+            protocolFeeRecipient,
+            tenPercent
+        );
+        require(protocolSuccess, "Protocol transfer failed");
         
         emit AccessPurchased(
             msg.sender,
@@ -361,33 +361,27 @@ contract TEMPL {
      * @dev Requires simple majority (yesVotes > noVotes)
      * @param _proposalId Proposal to execute
      */
-    function executeProposal(uint256 _proposalId) external {
+    function executeProposal(uint256 _proposalId) external nonReentrant {
         require(_proposalId < proposalCount, "Invalid proposal");
         Proposal storage proposal = proposals[_proposalId];
-        
+
         require(block.timestamp >= proposal.endTime, "Voting not ended");
         require(!proposal.executed, "Already executed");
-        
+
         require(proposal.yesVotes > proposal.noVotes, "Proposal did not pass");
-        
+
         proposal.executed = true;
-        
+
         address proposer = proposal.proposer;
         if (hasActiveProposal[proposer] && activeProposalId[proposer] == _proposalId) {
             hasActiveProposal[proposer] = false;
             activeProposalId[proposer] = 0;
         }
-        
+
         (bool success, bytes memory returnData) = address(this).call(proposal.callData);
-        
-        emit ProposalExecuted(_proposalId, success, returnData);
-        
-        if (!success) {
-            proposal.executed = false;
-            hasActiveProposal[proposer] = true;
-            activeProposalId[proposer] = _proposalId;
-            revert("Proposal execution failed");
-        }
+        require(success, "Proposal execution failed");
+
+        emit ProposalExecuted(_proposalId, true, returnData);
     }
     
     /**
@@ -396,17 +390,17 @@ contract TEMPL {
      * @param amount Token amount to withdraw
      * @param reason Withdrawal explanation
      */
-    function withdrawTreasuryDAO(address recipient, uint256 amount, string memory reason) external onlyDAO nonReentrant {
+    function withdrawTreasuryDAO(address recipient, uint256 amount, string memory reason) external onlyDAO {
         require(recipient != address(0), "Invalid recipient");
         require(amount > 0, "Amount must be greater than 0");
         require(amount <= treasuryBalance, "Insufficient treasury balance");
         
         treasuryBalance -= amount;
-        
+
+        emit TreasuryAction(proposalCount - 1, recipient, amount, reason);
+
         bool success = IERC20(accessToken).transfer(recipient, amount);
         require(success, "Treasury withdrawal failed");
-        
-        emit TreasuryAction(proposalCount - 1, recipient, amount, reason);
     }
     
     /**
@@ -428,17 +422,17 @@ contract TEMPL {
      * @param recipient Address to receive all treasury funds
      * @param reason Withdrawal explanation
      */
-    function withdrawAllTreasuryDAO(address recipient, string memory reason) external onlyDAO nonReentrant {
+    function withdrawAllTreasuryDAO(address recipient, string memory reason) external onlyDAO {
         require(recipient != address(0), "Invalid recipient");
         require(treasuryBalance > 0, "No treasury funds");
         
         uint256 amount = treasuryBalance;
         treasuryBalance = 0;
-        
+
+        emit TreasuryAction(proposalCount - 1, recipient, amount, reason);
+
         bool success = IERC20(accessToken).transfer(recipient, amount);
         require(success, "Treasury withdrawal failed");
-        
-        emit TreasuryAction(proposalCount - 1, recipient, amount, reason);
     }
     
     /**
@@ -449,7 +443,7 @@ contract TEMPL {
      * @param data Function call data
      * @return Result data from external call
      */
-    function executeDAO(address target, uint256 value, bytes memory data) external onlyDAO nonReentrant returns (bytes memory) {
+    function executeDAO(address target, uint256 value, bytes memory data) external onlyDAO returns (bytes memory) {
         require(target != address(0), "Invalid target");
         
         (bool success, bytes memory result) = target.call{value: value}(data);
