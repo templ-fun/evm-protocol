@@ -1,8 +1,8 @@
 # TEMPL - Token Entry Management Protocol
 
-**Battle-tested, security-audited smart contract for decentralized membership systems with autonomous treasury management on BASE blockchain.**
+Open-source contracts for decentralized membership management and automated treasury governance on the BASE blockchain.
 
-[![Tests](https://img.shields.io/badge/tests-93%20passing-brightgreen)]() [![Security](https://img.shields.io/badge/security-audited-blue)]() [![License](https://img.shields.io/badge/license-MIT-green)]()
+[![Tests](https://img.shields.io/badge/tests-passing-brightgreen)]() [![Audit](https://img.shields.io/badge/audit-reports-blue)]() [![License](https://img.shields.io/badge/license-MIT-green)]()
 
 ## 🛡️ Security First Design
 
@@ -15,16 +15,9 @@
 - **Gas Attack Prevention**: Paginated queries prevent DOS
 - **Emergency Circuit Breaker**: DAO can pause new memberships (purchaseAccess only)
 
-### Audit Status ✅
+### Audit Status
 
-| Attack Vector | Protection | Status |
-|--------------|------------|---------|
-| Reentrancy | Custom guards on all functions | ✅ Protected |
-| Flash Loans | Join timestamp validation | ✅ Protected |
-| Spam/DOS | Rate limits + pagination | ✅ Protected |
-| Frontrunning | Immutable fee structure | ✅ Protected |
-| Rug Pull | No admin functions | ✅ Protected |
-| Integer Overflow | Solidity 0.8.19 | ✅ Protected |
+External reviews have examined the protocol and reported no critical issues. Full findings are available in the [audit reports](./docs). Audits can highlight potential risks but cannot guarantee complete security.
 
 ## 💰 Economic Model
 
@@ -201,11 +194,7 @@ const calldata = templ.interface.encodeFunctionData('executeDAO', [
 ## 🧪 Testing
 
 ### Test Coverage
-- ✅ 93 tests passing
-- ✅ 100% core function coverage
-- ✅ Reentrancy attack scenarios
-- ✅ Flash loan attempts
-- ✅ Edge cases and boundaries
+Run `npm test` to execute the suite and generate coverage information. Results and coverage percentages are printed in the console and reflected in the badge above. The tests exercise core functions, reentrancy scenarios, flash loan attempts, and other boundary cases.
 
 ### Run Tests
 ```bash
@@ -271,26 +260,26 @@ The deployment script:
 ## 🎯 Why TEMPL?
 
 ### For DAOs
-- **Zero Trust**: No admin keys or backdoors
-- **Sustainable**: Automatic fee distribution
-- **Aligned Incentives**: Members earn from growth
-- **DeFi Ready**: Integrate with any protocol
+- No admin keys or backdoors
+- Automatic fee distribution
+- Members earn from growth
+- Integrates with DeFi protocols
 
 ### For Developers
-- **Battle-Tested**: 93+ tests with edge cases
-- **Well-Documented**: Every line explained
-- **Clean Architecture**: Single responsibility
-- **Easy Integration**: Standard ERC20 interface
+- Extensive automated test suite
+- Documentation for major components
+- Single-responsibility architecture
+- Standard ERC20 interface
 
 ### For Auditors
-- **Explicit Guards**: All protections marked
-- **No Hidden State**: Everything public
-- **Predictable**: No complex inheritance
-- **Comprehensive Tests**: Attack vectors covered
+- Explicit guards marked in code
+- All state variables are public
+- Predictable flow without complex inheritance
+- Tests cover known attack vectors
 
 ## 📚 Documentation
 
-- [Security Audit](./SECURITY_AUDIT.md) - Detailed security analysis
+- [Audit Reports](./docs) - Detailed security analysis
 - [Threat Model](./docs/THREAT_MODEL.md) - Architecture, assumptions, and failure modes
 - [Test Suite](./test/) - Implementation examples
 - [Deploy Script](./scripts/deploy.js) - Deployment configuration
@@ -315,7 +304,7 @@ Optimized for BASE mainnet (Chain ID: 8453)
 
 For integration support:
 - Review test files for examples
-- Check SECURITY_AUDIT.md for design rationale
+- Review audit reports in the `docs` directory for design rationale
 - Open an issue for bugs/improvements
 
 ## 📄 License
@@ -324,4 +313,4 @@ MIT - See [LICENSE](./LICENSE) file
 
 ---
 
-**Built with security and decentralization at its core.**
+**Designed with a focus on security and decentralization.**
