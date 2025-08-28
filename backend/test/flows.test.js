@@ -297,7 +297,7 @@ test('broadcasts proposal and vote events to group', async () => {
     .expect(200);
 
   emitter.emit('ProposalCreated', 1, addresses.member, 'Test', 123);
-  emitter.emit('VoteCast', 1, addresses.member, true);
+  emitter.emit('VoteCast', 1, addresses.member, true, 456);
 
   assert.deepEqual(messages, [
     {
@@ -311,7 +311,8 @@ test('broadcasts proposal and vote events to group', async () => {
       type: 'vote',
       id: 1,
       voter: addresses.member,
-      support: true
+      support: true,
+      timestamp: 456
     }
   ]);
 });
