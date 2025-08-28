@@ -5,10 +5,10 @@ This document describes the on-chain portion of TEMPL for auditors.
 ## Economic model
 - **30% Burn** – sent to `0xdead`.
 - **30% Treasury** – DAO controlled, released via proposals.
-- **30% Member pool** – distributed pro‑rata to existing members.
+- **30% Member pool** – distributed pro‑rata to existing members (`n - 1`).
 - **10% Protocol fee** – forwarded to a fixed recipient.
 
-Rewards per member are `30% / n` where `n` is current membership count (integer division may leave dust).
+Rewards per existing member are `30% / (n - 1)` where `n` is current membership count (integer division may leave dust).
 
 ## DAO governance
 - One member, one vote. The priest has `PRIEST_VOTE_WEIGHT` until membership exceeds `PRIEST_WEIGHT_THRESHOLD`.
