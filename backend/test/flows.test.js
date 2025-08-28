@@ -324,6 +324,42 @@ test('rejects mute with bad signature', async () => {
     .expect(403);
 });
 
+test('rejects mute with malformed addresses', async () => {
+  const hasPurchased = async () => true;
+  const fakeGroup = { id: 'group-3b', addMembers: async () => {}, removeMembers: async () => {} };
+  const fakeXmtp = { conversations: { newGroup: async () => fakeGroup } };
+
+  const app = createApp({ xmtp: fakeXmtp, hasPurchased });
+
+  await request(app)
+    .post('/mute')
+    .send({
+      contractAddress: 'not-an-address',
+      priestAddress: 'also-bad',
+      targetAddress: 'nope',
+      signature: '0x'
+    })
+    .expect(400);
+});
+
+test('rejects mute for unknown templ', async () => {
+  const hasPurchased = async () => true;
+  const fakeGroup = { id: 'group-3c', addMembers: async () => {}, removeMembers: async () => {} };
+  const fakeXmtp = { conversations: { newGroup: async () => fakeGroup } };
+
+  const app = createApp({ xmtp: fakeXmtp, hasPurchased });
+
+  await request(app)
+    .post('/mute')
+    .send({
+      contractAddress: addresses.contract,
+      priestAddress: addresses.priest,
+      targetAddress: addresses.member,
+      signature: '0x'
+    })
+    .expect(404);
+});
+
 test('broadcasts proposal and vote events to group', async () => {
   const messages = [];
   const fakeGroup = {
