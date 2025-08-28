@@ -10,6 +10,10 @@ Install dependencies:
 npm --prefix backend install
 ```
 
+The API limits cross-origin requests using the [`cors`](https://www.npmjs.com/package/cors) middleware. Allowed origins are
+configured with the `ALLOWED_ORIGINS` environment variable (comma-separated list). By default only `http://localhost:5173` is
+permitted.
+
 ## Development
 
 Start the API service:
@@ -46,6 +50,7 @@ The backend is an Express service that acts as the XMTP group owner. It creates 
 RPC_URL=https://mainnet.base.org
 PORT=3001
 BOT_PRIVATE_KEY=0x...
+ALLOWED_ORIGINS=http://localhost:5173
 ```
 
 ## Persistence
