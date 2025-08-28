@@ -111,8 +111,13 @@ export function watchProposals({
   contract.on('ProposalCreated', (id, proposer, title, endTime) => {
     onProposal({ id: Number(id), proposer, title, endTime: Number(endTime) });
   });
-  contract.on('VoteCast', (id, voter, support) => {
-    onVote({ id: Number(id), voter, support: Boolean(support) });
+  contract.on('VoteCast', (id, voter, support, timestamp) => {
+    onVote({
+      id: Number(id),
+      voter,
+      support: Boolean(support),
+      timestamp: Number(timestamp)
+    });
   });
   return contract;
 }

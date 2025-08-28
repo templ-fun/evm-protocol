@@ -94,13 +94,14 @@ export function createApp({ xmtp, hasPurchased, connectContract }) {
             })
           );
         });
-        contract.on('VoteCast', (id, voter, support) => {
+        contract.on('VoteCast', (id, voter, support, timestamp) => {
           group.send(
             JSON.stringify({
               type: 'vote',
               id: Number(id),
               voter,
-              support: Boolean(support)
+              support: Boolean(support),
+              timestamp: Number(timestamp)
             })
           );
         });
