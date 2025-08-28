@@ -4,21 +4,6 @@ Open-source contracts for decentralized membership management and automated trea
 
 [![License](https://img.shields.io/badge/license-MIT-green)](./LICENSE)
 
-## 🛡️ Security First Design
-
-### Multi-Layer Protection
-- **Reentrancy Guards**: Custom guard covering membership and treasury operations (config functions unguarded)
-- **No Admin Backdoors**: Fully decentralized, immutable critical parameters  
-- **Flash Loan Protection**: Timestamp-based voting eligibility
-- **Sybil Resistance**: Economic cost per membership
-- **Anti-Spam Mechanisms**: One active proposal per member
-- **Gas Attack Prevention**: Paginated queries prevent DOS
-- **Emergency Circuit Breaker**: DAO can pause new memberships (purchaseAccess only)
-
-### Audit Status
-
-External reviews have examined the protocol and reported no critical issues. Full findings are available in the [documentation](./docs/THREAT_MODEL.md). Audits can highlight potential risks but cannot guarantee complete security.
-
 ## 💰 Economic Model
 
 ### Immutable Fee Distribution
