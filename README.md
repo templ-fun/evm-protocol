@@ -35,12 +35,14 @@ Use the docs below to audit each component:
    ```
 4. **Configure environment files**
    - **Root `.env`** – used by deployment scripts. Populate values like RPC URL and deployer keys (see *Deploying to production* below).
-   - **`backend/.env`** – used only by the XMTP bot. Copy any shared values from the root `.env` or provide separate ones as needed.
-   ```env
-   # backend/.env
-   RPC_URL=https://mainnet.base.org
-   BOT_PRIVATE_KEY=0x...
-   ```
+  - **`backend/.env`** – used only by the XMTP bot. Copy any shared values from the root `.env` or provide separate ones as needed.
+    Include `ALLOWED_ORIGINS` with the frontend URLs allowed to call the API.
+  ```env
+  # backend/.env
+  RPC_URL=https://mainnet.base.org
+  BOT_PRIVATE_KEY=0x...
+  ALLOWED_ORIGINS=http://localhost:5173
+  ```
 5. **Launch backend bot**
    ```bash
    npm --prefix backend start
@@ -63,7 +65,8 @@ Use the docs below to audit each component:
    See [`CONTRACTS.md`](./CONTRACTS.md) for the full list of supported variables.
 2. Run the full test suite and Slither analysis.
 3. Deploy with `scripts/deploy.js` and record the contract address and XMTP group ID.
-4. Host the backend bot (e.g., on a VM) using the contract address and bot key.
+4. Host the backend bot (e.g., on a VM) using the contract address and bot key. Ensure
+   `backend/.env` sets `ALLOWED_ORIGINS` to the frontend URL(s) permitted to call the API.
 5. Build the frontend (`npm --prefix frontend run build`) and serve the static files.
 
 ## Core flows
