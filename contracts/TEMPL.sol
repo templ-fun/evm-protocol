@@ -43,7 +43,6 @@ error LimitOutOfRange();
  */
 contract TEMPL {
     using SafeERC20 for IERC20;
-    // Reentrancy guard state
     uint256 private constant _NOT_ENTERED = 1;
     uint256 private constant _ENTERED = 2;
     uint256 private _status;
@@ -101,7 +100,6 @@ contract TEMPL {
     uint256 public constant MIN_VOTING_PERIOD = 7 days;
     uint256 public constant MAX_VOTING_PERIOD = 30 days;
 
-    // Tracks the proposal currently being executed
     uint256 private executingProposalId = type(uint256).max;
     
     uint256 public totalPurchases;
@@ -217,7 +215,7 @@ contract TEMPL {
         priestVoteWeight = _priestVoteWeight;
         priestWeightThreshold = _priestWeightThreshold;
         paused = false;
-        _status = _NOT_ENTERED; // Initialize reentrancy guard
+        _status = _NOT_ENTERED;
     }
     
     /**
@@ -232,7 +230,6 @@ contract TEMPL {
 
         if (IERC20(accessToken).balanceOf(msg.sender) < entryFee) revert InsufficientBalance();
 
-        // Effects: update membership state before external calls
         hasPurchased[msg.sender] = true;
         purchaseTimestamp[msg.sender] = block.timestamp;
         purchaseBlock[msg.sender] = block.number;
@@ -256,7 +253,6 @@ contract TEMPL {
         totalToMemberPool += thirtyPercent;
         totalToProtocol += tenPercent;
 
-        // Interactions: execute external token transfers
         IERC20 token = IERC20(accessToken);
         token.safeTransferFrom(
             msg.sender,
