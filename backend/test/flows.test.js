@@ -10,6 +10,27 @@ const addresses = {
   stranger: '0x0000000000000000000000000000000000000004'
 };
 
+test('creates templ and returns group id', async () => {
+  const fakeGroup = {
+    id: 'group-0',
+    addMembers: async () => {},
+    removeMembers: async () => {}
+  };
+  const fakeXmtp = {
+    conversations: {
+      newGroup: async () => fakeGroup
+    }
+  };
+  const hasPurchased = async () => false;
+
+  const app = createApp({ xmtp: fakeXmtp, hasPurchased });
+
+  await request(app)
+    .post('/templs')
+    .send({ contractAddress: addresses.contract, priestAddress: addresses.priest })
+    .expect(200, { groupId: fakeGroup.id });
+});
+
 test('join requires on-chain purchase', async () => {
   const added = [];
   const fakeGroup = {

@@ -42,6 +42,7 @@ jobs:
       - run: npm --prefix backend ci
       - run: npm --prefix frontend ci
       - run: npm --prefix backend test
+      - run: npm --prefix frontend test
       - run: npm --prefix backend run lint
       - run: npm --prefix frontend run lint
       - run: npm --prefix frontend run build
