@@ -1,0 +1,15 @@
+{
+  "name": "templ-backend",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "ethers": "^6.15.0",
+    "dotenv": "^16.3.1",
+    "@xmtp/xmtp-js": "^13.0.4"
+  }
+}

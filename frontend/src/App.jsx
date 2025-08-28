@@ -51,26 +51,41 @@ function App() {
     await contract.waitForDeployment();
     const deployedAddress = await contract.getAddress();
     setTemplAddress(deployedAddress);
-    const newGroup = await xmtp.conversations.newGroup([], {
-      title: `Templ ${deployedAddress}`,
-      description: 'Private TEMPL group'
+    const res = await fetch('http://localhost:3001/templs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contractAddress: deployedAddress,
+        priestAddress: walletAddress
+      })
     });
-    setGroup(newGroup);
-    setGroupId(newGroup.id);
+    const data = await res.json();
+    const grp = await xmtp.conversations.getGroup(data.groupId);
+    setGroup(grp);
+    setGroupId(data.groupId);
   }
 
   async function purchaseAndJoin() {
-    if (!signer || !xmtp || !templAddress || !groupId) return;
+    if (!signer || !xmtp || !templAddress) return;
     const contract = new ethers.Contract(templAddress, templArtifact.abi, signer);
     const purchased = await contract.hasPurchased(walletAddress);
     if (!purchased) {
       const tx = await contract.purchaseAccess();
       await tx.wait();
     }
-    const check = await contract.hasPurchased(walletAddress);
-    if (check) {
-      const grp = await xmtp.conversations.getGroup(groupId);
+    const res = await fetch('http://localhost:3001/join', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contractAddress: templAddress,
+        memberAddress: walletAddress
+      })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const grp = await xmtp.conversations.getGroup(data.groupId);
       setGroup(grp);
+      setGroupId(data.groupId);
     }
   }
 
@@ -139,11 +154,6 @@ function App() {
               placeholder="Contract address"
               value={templAddress}
               onChange={(e) => setTemplAddress(e.target.value)}
-            />
-            <input
-              placeholder="Group ID"
-              value={groupId}
-              onChange={(e) => setGroupId(e.target.value)}
             />
             <button onClick={purchaseAndJoin}>Purchase & Join</button>
           </div>

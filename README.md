@@ -84,6 +84,17 @@ npm test
 npm run deploy
 ```
 
+### Backend Service
+Run the backend bot that owns each XMTP group and verifies membership on-chain:
+
+```bash
+# Install backend dependencies
+npm --prefix backend install
+
+# Start the service (uses RPC_URL and BOT_PRIVATE_KEY env vars)
+npm --prefix backend start
+```
+
 ## ⚙️ Configuration
 
 ### Environment Setup (.env)
