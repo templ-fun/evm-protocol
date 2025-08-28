@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import { Client } from '@xmtp/xmtp-js';
 import templArtifact from './contracts/TEMPL.json';
+import { deployTempl, purchaseAndJoin, sendMessage } from './flows.js';
 import './App.css';
 
 function App() {
@@ -33,59 +34,37 @@ function App() {
     setXmtp(client);
   }
 
-  async function deployTempl() {
+  async function handleDeploy() {
     if (!signer || !xmtp) return;
-    const factory = new ethers.ContractFactory(
-      templArtifact.abi,
-      templArtifact.bytecode,
-      signer
-    );
-    const contract = await factory.deploy(
-      walletAddress,
+    const result = await deployTempl({
+      ethers,
+      xmtp,
+      signer,
       walletAddress,
       tokenAddress,
-      BigInt(entryFee),
-      BigInt(priestVoteWeight),
-      BigInt(priestWeightThreshold)
-    );
-    await contract.waitForDeployment();
-    const deployedAddress = await contract.getAddress();
-    setTemplAddress(deployedAddress);
-    const res = await fetch('http://localhost:3001/templs', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contractAddress: deployedAddress,
-        priestAddress: walletAddress
-      })
+      entryFee,
+      priestVoteWeight,
+      priestWeightThreshold,
+      templArtifact
     });
-    const data = await res.json();
-    const grp = await xmtp.conversations.getGroup(data.groupId);
-    setGroup(grp);
-    setGroupId(data.groupId);
+    setTemplAddress(result.contractAddress);
+    setGroup(result.group);
+    setGroupId(result.groupId);
   }
 
-  async function purchaseAndJoin() {
+  async function handlePurchaseAndJoin() {
     if (!signer || !xmtp || !templAddress) return;
-    const contract = new ethers.Contract(templAddress, templArtifact.abi, signer);
-    const purchased = await contract.hasPurchased(walletAddress);
-    if (!purchased) {
-      const tx = await contract.purchaseAccess();
-      await tx.wait();
-    }
-    const res = await fetch('http://localhost:3001/join', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contractAddress: templAddress,
-        memberAddress: walletAddress
-      })
+    const result = await purchaseAndJoin({
+      ethers,
+      xmtp,
+      signer,
+      walletAddress,
+      templAddress,
+      templArtifact
     });
-    if (res.ok) {
-      const data = await res.json();
-      const grp = await xmtp.conversations.getGroup(data.groupId);
-      setGroup(grp);
-      setGroupId(data.groupId);
+    if (result) {
+      setGroup(result.group);
+      setGroupId(result.groupId);
     }
   }
 
@@ -104,9 +83,9 @@ function App() {
     };
   }, [group]);
 
-  async function sendMessage() {
+  async function handleSend() {
     if (!group || !messageInput) return;
-    await group.send(messageInput);
+    await sendMessage({ group, content: messageInput });
     setMessageInput('');
   }
 
@@ -140,7 +119,7 @@ function App() {
               value={priestWeightThreshold}
               onChange={(e) => setPriestWeightThreshold(e.target.value)}
             />
-            <button onClick={deployTempl}>Deploy</button>
+            <button onClick={handleDeploy}>Deploy</button>
             {templAddress && (
               <div>
                 <p>Contract: {templAddress}</p>
@@ -155,7 +134,7 @@ function App() {
               value={templAddress}
               onChange={(e) => setTemplAddress(e.target.value)}
             />
-            <button onClick={purchaseAndJoin}>Purchase & Join</button>
+            <button onClick={handlePurchaseAndJoin}>Purchase & Join</button>
           </div>
         </div>
       )}
@@ -174,7 +153,7 @@ function App() {
             value={messageInput}
             onChange={(e) => setMessageInput(e.target.value)}
           />
-          <button onClick={sendMessage}>Send</button>
+          <button onClick={handleSend}>Send</button>
         </div>
       )}
     </div>
