@@ -5,7 +5,7 @@ import { Client } from '@xmtp/xmtp-js';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import cors from 'cors';
-import fs from 'fs/promises';
+import sqlite3 from 'sqlite3';
 import pino from 'pino';
 
 const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
@@ -20,7 +20,7 @@ const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
  * @param {(address: string) => { on: Function }} [deps.connectContract] Optional
  *        factory returning a contract instance used to watch on-chain events.
  */
-export function createApp({ xmtp, hasPurchased, connectContract }) {
+export function createApp({ xmtp, hasPurchased, connectContract, dbPath, db }) {
   const app = express();
   const allowedOrigins =
     process.env.ALLOWED_ORIGINS?.split(',').filter(Boolean) ?? [
@@ -37,23 +37,47 @@ export function createApp({ xmtp, hasPurchased, connectContract }) {
   );
 
   const groups = new Map();
-  const GROUPS_FILE = new URL('../groups.json', import.meta.url);
+  const database =
+    db ??
+    new sqlite3.Database(
+      dbPath ?? new URL('../groups.db', import.meta.url).pathname
+    );
+  const ready = new Promise((resolve, reject) => {
+    database.run(
+      'CREATE TABLE IF NOT EXISTS groups (contract TEXT PRIMARY KEY, groupId TEXT, priest TEXT)',
+      (err) => (err ? reject(err) : resolve())
+    );
+  });
 
-  async function persist() {
-    const data = {};
-    for (const [addr, { group, priest }] of groups.entries()) {
-      data[addr] = { groupId: group.id, priest };
-    }
-    await fs.writeFile(GROUPS_FILE, JSON.stringify(data, null, 2));
+  function persist(contract, record) {
+    return ready.then(
+      () =>
+        new Promise((resolve, reject) => {
+          database.run(
+            'INSERT OR REPLACE INTO groups (contract, groupId, priest) VALUES (?, ?, ?)',
+            [contract, record.group.id, record.priest],
+            (err) => (err ? reject(err) : resolve())
+          );
+        })
+    );
   }
 
   (async () => {
     try {
-      const raw = await fs.readFile(GROUPS_FILE, 'utf8');
-      const data = JSON.parse(raw);
-      for (const [addr, meta] of Object.entries(data)) {
-        const group = await xmtp.conversations.getGroup(meta.groupId);
-        groups.set(addr, { group, priest: meta.priest });
+      await ready;
+      const rows = await new Promise((resolve, reject) => {
+        database.all(
+          'SELECT contract, groupId, priest FROM groups',
+          (err, rows) => (err ? reject(err) : resolve(rows))
+        );
+      });
+      for (const row of rows) {
+        try {
+          const group = await xmtp.conversations.getGroup(row.groupId);
+          groups.set(row.contract, { group, priest: row.priest });
+        } catch {
+          /* ignore */
+        }
       }
     } catch {
       /* ignore */
@@ -117,8 +141,9 @@ export function createApp({ xmtp, hasPurchased, connectContract }) {
         record.contract = contract;
       }
 
-      groups.set(contractAddress.toLowerCase(), record);
-      await persist();
+      const key = contractAddress.toLowerCase();
+      groups.set(key, record);
+      await persist(key, record);
       res.json({ groupId: group.id });
     } catch (err) {
       res.status(500).json({ error: err.message });

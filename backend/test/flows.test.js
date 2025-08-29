@@ -5,6 +5,8 @@ import { EventEmitter } from 'node:events';
 import { Wallet } from 'ethers';
 import { createApp } from '../src/server.js';
 
+const makeApp = (opts) => createApp({ dbPath: ':memory:', ...opts });
+
 const wallets = {
   priest: new Wallet('0x' + '2'.repeat(64)),
   member: new Wallet('0x' + '3'.repeat(64)),
@@ -31,7 +33,7 @@ test('creates templ and returns group id', async () => {
   };
   const hasPurchased = async () => false;
 
-  const app = createApp({ xmtp: fakeXmtp, hasPurchased });
+  const app = makeApp({ xmtp: fakeXmtp, hasPurchased });
   const signature = await wallets.priest.signMessage(
     `create:${addresses.contract}`
   );
@@ -50,7 +52,7 @@ test('rejects templ creation with malformed addresses', async () => {
   const fakeXmtp = { conversations: { newGroup: async () => fakeGroup } };
   const hasPurchased = async () => false;
 
-  const app = createApp({ xmtp: fakeXmtp, hasPurchased });
+  const app = makeApp({ xmtp: fakeXmtp, hasPurchased });
   const signature = await wallets.priest.signMessage(`create:${addresses.contract}`);
   await request(app)
     .post('/templs')
@@ -67,7 +69,7 @@ test('rejects templ creation with bad signature', async () => {
   const fakeXmtp = { conversations: { newGroup: async () => fakeGroup } };
   const hasPurchased = async () => false;
 
-  const app = createApp({ xmtp: fakeXmtp, hasPurchased });
+  const app = makeApp({ xmtp: fakeXmtp, hasPurchased });
   const signature = await wallets.member.signMessage(`create:${addresses.contract}`);
   await request(app)
     .post('/templs')
@@ -80,7 +82,7 @@ test('rejects templ creation with bad signature', async () => {
 });
 
 test('rejects join with malformed addresses', async () => {
-  const app = createApp({
+  const app = makeApp({
     xmtp: { conversations: {} },
     hasPurchased: async () => true
   });
@@ -100,7 +102,7 @@ test('rejects join with bad signature', async () => {
   const fakeXmtp = { conversations: { newGroup: async () => fakeGroup } };
   const hasPurchased = async () => true;
 
-  const app = createApp({ xmtp: fakeXmtp, hasPurchased });
+  const app = makeApp({ xmtp: fakeXmtp, hasPurchased });
 
   const templSig = await wallets.priest.signMessage(`create:${addresses.contract}`);
   await request(app)
@@ -124,7 +126,7 @@ test('rejects join with bad signature', async () => {
 });
 
 test('rejects join for unknown templ', async () => {
-  const app = createApp({
+  const app = makeApp({
     xmtp: { conversations: {} },
     hasPurchased: async () => true
   });
@@ -158,7 +160,7 @@ test('join requires on-chain purchase', async () => {
   const hasPurchased = async (_contract, member) =>
     purchased.has(member.toLowerCase());
 
-  const app = createApp({ xmtp: fakeXmtp, hasPurchased });
+  const app = makeApp({ xmtp: fakeXmtp, hasPurchased });
 
   let sig = await wallets.priest.signMessage(`create:${addresses.contract}`);
   await request(app)
@@ -209,7 +211,7 @@ test('responds with 500 when purchase check fails', async () => {
     throw new Error('oops');
   };
 
-  const app = createApp({ xmtp: fakeXmtp, hasPurchased });
+  const app = makeApp({ xmtp: fakeXmtp, hasPurchased });
 
   const templSig = await wallets.priest.signMessage(
     `create:${addresses.contract}`
@@ -252,7 +254,7 @@ test('only priest can mute members', async () => {
   };
   const hasPurchased = async () => true;
 
-  const app = createApp({ xmtp: fakeXmtp, hasPurchased });
+  const app = makeApp({ xmtp: fakeXmtp, hasPurchased });
 
   let templSig = await wallets.priest.signMessage(`create:${addresses.contract}`);
   await request(app)
@@ -298,7 +300,7 @@ test('rejects mute with bad signature', async () => {
   const fakeXmtp = { conversations: { newGroup: async () => fakeGroup } };
   const hasPurchased = async () => true;
 
-  const app = createApp({ xmtp: fakeXmtp, hasPurchased });
+  const app = makeApp({ xmtp: fakeXmtp, hasPurchased });
 
   const templSig = await wallets.priest.signMessage(`create:${addresses.contract}`);
   await request(app)
@@ -329,7 +331,7 @@ test('rejects mute with malformed addresses', async () => {
   const fakeGroup = { id: 'group-3b', addMembers: async () => {}, removeMembers: async () => {} };
   const fakeXmtp = { conversations: { newGroup: async () => fakeGroup } };
 
-  const app = createApp({ xmtp: fakeXmtp, hasPurchased });
+  const app = makeApp({ xmtp: fakeXmtp, hasPurchased });
 
   await request(app)
     .post('/mute')
@@ -347,7 +349,7 @@ test('rejects mute for unknown templ', async () => {
   const fakeGroup = { id: 'group-3c', addMembers: async () => {}, removeMembers: async () => {} };
   const fakeXmtp = { conversations: { newGroup: async () => fakeGroup } };
 
-  const app = createApp({ xmtp: fakeXmtp, hasPurchased });
+  const app = makeApp({ xmtp: fakeXmtp, hasPurchased });
 
   await request(app)
     .post('/mute')
@@ -379,7 +381,7 @@ test('broadcasts proposal and vote events to group', async () => {
   const connectContract = () => emitter;
   const hasPurchased = async () => false;
 
-  const app = createApp({ xmtp: fakeXmtp, hasPurchased, connectContract });
+  const app = makeApp({ xmtp: fakeXmtp, hasPurchased, connectContract });
 
   const signature = await wallets.priest.signMessage(
     `create:${addresses.contract}`
