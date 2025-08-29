@@ -1,7 +1,9 @@
 import test from 'node:test';
 import request from 'supertest';
-import fs from 'fs/promises';
 import { Wallet } from 'ethers';
+import { mkdtemp } from 'fs/promises';
+import path from 'path';
+import os from 'os';
 import { createApp } from '../src/server.js';
 
 const wallets = {
@@ -16,20 +18,8 @@ const addresses = {
 };
 
 test('reloads groups from disk on restart', async () => {
-  const originalWrite = fs.writeFile;
-  const originalRead = fs.readFile;
-  let stored;
-   
-  fs.writeFile = async (_path, data) => {
-    void _path;
-    stored = data;
-  };
-  fs.readFile = async (_path, _encoding) => {
-    void _path;
-    void _encoding;
-    if (stored) return stored;
-    throw new Error('no file');
-  };
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'templ-'));
+  const dbPath = path.join(dir, 'groups.db');
 
   const fakeGroup = {
     id: 'group-persist',
@@ -40,7 +30,7 @@ test('reloads groups from disk on restart', async () => {
   const xmtp1 = { conversations: { newGroup: async () => fakeGroup } };
   const hasPurchased = async () => true;
 
-  let app = createApp({ xmtp: xmtp1, hasPurchased });
+  let app = createApp({ xmtp: xmtp1, hasPurchased, dbPath });
   const createSig = await wallets.priest.signMessage(
     `create:${addresses.contract}`
   );
@@ -52,10 +42,11 @@ test('reloads groups from disk on restart', async () => {
       signature: createSig
     })
     .expect(200);
+  await app.close();
 
   const xmtp2 = { conversations: { getGroup: async () => fakeGroup } };
-  app = createApp({ xmtp: xmtp2, hasPurchased });
-  await new Promise((r) => setImmediate(r));
+  app = createApp({ xmtp: xmtp2, hasPurchased, dbPath });
+  await new Promise((r) => setTimeout(r, 10));
 
   const joinSig = await wallets.member.signMessage(
     `join:${addresses.contract}`
@@ -68,21 +59,29 @@ test('reloads groups from disk on restart', async () => {
       signature: joinSig
     })
     .expect(200, { groupId: fakeGroup.id });
-
-  fs.writeFile = originalWrite;
-  fs.readFile = originalRead;
+  await app.close();
 });
 
 test('returns 500 when persistence fails', async () => {
-  const originalWrite = fs.writeFile;
-  fs.writeFile = async () => {
-    throw new Error('disk full');
-  };
-
   const fakeGroup = { id: 'group-err', addMembers: async () => {}, removeMembers: async () => {} };
   const xmtp = { conversations: { newGroup: async () => fakeGroup } };
   const hasPurchased = async () => false;
-  const app = createApp({ xmtp, hasPurchased });
+  const failingDb = {
+    exec() {},
+    prepare(sql) {
+      return {
+        run() {
+          if (sql.startsWith('INSERT')) throw new Error('disk full');
+        },
+        all() {
+          return [];
+        }
+      };
+    },
+    close() {}
+  };
+
+  const app = createApp({ xmtp, hasPurchased, db: failingDb });
 
   const sig = await wallets.priest.signMessage(`create:${addresses.contract}`);
   await request(app)
@@ -93,6 +92,5 @@ test('returns 500 when persistence fails', async () => {
       signature: sig
     })
     .expect(500);
-
-  fs.writeFile = originalWrite;
+  await app.close();
 });

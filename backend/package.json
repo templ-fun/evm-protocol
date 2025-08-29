@@ -16,7 +16,8 @@
     "express": "^4.19.2",
     "express-rate-limit": "^7.0.0",
     "helmet": "^7.0.0",
-    "pino": "^9.9.0"
+    "pino": "^9.9.0",
+    "better-sqlite3": "^11.8.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.33.0",

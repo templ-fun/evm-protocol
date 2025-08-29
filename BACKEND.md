@@ -48,7 +48,7 @@ npm --prefix backend run lint
   - `POST /join` – verify `hasPurchased` on-chain and invite the wallet.
   - `POST /mute` – priest address may mute a member; no other admin powers exist.
 - **Dependencies** – XMTP JS SDK and an on-chain provider; event watching requires a `connectContract` factory.
-- **Persistence** – group metadata persists to `backend/groups.json`. The file is read on startup and rewritten when groups change; back it up to avoid losing state.
+- **Persistence** – group metadata persists to a SQLite database at `backend/groups.db`. The database is read on startup and updated when groups change; back it up to avoid losing state.
 
 ## Security considerations
 - The service trusts the provided wallet address; production deployments should authenticate requests.
