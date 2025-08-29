@@ -84,7 +84,8 @@ Use the docs below to dive into each component:
 1. **Templ creation** – deploy contract and create a private XMTP group with the priest added at creation time.
 2. **Pay‑to‑join** – wallet calls `purchaseAccess` and backend invites it into the group.
 3. **Messaging** – members send and receive XMTP messages in the group chat.
-4. **Priest muting** – priest can mute members but cannot rug the group.
+4. **Priest muting** – priest can silence members by removing them from the
+   XMTP group but cannot rug the group.
 5. **Proposal creation** – any member drafts a call‑data proposal from the chat UI.
 6. **Voting** – members cast yes/no votes and see live tallies as events arrive.
 7. **Proposal creation** – proposals that win with yes result has callData executed.
