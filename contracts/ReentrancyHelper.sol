@@ -9,7 +9,8 @@ interface ITEMPL {
     function claimMemberPool() external;
 }
 
-/// @dev Helper contract that attempts to reenter TEMPL during callbacks
+/// @dev Test-only helper that attempts to reenter TEMPL during callbacks.
+///      It is deliberately excluded from production deployments and Slither runs.
 contract ReentrancyHelper {
     address public immutable templ;
     address public immutable token;
