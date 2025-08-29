@@ -108,7 +108,7 @@ test.describe('TEMPL E2E - All 7 Core Flows', () => {
       
       // Mock XMTP to avoid inbox limits
       window.Client = {
-        create: async (_) => {
+        create: async () => {
           console.log('Creating mock XMTP client');
           const mockGroup = {
             id: 'mock-group-' + Date.now(),
