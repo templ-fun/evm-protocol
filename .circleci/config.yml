@@ -31,17 +31,24 @@ jobs:
           name: Run Slither
           command: npm run slither
 
-  web:
+  backend:
     docker:
       - image: cimg/node:20.8
     steps:
       - checkout
       - run: npm ci
       - run: npm --prefix backend ci
-      - run: npm --prefix frontend ci
       - run: npm --prefix backend test
-      - run: npm --prefix frontend test
       - run: npm --prefix backend run lint
+
+  frontend:
+    docker:
+      - image: cimg/node:20.8
+    steps:
+      - checkout
+      - run: npm ci
+      - run: npm --prefix frontend ci
+      - run: npm --prefix frontend test
       - run: npm --prefix frontend run lint
       - run: npm --prefix frontend run build
 
@@ -53,13 +60,32 @@ workflows:
           filters:
             branches:
               ignore: main
+            paths:
+              only:
+                - contracts/.*
+                - test/.*
       - slither:
           name: slither-pr
           filters:
             branches:
               ignore: main
-      - web:
-          name: web-pr
+            paths:
+              only:
+                - contracts/.*
+                - test/.*
+      - backend:
+          name: backend-pr
           filters:
             branches:
               ignore: main
+            paths:
+              only:
+                - backend/.*
+      - frontend:
+          name: frontend-pr
+          filters:
+            branches:
+              ignore: main
+            paths:
+              only:
+                - frontend/.*
