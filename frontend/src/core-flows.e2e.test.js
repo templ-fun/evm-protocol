@@ -6,7 +6,7 @@ import { setTimeout as wait } from 'timers/promises';
 import { ethers } from 'ethers';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
-import { Client } from '@xmtp/xmtp-js';
+import { Client } from '@xmtp/browser-sdk';
 import {
   deployTempl,
   purchaseAndJoin,

@@ -1,7 +1,7 @@
 import express from 'express';
 import dotenv from 'dotenv';
 import { ethers } from 'ethers';
-import { Client } from '@xmtp/xmtp-js';
+import { Client } from '@xmtp/node-sdk';
 import helmet from 'helmet';
 import rateLimit, { MemoryStore } from 'express-rate-limit';
 import cors from 'cors';

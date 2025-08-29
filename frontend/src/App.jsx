@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
-import { Client } from '@xmtp/xmtp-js';
+import { Client } from '@xmtp/browser-sdk';
 import templArtifact from './contracts/TEMPL.json';
 import {
   deployTempl,
