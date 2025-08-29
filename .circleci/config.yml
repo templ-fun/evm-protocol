@@ -49,27 +49,15 @@ workflows:
   test:
     jobs:
       - contracts:
-          filters:
-            branches:
-              only: main
-      - contracts:
           name: contracts-pr
           filters:
             branches:
               ignore: main
       - slither:
-          filters:
-            branches:
-              only: main
-      - slither:
           name: slither-pr
           filters:
             branches:
               ignore: main
-      - web:
-          filters:
-            branches:
-              only: main
       - web:
           name: web-pr
           filters:
