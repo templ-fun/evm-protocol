@@ -10,6 +10,10 @@ Install dependencies:
 npm --prefix backend install
 ```
 
+The API limits cross-origin requests using the [`cors`](https://www.npmjs.com/package/cors) middleware. Allowed origins are
+configured with the `ALLOWED_ORIGINS` environment variable (comma-separated list). By default only `http://localhost:5173` is
+permitted.
+
 ## Development
 
 Start the API service:
@@ -63,7 +67,9 @@ The backend is an Express service that acts as the XMTP group owner. It creates 
 
 ```env
 RPC_URL=https://mainnet.base.org
+PORT=3001
 BOT_PRIVATE_KEY=0x...
+ALLOWED_ORIGINS=http://localhost:5173
 ```
 
 ## Persistence
@@ -74,13 +80,6 @@ BOT_PRIVATE_KEY=0x...
 - Back up `backend/groups.json` to avoid losing group state across deployments.
 - The file may become stale if groups are modified outside the backend; prune or edit entries when necessary.
 - To reset or migrate, stop the service and delete or update `backend/groups.json`. A fresh file is created when new groups are added.
-
-## Tests
-Run unit tests and lint:
-```bash
-npm --prefix backend test
-npm --prefix backend run lint
-```
 
 ## Security considerations
 - The service trusts the provided wallet address; production deployments should authenticate requests.

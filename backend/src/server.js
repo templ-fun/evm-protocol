@@ -4,6 +4,7 @@ import { ethers } from 'ethers';
 import { Client } from '@xmtp/xmtp-js';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
+import cors from 'cors';
 import fs from 'fs/promises';
 import pino from 'pino';
 
@@ -21,6 +22,11 @@ const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
  */
 export function createApp({ xmtp, hasPurchased, connectContract }) {
   const app = express();
+  const allowedOrigins =
+    process.env.ALLOWED_ORIGINS?.split(',').filter(Boolean) ?? [
+      'http://localhost:5173'
+    ];
+  app.use(cors({ origin: allowedOrigins }));
   app.use(express.json());
   app.use(helmet());
   app.use(
