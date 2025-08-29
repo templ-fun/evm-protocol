@@ -23,7 +23,7 @@ sessions/
 redis_data/
 
 # Backend runtime files
-backend/groups.json
+backend/groups.db
 
 # Build
 dist/
