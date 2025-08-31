@@ -51,34 +51,50 @@ function App() {
     const address = await signer.getAddress();
     setWalletAddress(address);
     
-    // Create signer compatible with browser SDK
-    const xmtpSigner = {
-      type: 'EOA',
-      getIdentifier: () => ({
-        identifier: address.toLowerCase(),
-        identifierKind: 'Ethereum'  // Must be string "Ethereum" for browser SDK
-      }),
-      signMessage: async (message) => {
-        // Handle different message types
-        let messageToSign;
-        if (message instanceof Uint8Array) {
-          try {
-            messageToSign = ethers.toUtf8String(message);
-          } catch {
-            messageToSign = ethers.hexlify(message);
-          }
-        } else if (typeof message === 'string') {
-          messageToSign = message;
-        } else {
-          messageToSign = String(message);
+    const signMessage = async (message) => {
+      // Handle different message types
+      let messageToSign;
+      if (message instanceof Uint8Array) {
+        try {
+          messageToSign = ethers.toUtf8String(message);
+        } catch {
+          messageToSign = ethers.hexlify(message);
         }
-        
-        const signature = await signer.signMessage(messageToSign);
-        return ethers.getBytes(signature);
+      } else if (typeof message === 'string') {
+        messageToSign = message;
+      } else {
+        messageToSign = String(message);
       }
+
+      const signature = await signer.signMessage(messageToSign);
+      return ethers.getBytes(signature);
     };
-    
-    const client = await Client.create(xmtpSigner, { env: 'production' });
+
+    const baseNonce = Date.now();
+    let client;
+    for (let i = 0; i < 5 && !client; i++) {
+      const xmtpSigner = {
+        type: 'EOA',
+        getIdentifier: () => ({
+          identifier: address.toLowerCase(),
+          identifierKind: 'Ethereum', // Must be string "Ethereum" for browser SDK
+          nonce: baseNonce + i
+        }),
+        signMessage
+      };
+
+      try {
+        client = await Client.create(xmtpSigner, { env: 'production' });
+      } catch (err) {
+        if (!String(err.message).includes('already registered 10/10 installations')) {
+          throw err;
+        }
+      }
+    }
+
+    if (!client) {
+      throw new Error('Unable to initialize XMTP client');
+    }
     setXmtp(client);
   }
 
