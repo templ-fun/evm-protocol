@@ -422,28 +422,34 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       }
     };
 
-    let nonce = 0;
-    while (nonce < 20) {
+    // Start from a random nonce to reduce collisions across test runs
+    let nonce = Math.floor(Math.random() * 1_000_000);
+    for (let attempt = 0; attempt < 20; attempt++) {
       const inboxId = generateInboxId({
         identifier: wallet.address.toLowerCase(),
         identifierKind: 0,
         nonce
       });
+      logger.info({ attempt, nonce, inboxId }, 'Attempting XMTP client registration');
       try {
-        return await Client.create(xmtpSigner, {
+        const client = await Client.create(xmtpSigner, {
           dbEncryptionKey,
           env: 'dev', // Use dev for testing
           loggingLevel: 'off', // Suppress XMTP SDK internal logging
           inboxId
         });
+        logger.info({ attempt, nonce }, 'XMTP client registration succeeded');
+        return client;
       } catch (err) {
+        logger.warn({ attempt, nonce, err }, 'XMTP registration attempt failed');
         if (!String(err.message).includes('already registered')) {
+          logger.error({ attempt, nonce, err }, 'XMTP client creation error');
           throw err;
         }
-        logger.warn({ nonce, message: err.message }, 'XMTP registration failed, rotating nonce');
         nonce++;
       }
     }
+    logger.error('XMTP client registration exhausted all nonce attempts');
     throw new Error('Unable to register XMTP client');
   };
 
