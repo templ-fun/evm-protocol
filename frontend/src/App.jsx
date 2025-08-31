@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
-import { Client, generateInboxId } from '@xmtp/browser-sdk';
+import { Client, Utils } from '@xmtp/browser-sdk';
 import templArtifact from './contracts/TEMPL.json';
 import {
   deployTempl,
@@ -79,9 +79,10 @@ function App() {
       }),
       signMessage
     };
+    const utils = new Utils();
     let client;
     for (let i = 0; i < 5 && !client; i++) {
-      const inboxId = await generateInboxId({
+      const inboxId = await utils.generateInboxId({
         identifier: address.toLowerCase(),
         identifierKind: 'Ethereum',
         nonce: baseNonce + i
