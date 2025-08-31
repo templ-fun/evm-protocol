@@ -393,39 +393,68 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
   const wallet = new ethers.Wallet(process.env.BOT_PRIVATE_KEY, provider);
   
-  // Create signer compatible with new SDK - using the pattern that worked in tests
-  const xmtpSigner = {
-    getAddress: () => wallet.address,
-    getIdentifier: () => ({
-      identifier: wallet.address.toLowerCase(),
-      identifierKind: 0  // Ethereum = 0 in the enum
-    }),
-    signMessage: async (message) => {
-      // Handle different message types
-      let messageToSign;
-      if (message instanceof Uint8Array) {
-        try {
-          messageToSign = ethers.toUtf8String(message);
-        } catch {
-          messageToSign = ethers.hexlify(message);
+  // Create XMTP client with nonce rotation to avoid installation limits
+  const createXmtp = async () => {
+    const dbEncryptionKey = new Uint8Array(32);
+    const xmtpSigner = {
+      getAddress: () => wallet.address,
+      getIdentifier: () => ({
+        identifier: wallet.address.toLowerCase(),
+        identifierKind: 0 // Ethereum = 0 in the enum
+      }),
+      signMessage: async (message) => {
+        // Handle different message types
+        let messageToSign;
+        if (message instanceof Uint8Array) {
+          try {
+            messageToSign = ethers.toUtf8String(message);
+          } catch {
+            messageToSign = ethers.hexlify(message);
+          }
+        } else if (typeof message === 'string') {
+          messageToSign = message;
+        } else {
+          messageToSign = String(message);
         }
-      } else if (typeof message === 'string') {
-        messageToSign = message;
-      } else {
-        messageToSign = String(message);
+
+        const signature = await wallet.signMessage(messageToSign);
+        return ethers.getBytes(signature);
       }
-      
-      const signature = await wallet.signMessage(messageToSign);
-      return ethers.getBytes(signature);
+    };
+
+    // Use a timestamp-based nonce so each run gets a fresh inbox ID.
+    // Increment the nonce on "already registered" errors to rotate IDs.
+    let nonce = Date.now();
+    for (let attempt = 0; attempt < 20; attempt++) {
+      const inboxId = generateInboxId({
+        identifier: wallet.address.toLowerCase(),
+        identifierKind: 0,
+        nonce
+      });
+      logger.info({ attempt, nonce, inboxId }, 'Attempting XMTP client registration');
+      try {
+        const client = await Client.create(xmtpSigner, {
+          dbEncryptionKey,
+          env: 'dev', // Use dev for testing
+          loggingLevel: 'off', // Suppress XMTP SDK internal logging
+          inboxId
+        });
+        logger.info({ attempt, nonce }, 'XMTP client registration succeeded');
+        return client;
+      } catch (err) {
+        logger.warn({ attempt, nonce, err }, 'XMTP registration attempt failed');
+        if (!String(err.message).includes('already registered')) {
+          logger.error({ attempt, nonce, err }, 'XMTP client creation error');
+          throw err;
+        }
+        nonce++;
+      }
     }
+    logger.error('XMTP client registration exhausted all nonce attempts');
+    throw new Error('Unable to register XMTP client');
   };
-  
-  const dbEncryptionKey = new Uint8Array(32);
-  const xmtp = await Client.create(xmtpSigner, { 
-    dbEncryptionKey,
-    env: 'dev',  // Use dev for testing
-    loggingLevel: 'off'  // Suppress XMTP SDK internal logging
-  });
+
+  const xmtp = await createXmtp();
   const hasPurchased = async (contractAddress, memberAddress) => {
     const contract = new ethers.Contract(
       contractAddress,

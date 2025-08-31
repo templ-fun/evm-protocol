@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
-import { Client } from '@xmtp/browser-sdk';
+import { Client, Utils } from '@xmtp/browser-sdk';
 import templArtifact from './contracts/TEMPL.json';
 import {
   deployTempl,
@@ -51,34 +51,55 @@ function App() {
     const address = await signer.getAddress();
     setWalletAddress(address);
     
-    // Create signer compatible with browser SDK
+    const signMessage = async (message) => {
+      // Handle different message types
+      let messageToSign;
+      if (message instanceof Uint8Array) {
+        try {
+          messageToSign = ethers.toUtf8String(message);
+        } catch {
+          messageToSign = ethers.hexlify(message);
+        }
+      } else if (typeof message === 'string') {
+        messageToSign = message;
+      } else {
+        messageToSign = String(message);
+      }
+
+      const signature = await signer.signMessage(messageToSign);
+      return ethers.getBytes(signature);
+    };
+
+    const baseNonce = Date.now();
     const xmtpSigner = {
       type: 'EOA',
       getIdentifier: () => ({
         identifier: address.toLowerCase(),
-        identifierKind: 'Ethereum'  // Must be string "Ethereum" for browser SDK
+        identifierKind: 'Ethereum' // Must be string "Ethereum" for browser SDK
       }),
-      signMessage: async (message) => {
-        // Handle different message types
-        let messageToSign;
-        if (message instanceof Uint8Array) {
-          try {
-            messageToSign = ethers.toUtf8String(message);
-          } catch {
-            messageToSign = ethers.hexlify(message);
-          }
-        } else if (typeof message === 'string') {
-          messageToSign = message;
-        } else {
-          messageToSign = String(message);
-        }
-        
-        const signature = await signer.signMessage(messageToSign);
-        return ethers.getBytes(signature);
-      }
+      signMessage
     };
-    
-    const client = await Client.create(xmtpSigner, { env: 'production' });
+    const utils = new Utils();
+    let client;
+    for (let i = 0; i < 5 && !client; i++) {
+      const inboxId = await utils.generateInboxId({
+        identifier: address.toLowerCase(),
+        identifierKind: 'Ethereum',
+        nonce: baseNonce + i
+      });
+
+      try {
+        client = await Client.create(xmtpSigner, { env: 'dev', inboxId });
+      } catch (err) {
+        if (!String(err.message).includes('already registered')) {
+          throw err;
+        }
+      }
+    }
+
+    if (!client) {
+      throw new Error('Unable to initialize XMTP client');
+    }
     setXmtp(client);
   }
 
