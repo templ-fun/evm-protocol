@@ -396,45 +396,51 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   // Create XMTP client with nonce rotation to avoid installation limits
   const createXmtp = async () => {
     const dbEncryptionKey = new Uint8Array(32);
+    const xmtpSigner = {
+      getAddress: () => wallet.address,
+      getIdentifier: () => ({
+        identifier: wallet.address.toLowerCase(),
+        identifierKind: 0 // Ethereum = 0 in the enum
+      }),
+      signMessage: async (message) => {
+        // Handle different message types
+        let messageToSign;
+        if (message instanceof Uint8Array) {
+          try {
+            messageToSign = ethers.toUtf8String(message);
+          } catch {
+            messageToSign = ethers.hexlify(message);
+          }
+        } else if (typeof message === 'string') {
+          messageToSign = message;
+        } else {
+          messageToSign = String(message);
+        }
+
+        const signature = await wallet.signMessage(messageToSign);
+        return ethers.getBytes(signature);
+      }
+    };
+
     let nonce = 0;
     while (nonce < 20) {
-      const currentNonce = nonce;
-      const xmtpSigner = {
-        getAddress: () => wallet.address,
-        getIdentifier: () => ({
-          identifier: wallet.address.toLowerCase(),
-          identifierKind: 0, // Ethereum = 0 in the enum
-          nonce: currentNonce
-        }),
-        signMessage: async (message) => {
-          // Handle different message types
-          let messageToSign;
-          if (message instanceof Uint8Array) {
-            try {
-              messageToSign = ethers.toUtf8String(message);
-            } catch {
-              messageToSign = ethers.hexlify(message);
-            }
-          } else if (typeof message === 'string') {
-            messageToSign = message;
-          } else {
-            messageToSign = String(message);
-          }
-
-          const signature = await wallet.signMessage(messageToSign);
-          return ethers.getBytes(signature);
-        }
-      };
+      const inboxId = generateInboxId({
+        identifier: wallet.address.toLowerCase(),
+        identifierKind: 0,
+        nonce
+      });
       try {
         return await Client.create(xmtpSigner, {
           dbEncryptionKey,
           env: 'dev', // Use dev for testing
-          loggingLevel: 'off' // Suppress XMTP SDK internal logging
+          loggingLevel: 'off', // Suppress XMTP SDK internal logging
+          inboxId
         });
       } catch (err) {
         if (!String(err.message).includes('already registered')) {
           throw err;
         }
+        logger.warn({ nonce, message: err.message }, 'XMTP registration failed, rotating nonce');
         nonce++;
       }
     }

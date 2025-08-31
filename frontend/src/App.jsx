@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
-import { Client } from '@xmtp/browser-sdk';
+import { Client, generateInboxId } from '@xmtp/browser-sdk';
 import templArtifact from './contracts/TEMPL.json';
 import {
   deployTempl,
@@ -71,22 +71,26 @@ function App() {
     };
 
     const baseNonce = Date.now();
+    const xmtpSigner = {
+      type: 'EOA',
+      getIdentifier: () => ({
+        identifier: address.toLowerCase(),
+        identifierKind: 'Ethereum' // Must be string "Ethereum" for browser SDK
+      }),
+      signMessage
+    };
     let client;
     for (let i = 0; i < 5 && !client; i++) {
-      const xmtpSigner = {
-        type: 'EOA',
-        getIdentifier: () => ({
-          identifier: address.toLowerCase(),
-          identifierKind: 'Ethereum', // Must be string "Ethereum" for browser SDK
-          nonce: baseNonce + i
-        }),
-        signMessage
-      };
+      const inboxId = await generateInboxId({
+        identifier: address.toLowerCase(),
+        identifierKind: 'Ethereum',
+        nonce: baseNonce + i
+      });
 
       try {
-        client = await Client.create(xmtpSigner, { env: 'production' });
+        client = await Client.create(xmtpSigner, { env: 'production', inboxId });
       } catch (err) {
-        if (!String(err.message).includes('already registered 10/10 installations')) {
+        if (!String(err.message).includes('already registered')) {
           throw err;
         }
       }
