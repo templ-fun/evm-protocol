@@ -1,4 +1,4 @@
-import { defineConfig } from 'vitest/config'
+import { defineConfig, configDefaults } from 'vitest/config'
 
 export default defineConfig({
   // Use a writable cache directory for Vite transforms
@@ -13,10 +13,11 @@ export default defineConfig({
     testTimeout: 180_000,
     // Do not collect Playwright E2E specs with Vitest
     exclude: [
+      ...configDefaults.exclude, // keep node_modules and common defaults excluded
       'e2e/**',
       '**/*.pw.spec.*',
       'playwright*.config.*',
-      'playwright-*.config.*'
+      'playwright-*.config.*',
     ],
   },
 })
