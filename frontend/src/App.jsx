@@ -70,7 +70,7 @@ function App() {
       return ethers.getBytes(signature);
     };
 
-    const baseNonce = Date.now();
+    const baseNonce = await signer.getNonce();
     const xmtpSigner = {
       type: 'EOA',
       getIdentifier: () => ({

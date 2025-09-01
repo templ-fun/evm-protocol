@@ -422,10 +422,11 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       }
     };
 
-    // Use a timestamp-based nonce so each run gets a fresh inbox ID.
-    // Increment the nonce on "already registered" errors to rotate IDs.
-    let nonce = Date.now();
+    // Start from the current transaction nonce so inbox IDs advance sequentially.
+    // Increment the nonce on failures to rotate the inbox ID.
+    let baseNonce = await provider.getTransactionCount(wallet.address);
     for (let attempt = 0; attempt < 20; attempt++) {
+      const nonce = baseNonce + attempt;
       const inboxId = generateInboxId({
         identifier: wallet.address.toLowerCase(),
         identifierKind: 0,
@@ -442,12 +443,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
         logger.info({ attempt, nonce }, 'XMTP client registration succeeded');
         return client;
       } catch (err) {
-        logger.warn({ attempt, nonce, err }, 'XMTP registration attempt failed');
-        if (!String(err.message).includes('already registered')) {
-          logger.error({ attempt, nonce, err }, 'XMTP client creation error');
-          throw err;
-        }
-        nonce++;
+        logger.warn({ attempt, nonce, err: err?.message }, 'XMTP registration attempt failed');
       }
     }
     logger.error('XMTP client registration exhausted all nonce attempts');

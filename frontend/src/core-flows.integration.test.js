@@ -101,7 +101,7 @@ describe('core flows e2e', () => {
           return ethers.getBytes(signature);
         }
       };
-      let nonce = Date.now();
+      let nonce = await wallet.getNonce();
       for (let attempt = 0; attempt < 20; attempt++) {
         const inboxId = generateInboxId({
           identifier: wallet.address.toLowerCase(),
