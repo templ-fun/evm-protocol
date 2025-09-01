@@ -70,7 +70,6 @@ function App() {
       return ethers.getBytes(signature);
     };
 
-    const baseNonce = await signer.getNonce();
     const xmtpSigner = {
       type: 'EOA',
       getIdentifier: () => ({
@@ -80,27 +79,27 @@ function App() {
       signMessage
     };
     const utils = new Utils();
-    let client;
-    for (let i = 0; i < 5 && !client; i++) {
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const nonce = await signer.getNonce();
       const inboxId = await utils.generateInboxId({
         identifier: address.toLowerCase(),
         identifierKind: 'Ethereum',
-        nonce: baseNonce + i
+        nonce
       });
-
       try {
-        client = await Client.create(xmtpSigner, { env: 'dev', inboxId });
+        const client = await Client.create(xmtpSigner, { env: 'dev', inboxId });
+        setXmtp(client);
+        return;
       } catch (err) {
         if (!String(err.message).includes('already registered')) {
           throw err;
         }
+        const tx = await signer.sendTransaction({ to: address, value: 0n });
+        await tx.wait();
       }
     }
 
-    if (!client) {
-      throw new Error('Unable to initialize XMTP client');
-    }
-    setXmtp(client);
+    throw new Error('Unable to initialize XMTP client');
   }
 
   async function handleDeploy() {

@@ -422,11 +422,13 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       }
     };
 
-    // Start from the current transaction nonce so inbox IDs advance sequentially.
-    // Increment the nonce on failures to rotate the inbox ID.
-    let baseNonce = await provider.getTransactionCount(wallet.address);
+    // The XMTP network ties inbox IDs to the signer's on-chain transaction
+    // nonce. If an inbox has reached its update limit, advancing the wallet's
+    // nonce (by sending a transaction) allows generating a fresh inbox ID. The
+    // loop below retries client creation, bumping the nonce with a self-send
+    // transaction whenever XMTP reports an "already registered" error.
     for (let attempt = 0; attempt < 20; attempt++) {
-      const nonce = baseNonce + attempt;
+      const nonce = await provider.getTransactionCount(wallet.address);
       const inboxId = generateInboxId({
         identifier: wallet.address.toLowerCase(),
         identifierKind: 0,
@@ -443,7 +445,28 @@ if (import.meta.url === `file://${process.argv[1]}`) {
         logger.info({ attempt, nonce }, 'XMTP client registration succeeded');
         return client;
       } catch (err) {
-        logger.warn({ attempt, nonce, err: err?.message }, 'XMTP registration attempt failed');
+        logger.warn(
+          { attempt, nonce, err: err?.message },
+          'XMTP registration attempt failed'
+        );
+        // Only rotate the nonce if the failure is due to an existing
+        // registration. Other errors propagate immediately.
+        if (!String(err.message).includes('already registered')) {
+          throw err;
+        }
+        try {
+          const tx = await wallet.sendTransaction({
+            to: wallet.address,
+            value: 0n
+          });
+          await tx.wait();
+          logger.info({ newNonce: nonce + 1n }, 'Incremented wallet nonce');
+        } catch (txErr) {
+          logger.warn(
+            { err: txErr?.message },
+            'Failed to bump wallet nonce after XMTP error'
+          );
+        }
       }
     }
     logger.error('XMTP client registration exhausted all nonce attempts');

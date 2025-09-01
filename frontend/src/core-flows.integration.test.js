@@ -101,8 +101,8 @@ describe('core flows e2e', () => {
           return ethers.getBytes(signature);
         }
       };
-      let nonce = await wallet.getNonce();
       for (let attempt = 0; attempt < 20; attempt++) {
+        const nonce = await wallet.getNonce();
         const inboxId = generateInboxId({
           identifier: wallet.address.toLowerCase(),
           identifierKind: 0,
@@ -119,7 +119,8 @@ describe('core flows e2e', () => {
           if (!String(err.message).includes('already registered')) {
             throw err;
           }
-          nonce++;
+          const tx = await wallet.sendTransaction({ to: wallet.address, value: 0n });
+          await tx.wait();
         }
       }
       throw new Error('Unable to register XMTP client');
