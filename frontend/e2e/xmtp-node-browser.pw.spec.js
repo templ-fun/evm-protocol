@@ -57,11 +57,12 @@ test('XMTP Node<->Browser PoC: group discovery', async ({ page, wallets }) => {
   await ftx.wait();
 
   const dbEncryptionKey = new Uint8Array(32);
+  const env = process.env.E2E_XMTP_ENV || process.env.XMTP_ENV || 'production';
   const xmtpServer = await NodeClient.create({
     type: 'EOA',
     getIdentifier: () => ({ identifier: server.address.toLowerCase(), identifierKind: 0, nonce: 1 }),
     signMessage: async (msg) => ethers.getBytes(await server.signMessage(typeof msg === 'string' ? msg : ethers.toBeHex(msg)))
-  }, { env: 'dev', dbEncryptionKey, loggingLevel: 'off' });
+  }, { env, dbEncryptionKey, loggingLevel: 'off' });
 
   const uiAddr = (await uiWallet.getAddress()).toLowerCase();
   const uiInboxId = browserInboxId || generateInboxId({ identifier: uiAddr, identifierKind: 0 });
@@ -86,6 +87,6 @@ test('XMTP Node<->Browser PoC: group discovery', async ({ page, wallets }) => {
   }, groupId);
 
   console.log('PoC discovery result:', found);
-  // Do not fail the suite here; this PoC is diagnostic. Assert shape only.
-  expect(found).toHaveProperty('ok');
+  // Require discovery to build confidence in Browser <-> Node end-to-end.
+  expect(found.ok, `Group ${groupId} not discovered by browser`).toBe(true);
 });

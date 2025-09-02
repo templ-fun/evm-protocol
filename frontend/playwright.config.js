@@ -1,17 +1,29 @@
 /* eslint-env node */
 /* global process */
+import { randomBytes } from 'crypto';
 import { defineConfig, devices } from '@playwright/test';
 
+// Generate a fresh secp256k1 private key per run to avoid XMTP installation limits
+const N = BigInt('0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141');
+function randomPrivKeyHex() {
+  let d;
+  do {
+    d = BigInt('0x' + randomBytes(32).toString('hex'));
+  } while (d === 0n || d >= N);
+  return '0x' + d.toString(16).padStart(64, '0');
+}
+const BOT_PK = randomPrivKeyHex();
+
 export default defineConfig({
-  // Increase per-test timeout to accommodate full-stack flows on XMTP dev
-  timeout: 120 * 1000,
+  // Per-test timeout: keep reasonable to avoid long CI stalls
+  timeout: 180 * 1000,
   testDir: './e2e',
   testMatch: /.*\.pw\.spec\.js/,
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   workers: 1,
-  reporter: 'html',
+  reporter: 'line',
   
   use: {
     baseURL: 'http://localhost:5179',
@@ -48,12 +60,13 @@ export default defineConfig({
       cwd: '../backend',
       env: {
         RPC_URL: 'http://127.0.0.1:8545',
-        BOT_PRIVATE_KEY: '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80',
+        BOT_PRIVATE_KEY: BOT_PK,
         PORT: '3001',
         ALLOWED_ORIGINS: 'http://localhost:5179',
         DB_PATH: 'e2e-groups.db',
         CLEAR_DB: '1',
         ENABLE_DEBUG_ENDPOINTS: '1',
+        XMTP_ENV: 'production',
       },
       reuseExistingServer: false,
       timeout: 120 * 1000,
@@ -63,6 +76,7 @@ export default defineConfig({
       port: 5179,
       env: {
         VITE_E2E_DEBUG: '1',
+        VITE_XMTP_ENV: 'production',
       },
       reuseExistingServer: false,
       timeout: 180 * 1000,

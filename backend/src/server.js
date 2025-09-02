@@ -101,7 +101,7 @@ export function createApp(opts) {
   }
 
   app.post('/templs', async (req, res) => {
-    const { contractAddress, priestAddress, priestInboxId, signature } = req.body;
+    const { contractAddress, priestAddress, signature } = req.body;
     if (!ethers.isAddress(contractAddress) || !ethers.isAddress(priestAddress)) {
       return res.status(400).json({ error: 'Invalid addresses' });
     }
@@ -110,55 +110,54 @@ export function createApp(opts) {
       return res.status(403).json({ error: 'Bad signature' });
     }
     try {
-      // Create a new group including the priest so they can discover it immediately.
-      // If an explicit inbox ID isn't provided, derive one from the address.
-      let priestId = priestInboxId;
-      if (!priestId) {
-        const priestIdentifier = {
-          identifier: priestAddress.toLowerCase(),
-          identifierKind: 0
-        };
-        priestId = generateInboxId(priestIdentifier);
-      }
-
-      // Wait for the priest inbox to have at least one installation (Browser SDK may need a moment)
-      async function waitForInboxReady(inboxId, tries = 20) {
-        if (!xmtp?.preferences?.inboxStateFromInboxIds) return;
+      // Capture baseline set of server conversations to help identify the new one
+      let beforeIds = [];
+      try {
+        if (xmtp.conversations?.sync) await xmtp.conversations.sync();
+        const beforeList = (await xmtp.conversations?.list?.()) ?? [];
+        beforeIds = beforeList.map((c) => c.id);
+      } catch (err) { void err; }
+      // Prefer identity-based membership (Ethereum = 0) to avoid coupling to a specific installation
+      const priestIdentifierObj = { identifier: priestAddress.toLowerCase(), identifierKind: 0 };
+      // Ensure the priest identity is registered before creating a group
+      async function waitForIdentityReady(identifier, tries = 60) {
+        if (!xmtp?.findInboxIdByIdentifier) return;
         for (let i = 0; i < tries; i++) {
           try {
-            const states = await xmtp.preferences.inboxStateFromInboxIds([inboxId]);
-            const st = states?.[0];
-            if (st && Array.isArray(st.installations) && st.installations.length > 0) return;
-          } catch (e) { console.warn(e); };
-          await new Promise((r) => setTimeout(r, 500));
+            const found = await xmtp.findInboxIdByIdentifier(identifier);
+            if (found) return found;
+          } catch (err) { void err; }
+          await new Promise((r) => setTimeout(r, 1000));
         }
+        return null;
       }
-      try { await waitForInboxReady(priestId, 20); } catch (e) { console.warn(e); };
+      await waitForIdentityReady(priestIdentifierObj, 60);
 
       // The SDK often reports successful syncs as errors, so capture that case.
       let group;
       try {
-        group = await xmtp.conversations.newGroup([priestId]);
+        group = await xmtp.conversations.newGroupWithIdentifiers([priestIdentifierObj]);
       } catch (err) {
         if (err.message && err.message.includes('succeeded')) {
-          logger.info({ message: err.message }, 'XMTP sync message during group creation - ignoring');
-          if (xmtp.conversations.sync) {
-            await xmtp.conversations.sync();
+          logger.info({ message: err.message }, 'XMTP sync message during group creation - attempting deterministic resolve');
+          try { if (xmtp.conversations.sync) await xmtp.conversations.sync(); } catch (err) { void err; }
+          const afterList = (await xmtp.conversations.list?.()) ?? [];
+          const afterIds = afterList.map((c) => c.id);
+          // Prefer new conversations that appeared since beforeIds snapshot
+          const diffIds = afterIds.filter((id) => !beforeIds.includes(id));
+          const byDiff = afterList.filter((c) => diffIds.includes(c.id));
+          // Try by name first (if something already set a name)
+          const expectedName = `Templ ${contractAddress}`;
+          let candidate = byDiff.find((c) => c.name === expectedName) || afterList.find((c) => c.name === expectedName);
+          if (!candidate) {
+            // Fall back to the newest item among the diffs, then overall list
+            candidate = byDiff[byDiff.length - 1] || afterList[afterList.length - 1];
           }
-          const conversations = (await xmtp.conversations.list?.()) ?? [];
-          const serverId = xmtp.inboxId;
-          const candidates = conversations.filter((c) => {
-            // members can be Array, Set, or undefined depending on SDK
-            const mm = c.members;
-            let members;
-            if (Array.isArray(mm)) members = mm;
-            else if (mm && typeof mm.has === 'function' && typeof mm.size === 'number') members = Array.from(mm);
-            else members = [];
-            const hasPriest = members.includes?.(priestId);
-            const hasServer = serverId ? members.includes?.(serverId) : true;
-            return Boolean(hasPriest && hasServer);
-          });
-          group = candidates[candidates.length - 1] || conversations[conversations.length - 1];
+          group = candidate;
+          if (!group) {
+            // As a last resort, retry identity-based group creation once.
+            group = await xmtp.conversations.newGroupWithIdentifiers([priestIdentifierObj]);
+          }
         } else {
           throw err;
         }
@@ -167,8 +166,8 @@ export function createApp(opts) {
       // Proactively nudge message history so new members can discover the group quickly
       try {
         await group.send(JSON.stringify({ type: 'templ-created', contract: contractAddress }));
-      } catch (e) {
-        logger.warn({ err: e }, 'Unable to send templ-created message');
+      } catch (err) {
+        logger.warn({ err }, 'Unable to send templ-created message');
       }
       
       logger.info({ 
@@ -209,7 +208,10 @@ export function createApp(opts) {
 
       // Ensure the group is fully synced before returning
       if (xmtp.conversations.sync) {
-        await xmtp.conversations.sync();
+        try { await xmtp.conversations.sync(); } catch (err) {
+          if (!String(err?.message || '').includes('succeeded')) throw err;
+          logger.info({ message: err.message }, 'XMTP sync message after creation - ignoring');
+        }
       }
       
       const record = {
@@ -256,7 +258,7 @@ export function createApp(opts) {
   });
 
   app.post('/join', async (req, res) => {
-    const { contractAddress, memberAddress, memberInboxId, signature } = req.body;
+    const { contractAddress, memberAddress, signature } = req.body;
     if (!ethers.isAddress(contractAddress) || !ethers.isAddress(memberAddress)) {
       return res.status(400).json({ error: 'Invalid addresses' });
     }
@@ -268,61 +270,43 @@ export function createApp(opts) {
     }
     let purchased;
     try {
+      // Snapshot removal: no longer needed with identity-based add
       purchased = await hasPurchased(contractAddress, memberAddress);
     } catch {
       return res.status(500).json({ error: 'Purchase check failed' });
     }
     if (!purchased) return res.status(403).json({ error: 'Access not purchased' });
     try {
-      // Use the provided inbox ID, or generate one from the address as fallback
-      let inboxIdToAdd = memberInboxId;
-      if (!inboxIdToAdd) {
-        const memberIdentifier = {
-          identifier: memberAddress.toLowerCase(),
-          identifierKind: 0
-        };
-        // Generate inbox ID deterministically from the identifier
-        inboxIdToAdd = generateInboxId(memberIdentifier);
-      }
-      
-      // Ensure the member inbox has a published installation before adding
-      async function waitForInboxReady(inboxId, tries = 20) {
-        if (!xmtp?.preferences?.inboxStateFromInboxIds) return;
+      // Add the member by identity to the existing group to avoid coupling to a specific installation
+      const memberIdentifier = { identifier: memberAddress.toLowerCase(), identifierKind: 0 };
+      // Ensure the member identity is registered before adding
+      async function waitForIdentityReady(identifier, tries = 180) {
+        if (!xmtp?.findInboxIdByIdentifier) return;
         for (let i = 0; i < tries; i++) {
           try {
-            const states = await xmtp.preferences.inboxStateFromInboxIds([inboxId]);
-            const st = states?.[0];
-            if (st && Array.isArray(st.installations) && st.installations.length > 0) return;
-          } catch (e) { console.warn(e); };
-          await new Promise((r) => setTimeout(r, 500));
+            const found = await xmtp.findInboxIdByIdentifier(identifier);
+            if (found) return found;
+          } catch (err) { void err; }
+          await new Promise((r) => setTimeout(r, 1000));
         }
+        return null;
       }
-      try { await waitForInboxReady(inboxIdToAdd, 20); } catch (e) { console.warn(e); };
-
+      await waitForIdentityReady(memberIdentifier, 180);
       try {
-        await record.group.addMembers([inboxIdToAdd]);
+        if (typeof record.group.addMembersByIdentifiers === 'function') {
+          await record.group.addMembersByIdentifiers([memberIdentifier]);
+        } else if (typeof record.group.addMembers === 'function') {
+          // Fallback to inboxId-based add if identity add is not available
+          const inboxId = generateInboxId(memberIdentifier);
+          await record.group.addMembers([inboxId]);
+        }
       } catch (err) {
-        if (!err.message || !err.message.includes('succeeded')) {
-          throw err;
-        }
-        logger.info({ message: err.message }, 'XMTP sync message during member add - ignoring');
+        if (!String(err?.message || '').includes('succeeded')) throw err;
       }
 
-      logger.info({ contract: contractAddress.toLowerCase(), groupId: record.group.id, memberInboxId: inboxIdToAdd }, 'Member added to group');
-
-      // Ensure the server sees the updated membership before responding
-      if (xmtp.conversations.sync) {
-        await xmtp.conversations.sync();
-      }
-
-      // Send a lightweight welcome message so the client has fresh activity to sync
-      try {
-        await record.group.send(
-          JSON.stringify({ type: 'member-joined', address: memberAddress })
-        );
-      } catch (e) {
-        logger.warn({ err: e }, 'Unable to send member-joined message');
-      }
+      // Re-sync server view and warm the conversation
+      try { if (xmtp.conversations.sync) await xmtp.conversations.sync(); } catch (err) { void err; }
+      try { await record.group.send(JSON.stringify({ type: 'member-joined', address: memberAddress })); } catch (err) { void err; }
       res.json({ groupId: record.group.id });
     } catch (err) {
       logger.error({ err, contractAddress }, 'Join failed');
@@ -589,6 +573,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     const dbEncryptionKey = new Uint8Array(32);
     for (let attempt = 1; attempt <= 100000000; attempt++) {
       const xmtpSigner = {
+        type: 'EOA',
         getAddress: () => wallet.address,
         getIdentifier: () => ({
           identifier: wallet.address.toLowerCase(),
@@ -614,9 +599,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       };
       try {
         // @ts-ignore - Node SDK accepts EOA-like signers
+        const env = process.env.XMTP_ENV || 'dev';
         return await Client.create(xmtpSigner, {
           dbEncryptionKey,
-          env: 'dev',
+          env,
           loggingLevel: 'off'
         });
       } catch (err) {
