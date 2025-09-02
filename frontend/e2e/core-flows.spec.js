@@ -206,11 +206,74 @@ test.describe('TEMPL E2E - All 7 Core Flows', () => {
       console.log('Access purchased (pre-join)');
     }
     
-    // Now join
-    await page.fill('input[placeholder*="Contract address"]', templAddress);
-    await page.click('button:has-text("Purchase & Join")');
+    // Now join as a separate member to better mirror real usage
+    console.log('Core Flow 3b: Switch to member wallet and join');
+    await page.reload();
+    await page.waitForLoadState('domcontentloaded');
+    {
+      const w = wallets.member;
+      const addr = await w.getAddress();
+      // Bridge sign/send for member
+      await page.exposeFunction('e2e_member_sign', async ({ message }) => {
+        if (typeof message === 'string' && message.startsWith('0x')) {
+          return await w.signMessage(ethers.getBytes(message));
+        }
+        return await w.signMessage(message);
+      });
+      await page.exposeFunction('e2e_member_send', async (tx) => {
+        const req = {
+          to: tx.to || undefined,
+          data: tx.data || undefined,
+          value: tx.value ? BigInt(tx.value) : undefined,
+          gasPrice: tx.gasPrice ? BigInt(tx.gasPrice) : undefined,
+          gasLimit: tx.gas || tx.gasLimit ? BigInt(tx.gas || tx.gasLimit) : undefined,
+        };
+        const resp = await w.sendTransaction(req);
+        return resp.hash;
+      });
+      await page.evaluate(async ({ address }) => {
+        window.ethereum = {
+          isMetaMask: true,
+          selectedAddress: address,
+          request: async ({ method, params }) => {
+            if (method === 'eth_requestAccounts' || method === 'eth_accounts') return [address];
+            if (method === 'eth_chainId') return '0x7a69';
+            if (method === 'personal_sign' || method === 'eth_sign') {
+              const data = (params && params[0]) || '';
+              // @ts-ignore
+              return await window.e2e_member_sign({ message: data });
+            }
+            if (method === 'eth_sendTransaction') {
+              const [tx] = params || [];
+              // @ts-ignore
+              return await window.e2e_member_send(tx);
+            }
+            // passthrough JSON-RPC
+            const response = await fetch('http://127.0.0.1:8545', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ jsonrpc: '2.0', method, params, id: 1 })
+            });
+            const result = await response.json();
+            if (result.error) throw new Error(result.error.message);
+            return result.result;
+          },
+          on: () => {},
+          removeListener: () => {}
+        };
+      }, { address: addr });
+      // Reconnect as member
+      await page.click('button:has-text("Connect Wallet")');
+      await expect(page.locator('.status')).toContainText('Messaging client ready', { timeout: 15000 });
+      // Join existing templ
+      await page.fill('input[placeholder*="Contract address"]', templAddress);
+      await page.click('button:has-text("Purchase & Join")');
+    }
     // Confirm join by presence of Group ID (discovery may lag on XMTP dev)
-    await expect(page.locator('text=Group ID:')).toBeVisible({ timeout: 30000 });
+    const gidEl = page.locator('text=Group ID:').first();
+    await expect(gidEl).toBeVisible({ timeout: 30000 });
+    const gidText = (await gidEl.textContent()) || '';
+    const groupId = gidText.split(':').pop().trim();
     // Debug server-side view of group and conversations after join
     try {
       const dbg1 = await fetch(`http://localhost:3001/debug/group?contractAddress=${templAddress}&refresh=1`).then(r => r.json());
@@ -221,11 +284,28 @@ test.describe('TEMPL E2E - All 7 Core Flows', () => {
       console.log('DEBUG /debug/conversations after join:', dbg2);
     } catch {}
     
-    // Group chat header may already be visible since groupId is known post-deploy
-    const hasGroupChat = await page.locator('h2:has-text("Group Chat")').isVisible({ timeout: 20000 }).catch(() => false);
-    
-    if (hasGroupChat) {
-      console.log('✅ Successfully joined TEMPL!');
+    // Require actual discovery in the browser: either UI shows connected or the
+    // debug helper resolves the conversation by id.
+    let discovered = false;
+    try {
+      await expect(page.locator('text=Group connected')).toBeVisible({ timeout: 60000 });
+      discovered = true;
+    } catch {}
+    if (!discovered) {
+      try {
+        discovered = await page.evaluate(async (gid) => {
+          if (!window.__xmtpGetById) return false;
+          for (let i = 0; i < 60; i++) {
+            try { const c = await window.__xmtpGetById(gid); if (c) return true; } catch {}
+            await new Promise(r => setTimeout(r, 1000));
+          }
+          return false;
+        }, groupId);
+      } catch { discovered = false; }
+    }
+
+    if (discovered) {
+      console.log('✅ Browser discovered group conversation');
       // Extra diagnostics right before messaging
       try {
         const dbg3 = await fetch(`http://localhost:3001/debug/group?contractAddress=${templAddress}`).then(r => r.json());
@@ -313,14 +393,26 @@ test.describe('TEMPL E2E - All 7 Core Flows', () => {
       await page.screenshot({ path: 'test-results/all-flows-complete.png', fullPage: true });
       
     } else {
-      console.log('❌ Failed to join TEMPL - Group chat did not appear');
+      console.log('❌ Failed to discover group in browser');
       await page.screenshot({ path: 'test-results/error-no-group-chat.png', fullPage: true });
-      
-      // Debug: Check for any error messages
       const pageContent = await page.content();
       if (pageContent.includes('Error') || pageContent.includes('error')) {
         console.log('Found error in page');
       }
+      // Extra diagnostics when discovery fails
+      try {
+        const dbg1 = await fetch(`http://localhost:3001/debug/group?contractAddress=${templAddress}&refresh=1`).then(r => r.json());
+        console.log('DEBUG /debug/group on failure:', dbg1);
+      } catch {}
+      try {
+        const dbg2 = await fetch('http://localhost:3001/debug/conversations').then(r => r.json());
+        console.log('DEBUG /debug/conversations on failure:', dbg2);
+      } catch {}
+      try {
+        const ids = await page.evaluate(async () => (window.__xmtpList ? await window.__xmtpList() : []));
+        console.log('DEBUG browser first ids:', ids.slice(0,5));
+      } catch {}
+      throw new Error('Browser did not discover group conversation');
     }
   });
 });

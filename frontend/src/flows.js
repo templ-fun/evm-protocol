@@ -71,7 +71,7 @@ export async function deployTempl({
   if (!data || typeof data.groupId !== 'string' || data.groupId.length === 0) {
     throw new Error('Invalid /templs response: missing groupId');
   }
-  const groupId = data.groupId; // use as-is; Browser SDK lists ids without 0x
+  const groupId = String(data.groupId).replace(/^0x/i, '').toLowerCase();
   
   // If XMTP isn’t ready yet on the client, skip fetching the group for now.
   if (!xmtp) {
@@ -83,15 +83,16 @@ export async function deployTempl({
   
   // Try syncing multiple times with a small delay
   let group = null;
-  for (let i = 0; i < 3; i++) {
-    await xmtp.conversations.sync();
+  for (let i = 0; i < 6; i++) {
+    try { await xmtp.preferences?.sync?.(); } catch {}
+    try { await xmtp.conversations.syncAll?.(['allowed','unknown','denied']); } catch {}
     try {
       group = await xmtp.conversations.getConversationById(groupId);
     } catch (err) {
       console.log('getConversationById failed:', err.message);
     }
     if (!group) {
-      const conversations = await xmtp.conversations.list();
+      const conversations = await xmtp.conversations.list?.({ consentStates: ['allowed','unknown','denied'] }) || [];
       console.log(`Sync attempt ${i + 1}: Found ${conversations.length} conversations; firstIds=`, conversations.slice(0,3).map(c=>c.id));
       group = conversations.find(c => c.id === groupId);
     }
@@ -165,20 +166,19 @@ export async function purchaseAndJoin({
   if (!data || typeof data.groupId !== 'string' || data.groupId.length === 0) {
     throw new Error('Invalid /join response: missing groupId');
   }
-  const groupId = data.groupId; // use as-is; Browser SDK expects ids without 0x
+  const groupId = String(data.groupId).replace(/^0x/i, '').toLowerCase();
   console.log('purchaseAndJoin: backend returned groupId=', data.groupId);
   // Try multiple sync attempts — joins can be eventually consistent
   let group = null;
-  for (let i = 0; i < 40; i++) {
-    try {
-      await xmtp.conversations.sync();
-    } catch {}
+  for (let i = 0; i < 120; i++) {
+    try { await xmtp.preferences?.sync?.(); } catch {}
+    try { await xmtp.conversations.syncAll?.(['allowed','unknown','denied']); } catch {}
     try {
       group = await xmtp.conversations.getConversationById(groupId);
     } catch {}
     if (!group) {
       try {
-        const conversations = await xmtp.conversations.list();
+        const conversations = await xmtp.conversations.list?.({ consentStates: ['allowed','unknown','denied'] }) || [];
         console.log(`join sync ${i+1}: list=${conversations.length}; firstIds=`, conversations.slice(0,3).map(c=>c.id));
         group = conversations.find((c) => c.id === groupId) || null;
       } catch {}

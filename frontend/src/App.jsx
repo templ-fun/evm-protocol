@@ -62,9 +62,8 @@ function App() {
     pushStatus('✅ Wallet connected');
     
     // Use an XMTP-compatible signer wrapper for the browser SDK with inbox rotation
-    const xmtpEnv = ['localhost', '127.0.0.1'].includes(window.location.hostname)
-      ? 'dev'
-      : 'production';
+    const forcedEnv = import.meta.env.VITE_XMTP_ENV?.trim();
+    const xmtpEnv = forcedEnv || (['localhost', '127.0.0.1'].includes(window.location.hostname) ? 'dev' : 'production');
     async function createXmtpStable() {
       // Use a stable installation nonce per wallet to avoid exhausting the
       // XMTP dev network's 10-installation cap and to prevent OPFS handle
@@ -194,7 +193,8 @@ function App() {
       if (result) {
         setGroup(result.group);
         setGroupId(result.groupId);
-        pushStatus('✅ Joined group');
+        // Clarify semantics: membership confirmed, then discovery may take time
+        pushStatus('✅ Membership confirmed; connecting to group');
         if (result.group) {
           pushStatus('✅ Group connected');
           setGroupConnected(true);
@@ -210,7 +210,8 @@ function App() {
   // As soon as we have a groupId, surface a visible success status
   useEffect(() => {
     if (groupId && !joinedLoggedRef.current) {
-      pushStatus('✅ Joined group');
+      // Avoid implying the group stream is ready; discovery can lag.
+      pushStatus('✅ Group ID received; discovering conversation');
       joinedLoggedRef.current = true;
     }
   }, [groupId]);
@@ -238,15 +239,21 @@ function App() {
     if (!xmtp || !groupId || group) return;
     let cancelled = false;
     let attempts = 0;
+    const norm = (id) => (id || '').replace(/^0x/i, '').toLowerCase();
+    const wanted = norm(groupId);
     async function poll() {
-      while (!cancelled && attempts < 60 && !group) {
+      while (!cancelled && attempts < 120 && !group) {
         attempts++;
         console.log('[app] finding group', groupId, 'attempt', attempts);
         try {
-          await xmtp.conversations.sync();
-        } catch (e) { console.warn('[app] sync error', e?.message || e); }
+          // Ensure welcomes, conversations, messages, and preferences are up to date
+          await xmtp.preferences?.sync?.();
+        } catch (e) { console.warn('[app] preferences.sync error', e?.message || e); }
         try {
-          const maybe = await xmtp.conversations.getConversationById(groupId);
+          await xmtp.conversations.syncAll?.(['allowed','unknown','denied']);
+        } catch (e) { console.warn('[app] syncAll error', e?.message || e); }
+        try {
+          const maybe = await xmtp.conversations.getConversationById(wanted);
           if (maybe) {
             console.log('[app] found group by id');
             setGroup(maybe);
@@ -256,9 +263,9 @@ function App() {
           }
         } catch (e) { console.warn('[app] getById error', e?.message || e); }
         try {
-          const list = await xmtp.conversations.list();
+          const list = await xmtp.conversations.list?.({ consentStates: ['allowed','unknown','denied'] }) || [];
           console.log('[app] list size=', list?.length, 'firstIds=', (list||[]).slice(0,3).map(c=>c.id));
-          const found = list.find((c) => c.id === groupId);
+          const found = list.find((c) => norm(c.id) === wanted);
           if (found) {
             console.log('[app] found group by list');
             setGroup(found);
@@ -271,6 +278,43 @@ function App() {
       }
     }
     poll();
+    // In parallel, open a short-lived stream to pick up welcome/conversation events
+    (async () => {
+      try {
+        const convStream = await xmtp.conversations.streamGroups?.();
+        const stream = await xmtp.conversations.streamAllMessages?.({ consentStates: ['allowed','unknown','denied'] });
+        const endAt = Date.now() + 60_000; // 60s assist window
+        const onConversation = async (conv) => {
+          if (cancelled || group) return;
+          const cid = norm(conv?.id || '');
+          if (cid && cid === wanted) {
+            const maybe = await xmtp.conversations.getConversationById(wanted);
+            if (maybe) {
+              setGroup(maybe);
+              pushStatus('✅ Group discovered');
+              setGroupConnected(true);
+            }
+          }
+        };
+        (async () => { try { for await (const c of convStream) { await onConversation(c); if (group) break; if (Date.now()>endAt) break; } } catch {} })();
+        for await (const evt of stream) {
+          if (cancelled || group) break;
+          if (Date.now() > endAt) break;
+          try {
+            const cid = norm(evt?.conversationId || '');
+            if (cid && cid === wanted) {
+              const maybe = await xmtp.conversations.getConversationById(wanted);
+              if (maybe) {
+                setGroup(maybe);
+                pushStatus('✅ Group discovered');
+                setGroupConnected(true);
+                break;
+              }
+            }
+          } catch {}
+        }
+      } catch {}
+    })();
     return () => {
       cancelled = true;
     };
@@ -441,6 +485,12 @@ function App() {
           ))}
         </div>
       </div>
+      {templAddress && (
+        <div className="deploy-info">
+          <p>Contract: {templAddress}</p>
+          <p>Group ID: {groupId}</p>
+        </div>
+      )}
       {!walletAddress && (
         <button onClick={connectWallet}>Connect Wallet</button>
       )}
