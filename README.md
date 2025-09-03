@@ -1,42 +1,6 @@
 # TEMPL
 
-TEMPL is a DAO‑governed, token‑gated group with on‑chain treasury management and off‑chain messaging via XMTP.
-
-## Monorepo Structure
-- `contracts/` – Hardhat + Solidity 0.8.23
-- `backend/` – Node service that owns the XMTP group and exposes an HTTP API
-- `frontend/` – Vite + React demo app with Playwright e2e
-
-Quick start
-- Node 22.18.0
-- Enable hooks: `npm run prepare`
-- Contracts
-  - `npm run compile`, `npm test`, `npm run node`, `npm run deploy:local`
-- Backend
-  - Dev: `RPC_URL=http://127.0.0.1:8545 BOT_PRIVATE_KEY=<hardhat-0> ALLOWED_ORIGINS=http://localhost:5173 ENABLE_DEBUG_ENDPOINTS=1 XMTP_ENV=production npm --prefix backend start`
-- Frontend
-  - Dev: `VITE_XMTP_ENV=production VITE_E2E_DEBUG=1 npm --prefix frontend run dev`
-  - E2E (production): `npm --prefix frontend run test:e2e -- --project=tech-demo`
-  - E2E (local XMTP): `E2E_XMTP_LOCAL=1 npm --prefix frontend run test:e2e -- --project=tech-demo`
-
-## E2E Environments
-- Default: XMTP production
-  - Playwright sets `XMTP_ENV=production` for backend, `VITE_XMTP_ENV=production` for frontend
-- Local XMTP: set `E2E_XMTP_LOCAL=1`
-  - Playwright starts `xmtp-local-node`, sets `XMTP_ENV=local` and `VITE_XMTP_ENV=local`
-  - Local-only repro tests are enabled
-
-## Debug Endpoints (backend)
-- `GET /debug/group?contractAddress=<addr>&refresh=1`
-- `GET /debug/conversations`
-- `GET /debug/membership?contractAddress=<addr>&inboxId=<id>`
-- `GET /debug/last-join`
-- `GET /debug/inbox-state?inboxId=<id>&env=production`
-
-## Troubleshooting test:all
-- If backend tests appear to “hang”, ensure network gating isn’t blocking. The backend skips XMTP readiness checks in test mode by default. You can also set `DISABLE_XMTP_WAIT=1` for the backend during tests.
-- For e2e, ensure ports 8545/3001/5179 are free.
-
+DAO‑governed token‑gated private groups with onchain treasury management and XMTP messaging
 
 <p align="center">
 <img width="300" alt="templ logo" src="https://github.com/user-attachments/assets/fa3513b4-75e4-4dbf-a1fb-73e9e27d766f" />
@@ -60,22 +24,30 @@ proposal or vote updates to the chat.
 ## Documentation
 Use the docs below to dive into each component:
 
+- [CORE_FLOW_DOCS.MD](./CORE_FLOW_DOCS.MD) – core flow service diagrams
 - [CONTRACTS.md](./CONTRACTS.md) – smart‑contract specification
 - [BACKEND.md](./BACKEND.md) – XMTP bot and API
 - [FRONTEND.md](./FRONTEND.md) – React client
-- [CORE_FLOW_DOCS.MD](./CORE_FLOW_DOCS.MD) – core flow service diagrams
- - [PERSISTENCE.md](./PERSISTENCE.md) – data storage and XMTP DBs
- - [WEB3_AUDIT_REPORT.MD](./WEB3_AUDIT_REPORT.MD) – web3 audit summary
+- [PERSISTENCE.md](./PERSISTENCE.md) – data storage and XMTP DBs
+- [WEB3_AUDIT_REPORT.MD](./WEB3_AUDIT_REPORT.MD) – web3 audit summary
   
-In addition, all core workflows are covered by automated tests:
-- Contract unit tests (Hardhat + Chai)
-- Backend API tests (Node test runner + supertest)
-- Frontend unit + integration tests (Vitest)
-- End‑to‑end tests (Playwright) hitting: local Hardhat, XMTP dev network, backend + SQLite, and the React app
+## Monorepo Structure
+- `contracts/` – Hardhat + Solidity 0.8.23
+- `backend/` – Node service that owns the XMTP group and exposes an HTTP API
+- `frontend/` – Vite + React demo app with Playwright e2e
 
-## XMTP Discovery
-- After a member is added to a group, the browser explicitly calls `conversations.sync()` to fetch welcomes, then `preferences.sync()` and `conversations.syncAll([...])`, polling `getConversationById` and briefly streaming conversations/messages until the group is found.
-- On production XMTP, discovery can lag; the app renders the chat as soon as `groupId` is known.
+## Quick start
+
+- Node 22.18.0
+- Enable hooks: `npm run prepare`
+- Contracts
+  - `npm run compile`, `npm test`, `npm run node`, `npm run deploy:local`
+- Backend
+  - Dev: `RPC_URL=http://127.0.0.1:8545 BOT_PRIVATE_KEY=<hardhat-0> ALLOWED_ORIGINS=http://localhost:5173 ENABLE_DEBUG_ENDPOINTS=1 XMTP_ENV=production npm --prefix backend start`
+- Frontend
+  - Dev: `VITE_XMTP_ENV=production VITE_E2E_DEBUG=1 npm --prefix frontend run dev`
+  - E2E (production): `npm --prefix frontend run test:e2e -- --project=tech-demo`
+  - E2E (local XMTP): `E2E_XMTP_LOCAL=1 npm --prefix frontend run test:e2e -- --project=tech-demo`
 
 ## Quick start
 1. **Clone & install**
@@ -172,7 +144,27 @@ In addition, all core workflows are covered by automated tests:
 For auditing guides, continue with the docs linked above.
 
 ## Security considerations
+
 - Proposal execution is restricted to an allowlist of safe DAO actions; arbitrary external calls are disabled.
  - The backend owns the XMTP group. The priest does not control membership directly; actions are mediated via the backend’s bot, which verifies on‑chain purchase. See BACKEND.md for API auth and rate‑limit details.
  - XMTP dev network has a 10‑installation limit per inbox and 256 total actions limit per inbox (install and revoke each count as 1 action). Tests rotate wallets or reuse local XMTP databases to avoid hitting this limit.
  - For auditors: CONTRACTS.md documents all custom errors, events, invariants, fee splits, and DAO constraints. The Hardhat test suite covers these invariants; Slither reports are part of CI.
+
+
+## E2E Environments
+- Default: XMTP production
+  - Playwright sets `XMTP_ENV=production` for backend, `VITE_XMTP_ENV=production` for frontend
+- Local XMTP: set `E2E_XMTP_LOCAL=1`
+  - Playwright starts `xmtp-local-node`, sets `XMTP_ENV=local` and `VITE_XMTP_ENV=local`
+  - Local-only repro tests are enabled
+
+## Debug Endpoints (backend)
+- `GET /debug/group?contractAddress=<addr>&refresh=1`
+- `GET /debug/conversations`
+- `GET /debug/membership?contractAddress=<addr>&inboxId=<id>`
+- `GET /debug/last-join`
+- `GET /debug/inbox-state?inboxId=<id>&env=production`
+
+## Troubleshooting test:all
+- If backend tests appear to “hang”, ensure network gating isn’t blocking. The backend skips XMTP readiness checks in test mode by default. You can also set `DISABLE_XMTP_WAIT=1` for the backend during tests.
+- For e2e, ensure ports 8545/3001/5179 are free.
