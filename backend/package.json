@@ -7,7 +7,7 @@
   },
   "scripts": {
     "start": "node src/server.js",
-    "test": "DISABLE_XMTP_WAIT=1 node --test",
+    "test": "DISABLE_XMTP_WAIT=1 node --test --import ./test/after-cleanup.js",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc -p tsconfig.json"
