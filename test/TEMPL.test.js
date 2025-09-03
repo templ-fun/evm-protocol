@@ -159,6 +159,43 @@ describe("TEMPL Contract with DAO Governance", function () {
             )).to.be.revertedWithCustomError(templ, "NotMember");
         });
 
+        it("Should allow creating a proposal to withdraw treasury funds", async function () {
+            const iface = new ethers.Interface([
+                "function withdrawTreasuryDAO(address,uint256,string)"
+            ]);
+            const callData = iface.encodeFunctionData("withdrawTreasuryDAO", [
+                treasury.address,
+                ethers.parseUnits("1", 18),
+                "Move funds"
+            ]);
+            await expect(
+                templ.connect(user1).createProposal(
+                    "Treasury Withdraw",
+                    "Propose to move funds",
+                    callData,
+                    7 * 24 * 60 * 60
+                )
+            ).to.emit(templ, "ProposalCreated");
+        });
+
+        it("Should allow creating a proposal to withdraw all treasury funds", async function () {
+            const iface = new ethers.Interface([
+                "function withdrawAllTreasuryDAO(address,string)"
+            ]);
+            const callData = iface.encodeFunctionData("withdrawAllTreasuryDAO", [
+                treasury.address,
+                "Drain treasury"
+            ]);
+            await expect(
+                templ.connect(user1).createProposal(
+                    "Full Treasury Withdraw",
+                    "Propose to move all funds",
+                    callData,
+                    7 * 24 * 60 * 60
+                )
+            ).to.emit(templ, "ProposalCreated");
+        });
+
         it("Should enforce minimum voting period", async function () {
             const iface2 = new ethers.Interface(["function setPausedDAO(bool)"]);
             const cd2 = iface2.encodeFunctionData("setPausedDAO", [false]);
