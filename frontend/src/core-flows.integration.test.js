@@ -265,6 +265,18 @@ describe('core flows e2e', () => {
     expect(yesVotes).toBe(0n);
     expect(noVotes).toBe(0n);
 
+    // Attempt to execute before any votes should be rejected
+    await expect(
+      executeProposal({
+        ethers,
+        signer: priestSigner,
+        templAddress,
+        templArtifact,
+        proposalId: 0,
+        txOptions: { nonce: priestNonce++ }
+      })
+    ).rejects.toThrow(/VotingNotEnded|ProposalNotPassed/);
+
     await voteOnProposal({
       ethers,
       signer: memberSigner,
@@ -279,6 +291,23 @@ describe('core flows e2e', () => {
 
     await provider.send('evm_increaseTime', [7 * 24 * 60 * 60]);
     await provider.send('evm_mine', []);
+
+    // Attempt to execute with a tampered signature
+    const templPriest = new ethers.Contract(templAddress, templArtifact.abi, priestSigner);
+    const unsignedTx = await templPriest.populateTransaction.executeProposal(0);
+    const chainId = await priestSigner.getChainId();
+    const rawTx = await priestSigner.signTransaction({
+      ...unsignedTx,
+      chainId,
+      nonce: priestNonce,
+      gasLimit: unsignedTx.gasLimit ?? 1_000_000n,
+      gasPrice: 0n,
+      type: 0
+    });
+    const tamperedTx = rawTx.slice(0, -2) + (rawTx.slice(-2) === '00' ? '01' : '00');
+    await expect(
+      provider.send('eth_sendRawTransaction', [tamperedTx])
+    ).rejects.toThrow(/invalid|signature|sender/i);
 
     await executeProposal({
       ethers,
