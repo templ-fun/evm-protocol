@@ -2,7 +2,7 @@ import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { Wallet } from 'ethers';
 import { Client } from '@xmtp/node-sdk';
-import { createXmtpWithRotation } from '../src/server.js';
+import { createXmtpWithRotation } from '../src/xmtp/createXmtpWithRotation.js';
 
 test('createXmtpWithRotation respects maxAttempts', async () => {
   const wallet = new Wallet('0x' + '1'.repeat(64));

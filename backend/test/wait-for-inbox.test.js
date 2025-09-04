@@ -1,18 +1,19 @@
 import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { Client } from '@xmtp/node-sdk';
+import { logger } from '../src/logger.js';
 
 const originalEnv = { ...process.env };
 
 const loadModule = async () => {
-  return import(`../src/server.js?test=${Math.random()}`);
+  return import(`../src/xmtp/waitForInboxReady.js?test=${Math.random()}`);
 };
 
 test('waitForInboxReady returns true and logs on success', { concurrency: false }, async () => {
   process.env.NODE_ENV = 'development';
   process.env.XMTP_ENV = 'dev';
   delete process.env.DISABLE_XMTP_WAIT;
-  const { waitForInboxReady, logger } = await loadModule();
+  const { waitForInboxReady } = await loadModule();
   const info = mock.fn();
   const debug = mock.fn();
   const origInfo = logger.info;
@@ -41,7 +42,7 @@ test('waitForInboxReady logs debug on failure and returns false', { concurrency:
   process.env.NODE_ENV = 'development';
   process.env.XMTP_ENV = 'dev';
   delete process.env.DISABLE_XMTP_WAIT;
-  const { waitForInboxReady, logger } = await loadModule();
+  const { waitForInboxReady } = await loadModule();
   const info = mock.fn();
   const debug = mock.fn();
   const origInfo = logger.info;
@@ -67,7 +68,7 @@ test('waitForInboxReady skips network checks in test env', { concurrency: false 
   process.env.NODE_ENV = 'test';
   process.env.XMTP_ENV = 'dev';
   delete process.env.DISABLE_XMTP_WAIT;
-  const { waitForInboxReady, logger } = await loadModule();
+  const { waitForInboxReady } = await loadModule();
   const info = mock.fn();
   const debug = mock.fn();
   const origInfo = logger.info;
