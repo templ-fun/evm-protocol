@@ -182,6 +182,77 @@ test.describe('TEMPL E2E - All 7 Core Flows', () => {
     expect(await templ.accessToken()).toBe(tokenAddress);
     await expect(page.locator('.status')).toContainText('Templ deployed');
 
+    // Negative Flow: joining without prior purchase should error
+    console.log('Negative Flow: Join without purchase');
+    {
+      const stranger = ethers.Wallet.createRandom().connect(wallets.priest.provider);
+      const strangerAddr = await stranger.getAddress();
+      // fund ETH so transactions can be attempted, but no tokens are minted
+      let fundTx = await wallets.priest.sendTransaction({
+        to: strangerAddr,
+        value: ethers.parseEther('1')
+      });
+      await fundTx.wait();
+
+      await page.exposeFunction('e2e_stranger_sign', async ({ message }) => {
+        if (typeof message === 'string' && message.startsWith('0x')) {
+          return await stranger.signMessage(ethers.getBytes(message));
+        }
+        return await stranger.signMessage(message);
+      });
+      await page.exposeFunction('e2e_stranger_send', async (tx) => {
+        const req = {
+          to: tx.to || undefined,
+          data: tx.data || undefined,
+          value: tx.value ? BigInt(tx.value) : undefined,
+          gasPrice: tx.gasPrice ? BigInt(tx.gasPrice) : undefined,
+          gasLimit: tx.gas || tx.gasLimit ? BigInt(tx.gas || tx.gasLimit) : undefined,
+        };
+        const resp = await stranger.sendTransaction(req);
+        return resp.hash;
+      });
+      await page.evaluate(({ address }) => {
+        window.ethereum = {
+          isMetaMask: true,
+          selectedAddress: address,
+          request: async ({ method, params }) => {
+            if (method === 'eth_requestAccounts' || method === 'eth_accounts') return [address];
+            if (method === 'eth_chainId') return '0x7a69';
+            if (method === 'personal_sign' || method === 'eth_sign') {
+              const data = (params && params[0]) || '';
+              // @ts-ignore
+              return await window.e2e_stranger_sign({ message: data });
+            }
+            if (method === 'eth_sendTransaction') {
+              const [tx] = params || [];
+              // @ts-ignore
+              return await window.e2e_stranger_send(tx);
+            }
+            const response = await fetch('http://127.0.0.1:8545', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ jsonrpc: '2.0', method, params, id: 1 })
+            });
+            const result = await response.json();
+            if (result.error) throw new Error(result.error.message);
+            return result.result;
+          },
+          on: () => {},
+          removeListener: () => {}
+        };
+      }, { address: strangerAddr });
+
+      await page.reload();
+      await page.waitForLoadState('domcontentloaded');
+      await page.click('button:has-text("Connect Wallet")');
+      await page.fill('input[placeholder*="Contract address"]', templAddress);
+      const dialogPromise = page.waitForEvent('dialog');
+      await page.click('button:has-text("Purchase & Join")');
+      const dialog = await dialogPromise;
+      expect(dialog.message().toLowerCase()).toMatch(/failed|insufficient|revert/);
+      await dialog.dismiss();
+    }
+
     // Core Flow 3: Pay-to-join
     console.log('Core Flow 3: Pay-to-join');
     
@@ -396,6 +467,17 @@ test.describe('TEMPL E2E - All 7 Core Flows', () => {
     // Optionally assert membership without writing:
     const ensureBuy = new ethers.Contract(templAddress, templAbi, testWallet);
     await expect.poll(async () => await ensureBuy.hasPurchased(testAddress), { timeout: 20000 }).toBe(true);
+
+    // Negative Flow: unauthorized muting attempt should be blocked
+    console.log('Negative Flow: Unauthorized muting');
+    let mutingBlocked = false;
+    try {
+      await page.fill('input[placeholder*="Address to mute"]', await wallets.delegate.getAddress());
+      await page.click('button:has-text("Mute Address")');
+    } catch {
+      mutingBlocked = true;
+    }
+    expect(mutingBlocked).toBe(true);
 
     // Core Flow 4: Messaging (best-effort)
     console.log('Core Flow 4: Messaging');
