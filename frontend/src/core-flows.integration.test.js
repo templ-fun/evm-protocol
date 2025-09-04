@@ -275,21 +275,18 @@ describe('core flows e2e', () => {
         proposalId: 0,
         txOptions: { nonce: priestNonce++ }
       }).catch((err) => {
-        try {
-          const data =
-            err?.data ||
-            err?.error?.data ||
-            err?.info?.error?.data ||
-            err?.info?.data;
-          const selector = typeof data === 'string' ? data.slice(0, 10) : null;
-          const errors = {
-            [ethers.id('VotingNotEnded()').slice(0, 10)]: 'VotingNotEnded',
-            [ethers.id('ProposalNotPassed()').slice(0, 10)]: 'ProposalNotPassed'
-          };
-          if (selector && errors[selector]) {
-            throw new Error(errors[selector]);
-          }
-        } catch {}
+        const data =
+          err?.data ||
+          err?.error?.data ||
+          err?.info?.error?.data ||
+          err?.info?.data ||
+          null;
+        if (typeof data === 'string') {
+          try {
+            const decoded = iface.parseError(data);
+            throw new Error(decoded?.name);
+          } catch {}
+        }
         throw err;
       })
     ).rejects.toThrow(/VotingNotEnded|ProposalNotPassed/);
