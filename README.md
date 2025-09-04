@@ -30,7 +30,10 @@ Use the docs below to dive into each component:
 - [FRONTEND.md](./FRONTEND.md) – React client
 - [PERSISTENCE.md](./PERSISTENCE.md) – data storage and XMTP DBs
 - [WEB3_AUDIT_REPORT.MD](./WEB3_AUDIT_REPORT.MD) – web3 audit summary
-  
+
+### Demo
+- [Demo recording instructions](./frontend/demo-recording.md)
+
 ## Monorepo Structure
 - `contracts/` – Hardhat + Solidity 0.8.23
 - `backend/` – Node service that owns the XMTP group and exposes an HTTP API
