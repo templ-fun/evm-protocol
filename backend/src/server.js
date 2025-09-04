@@ -16,6 +16,17 @@ import { requireAddresses, verifySignature } from './middleware/validate.js';
 export const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
 const XMTP_ENV = process.env.XMTP_ENV || 'dev';
 
+/**
+ * Handle an error by logging and optionally rethrowing it.
+ * @param {unknown} err The error that occurred
+ * @param {string} msg Contextual message
+ * @param {{ rethrow?: boolean }} [opts] Control whether to rethrow
+ */
+export function handleError(err, msg, opts = {}) {
+  logger.warn({ err }, msg);
+  if (opts.rethrow) throw err;
+}
+
 // Linearize: wait until the target inbox is visible on the XMTP network
 export async function waitForInboxReady(inboxId, tries = 60) {
   const id = String(inboxId || '').replace(/^0x/i, '');
@@ -132,7 +143,9 @@ export function createApp(opts) {
           if (xmtp.conversations?.sync) await xmtp.conversations.sync();
           const beforeList = (await xmtp.conversations?.list?.()) ?? [];
           beforeIds = beforeList.map((c) => c.id);
-        } catch (err) { void err; }
+        } catch (err) {
+          handleError(err, 'Initial conversation snapshot failed');
+        }
         // Prefer identity-based membership (Ethereum = 0) when supported
         const priestIdentifierObj = { identifier: priestAddress.toLowerCase(), identifierKind: 0 };
         // Ensure the priest identity is registered before creating a group
@@ -142,7 +155,9 @@ export function createApp(opts) {
             try {
               const found = await xmtp.findInboxIdByIdentifier(identifier);
               if (found) return found;
-            } catch (err) { void err; }
+            } catch (err) {
+              handleError(err, 'Identity lookup failed');
+            }
             await new Promise((r) => setTimeout(r, 1000));
           }
           return null;
@@ -163,7 +178,11 @@ export function createApp(opts) {
       } catch (err) {
         if (err.message && err.message.includes('succeeded')) {
           logger.info({ message: err.message }, 'XMTP sync message during group creation - attempting deterministic resolve');
-          try { if (xmtp.conversations.sync) await xmtp.conversations.sync(); } catch (err) { void err; }
+            try {
+              if (xmtp.conversations.sync) await xmtp.conversations.sync();
+            } catch (err) {
+              handleError(err, 'Group recovery sync failed');
+            }
           const afterList = (await xmtp.conversations.list?.()) ?? [];
           const afterIds = afterList.map((c) => c.id);
           // Prefer new conversations that appeared since beforeIds snapshot
@@ -193,11 +212,13 @@ export function createApp(opts) {
         if (priestInboxId && typeof priestInboxId === 'string' && priestInboxId.length > 0) {
           priestInbox = priestInboxId.replace(/^0x/i, '');
         } else {
-          try {
-            if (typeof xmtp.findInboxIdByIdentifier === 'function') {
-              priestInbox = await xmtp.findInboxIdByIdentifier(priestIdentifierObj);
+            try {
+              if (typeof xmtp.findInboxIdByIdentifier === 'function') {
+                priestInbox = await xmtp.findInboxIdByIdentifier(priestIdentifierObj);
+              }
+            } catch (err) {
+              handleError(err, 'Failed to resolve priest inbox');
             }
-          } catch (e) { void e; }
         }
         if (priestInbox && typeof group.addMembers === 'function') {
           const ready = await waitForInboxReady(priestInbox, 30);
@@ -213,16 +234,22 @@ export function createApp(opts) {
           }
           try {
             if (xmtp.conversations?.sync) await xmtp.conversations.sync();
-          } catch (e) { logger.warn({ e }, 'Server sync after priest add failed'); }
-          try {
-            const afterAgg = xmtp?.debugInformation?.apiAggregateStatistics?.();
-            logger.info({ beforeAgg, afterAgg }, 'XMTP API stats around priest add');
-          } catch (e) { void e; }
-          try {
-            // Attempt to read members for diagnostics
-            const members = Array.isArray(group.members) ? group.members : [];
-            logger.info({ members }, 'Group members snapshot after priest add');
-          } catch (e) { void e; }
+            } catch (err) {
+              handleError(err, 'Server sync after priest add failed');
+            }
+            try {
+              const afterAgg = xmtp?.debugInformation?.apiAggregateStatistics?.();
+              logger.info({ beforeAgg, afterAgg }, 'XMTP API stats around priest add');
+            } catch (err) {
+              handleError(err, 'Failed to capture XMTP stats after priest add');
+            }
+            try {
+              // Attempt to read members for diagnostics
+              const members = Array.isArray(group.members) ? group.members : [];
+              logger.info({ members }, 'Group members snapshot after priest add');
+            } catch (err) {
+              handleError(err, 'Failed to snapshot members after priest add');
+            }
         }
       } catch (err) {
         logger.warn({ err }, 'Unable to explicitly add priest by inboxId');
@@ -352,13 +379,15 @@ export function createApp(opts) {
       const memberIdentifier = { identifier: memberAddress.toLowerCase(), identifierKind: 0 };
       async function waitForInboxId(identifier, tries = 180) {
         if (!xmtp?.findInboxIdByIdentifier) return null;
-        for (let i = 0; i < tries; i++) {
-          try {
-            const found = await xmtp.findInboxIdByIdentifier(identifier);
-            if (found) return found;
-          } catch (e) { void e; }
-          await new Promise((r) => setTimeout(r, 1000));
-        }
+          for (let i = 0; i < tries; i++) {
+            try {
+              const found = await xmtp.findInboxIdByIdentifier(identifier);
+              if (found) return found;
+            } catch (err) {
+              handleError(err, 'Member identity lookup failed');
+            }
+            await new Promise((r) => setTimeout(r, 1000));
+          }
         return null;
       }
       // Prefer inboxId provided by client; else wait until identity is visible on the network
@@ -396,22 +425,38 @@ export function createApp(opts) {
 
       // Re-sync server view and warm the conversation
       try { if (xmtp.conversations.sync) await xmtp.conversations.sync(); logger.info('Server conversations synced after join'); } catch (err) { logger.warn({ err }, 'Server sync after join failed'); }
-      try {
-        lastJoin.at = Date.now();
-        lastJoin.payload = { joinMeta };
         try {
-          const afterAgg = xmtp?.debugInformation?.apiAggregateStatistics?.();
-          logger.info({ beforeAgg, afterAgg }, 'XMTP API stats around member add');
-          lastJoin.payload.afterAgg = afterAgg;
-          lastJoin.payload.beforeAgg = beforeAgg;
-        } catch (e) { void e; }
-      } catch (e) { void e; }
-      try {
-        const members = Array.isArray(record.group?.members) ? record.group.members : [];
-        logger.info({ members }, 'Group members snapshot after member add');
-      } catch (e) { void e; }
-      try { if (typeof record.group.sync === 'function') await record.group.sync(); } catch (err) { void err; }
-      try { await record.group.send(JSON.stringify({ type: 'member-joined', address: memberAddress })); } catch (err) { void err; }
+          lastJoin.at = Date.now();
+          lastJoin.payload = { joinMeta };
+          try {
+            const afterAgg = xmtp?.debugInformation?.apiAggregateStatistics?.();
+            logger.info({ beforeAgg, afterAgg }, 'XMTP API stats around member add');
+            lastJoin.payload.afterAgg = afterAgg;
+            lastJoin.payload.beforeAgg = beforeAgg;
+          } catch (err) {
+            handleError(err, 'Failed to capture XMTP stats around member add');
+          }
+        } catch (err) {
+          handleError(err, 'Failed to update lastJoin metadata');
+        }
+        try {
+          const members = Array.isArray(record.group?.members) ? record.group.members : [];
+          logger.info({ members }, 'Group members snapshot after member add');
+        } catch (err) {
+          handleError(err, 'Failed to snapshot members after member add');
+        }
+        try {
+          if (typeof record.group.sync === 'function') await record.group.sync();
+        } catch (err) {
+          handleError(err, 'Group sync after member add failed');
+        }
+        try {
+          await record.group.send(
+            JSON.stringify({ type: 'member-joined', address: memberAddress })
+          );
+        } catch (err) {
+          handleError(err, 'Notify member join failed');
+        }
       res.json({ groupId: record.group.id });
       } catch (err) {
         logger.error({ err, contractAddress }, 'Join failed');
