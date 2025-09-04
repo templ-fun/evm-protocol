@@ -1,5 +1,8 @@
 // @ts-check
 
+/** Simple delay helper. */
+export const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 /**
  * Generic async polling utility.
  * @param {object} opts
@@ -15,9 +18,11 @@ export async function waitFor({ check, tries = 60, delayMs = 1000, onError }) {
       const res = await check();
       if (res) return res;
     } catch (err) {
-      try { onError?.(err); } catch {}
+      try {
+        onError?.(err);
+      } catch {}
     }
-    if (i < tries - 1) await new Promise((r) => setTimeout(r, delayMs));
+    if (i < tries - 1) await wait(delayMs);
   }
   return null;
 }

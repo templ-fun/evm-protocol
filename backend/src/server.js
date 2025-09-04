@@ -9,13 +9,13 @@ import rateLimit, { MemoryStore } from 'express-rate-limit';
 import { createRateLimitStore } from './config.js';
 import cors from 'cors';
 import Database from 'better-sqlite3';
-import pino from 'pino';
 import { buildDelegateMessage, buildMuteMessage } from '../../shared/signing.js';
 import { requireAddresses, verifySignature } from './middleware/validate.js';
 import { syncXMTP } from '../../shared/xmtp.js';
-import { waitFor } from '../../shared/xmtp-wait.js';
+import { logger } from '../../shared/logger.js';
+import { wait, waitFor } from '../../shared/wait.js';
 
-export const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
+export { logger };
 const XMTP_ENV = process.env.XMTP_ENV || 'dev';
 
 // Linearize: wait until the target inbox is visible on the XMTP network
@@ -145,7 +145,7 @@ export function createApp(opts) {
               const found = await xmtp.findInboxIdByIdentifier(identifier);
               if (found) return found;
             } catch (err) { void err; }
-            await new Promise((r) => setTimeout(r, 1000));
+            await wait(1000);
           }
           return null;
         }
@@ -359,7 +359,7 @@ export function createApp(opts) {
             const found = await xmtp.findInboxIdByIdentifier(identifier);
             if (found) return found;
           } catch (e) { void e; }
-          await new Promise((r) => setTimeout(r, 1000));
+          await wait(1000);
         }
         return null;
       }
