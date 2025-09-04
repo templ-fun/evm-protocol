@@ -404,6 +404,40 @@ describe("Member Pool Distribution - Exhaustive Tests", function () {
         });
     });
 
+    describe("memberPoolClaims tracking", function () {
+        it("Should accumulate total claimed rewards across multiple claims", async function () {
+            // Initial member joins
+            await token.connect(member1).approve(await templ.getAddress(), ENTRY_FEE);
+            await templ.connect(member1).purchaseAccess();
+
+            let totalClaimed = 0n;
+
+            // Member 2 joins and member 1 claims 30%
+            await token.connect(member2).approve(await templ.getAddress(), ENTRY_FEE);
+            await templ.connect(member2).purchaseAccess();
+            let claimable = await templ.getClaimablePoolAmount(member1.address);
+            await templ.connect(member1).claimMemberPool();
+            totalClaimed += claimable;
+            expect(await templ.memberPoolClaims(member1.address)).to.equal(totalClaimed);
+
+            // Member 3 joins and member 1 claims an additional 15%
+            await token.connect(member3).approve(await templ.getAddress(), ENTRY_FEE);
+            await templ.connect(member3).purchaseAccess();
+            claimable = await templ.getClaimablePoolAmount(member1.address);
+            await templ.connect(member1).claimMemberPool();
+            totalClaimed += claimable;
+            expect(await templ.memberPoolClaims(member1.address)).to.equal(totalClaimed);
+
+            // Member 4 joins and member 1 claims a final 10%
+            await token.connect(member4).approve(await templ.getAddress(), ENTRY_FEE);
+            await templ.connect(member4).purchaseAccess();
+            claimable = await templ.getClaimablePoolAmount(member1.address);
+            await templ.connect(member1).claimMemberPool();
+            totalClaimed += claimable;
+            expect(await templ.memberPoolClaims(member1.address)).to.equal(totalClaimed);
+        });
+    });
+
     describe("DAO Sweep Impact", function () {
         it("Should revert claim after DAO sweeps remaining pool balance", async function () {
             // Two members join to generate pool rewards
