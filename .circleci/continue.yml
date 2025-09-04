@@ -1,5 +1,16 @@
 version: 2.1
 
+npm-ci: &npm-ci
+  name: Install dependencies
+  command: npm ci
+
+lint: &lint
+  name: Run lint
+
+test: &test
+  name: Run contract tests
+  command: npm test
+
 parameters:
   run_contracts:
     type: boolean
@@ -17,21 +28,15 @@ jobs:
       - image: cimg/node:22.18
     steps:
       - checkout
-      - run:
-          name: Install dependencies
-          command: npm ci
-      - run:
-          name: Run contract tests
-          command: npm test
+      - run: *npm-ci
+      - run: *test
 
   slither:
     docker:
       - image: cimg/node:22.18
     steps:
       - checkout
-      - run:
-          name: Install dependencies
-          command: npm ci
+      - run: *npm-ci
       - run:
           name: Install Slither
           command: |
@@ -49,10 +54,8 @@ jobs:
       - image: cimg/node:22.18
     steps:
       - checkout
-      - run: npm ci
-      - run:
-          name: Run contract tests
-          command: npm test
+      - run: *npm-ci
+      - run: *test
       - run: npm run compile
       - run: npm --prefix backend ci
       - run: npm --prefix frontend ci
@@ -67,9 +70,13 @@ jobs:
           name: Install Playwright browsers
           command: npm --prefix frontend exec playwright install
       - run: npm --prefix backend test
-      - run: npm --prefix backend run lint
+      - run:
+          <<: *lint
+          command: npm --prefix backend run lint
       - run: npm --prefix frontend test -- --reporter verbose
-      - run: npm --prefix frontend run lint
+      - run:
+          <<: *lint
+          command: npm --prefix frontend run lint
       - run: npm --prefix frontend run build
       - run: npm --prefix frontend run test:e2e
 
