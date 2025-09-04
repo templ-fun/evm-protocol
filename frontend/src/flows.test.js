@@ -265,7 +265,7 @@ describe('templ flows', () => {
     const on = vi.fn();
     const contract = { on };
     const ethers = { Contract: vi.fn().mockReturnValue(contract) };
-    watchProposals({
+    const cleanup = watchProposals({
       ethers,
       provider: {},
       templAddress: '0xtempl',
@@ -274,6 +274,42 @@ describe('templ flows', () => {
       onVote: vi.fn()
     });
     expect(on).toHaveBeenCalledTimes(2);
+    expect(typeof cleanup).toBe('function');
+  });
+
+  it('watchProposals stops firing events after cleanup', () => {
+    const listeners = {};
+    const contract = {
+      on: vi.fn((event, cb) => {
+        (listeners[event] || (listeners[event] = [])).push(cb);
+      }),
+      off: vi.fn((event, cb) => {
+        listeners[event] = (listeners[event] || []).filter((fn) => fn !== cb);
+      }),
+      emit: (event, ...args) => {
+        (listeners[event] || []).forEach((fn) => fn(...args));
+      }
+    };
+    const ethers = { Contract: vi.fn().mockReturnValue(contract) };
+    const onProposal = vi.fn();
+    const onVote = vi.fn();
+    const cleanup = watchProposals({
+      ethers,
+      provider: {},
+      templAddress: '0xtempl',
+      templArtifact,
+      onProposal,
+      onVote
+    });
+    contract.emit('ProposalCreated', 1, '0x', 'title', 123);
+    contract.emit('VoteCast', 1, '0x', true, 123);
+    expect(onProposal).toHaveBeenCalledTimes(1);
+    expect(onVote).toHaveBeenCalledTimes(1);
+    cleanup();
+    contract.emit('ProposalCreated', 2, '0x', 'title2', 456);
+    contract.emit('VoteCast', 1, '0x', false, 456);
+    expect(onProposal).toHaveBeenCalledTimes(1);
+    expect(onVote).toHaveBeenCalledTimes(1);
   });
 
   it('delegateMute posts delegation to backend', async () => {

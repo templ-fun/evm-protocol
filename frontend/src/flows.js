@@ -352,18 +352,23 @@ export function watchProposals({
   onVote
 }) {
   const contract = new ethers.Contract(templAddress, templArtifact.abi, provider);
-  contract.on('ProposalCreated', (id, proposer, title, endTime) => {
+  const proposalHandler = (id, proposer, title, endTime) => {
     onProposal({ id: Number(id), proposer, title, endTime: Number(endTime) });
-  });
-  contract.on('VoteCast', (id, voter, support, timestamp) => {
+  };
+  const voteHandler = (id, voter, support, timestamp) => {
     onVote({
       id: Number(id),
       voter,
       support: Boolean(support),
       timestamp: Number(timestamp)
     });
-  });
-  return contract;
+  };
+  contract.on('ProposalCreated', proposalHandler);
+  contract.on('VoteCast', voteHandler);
+  return () => {
+    contract.off('ProposalCreated', proposalHandler);
+    contract.off('VoteCast', voteHandler);
+  };
 }
 
 export async function delegateMute({
