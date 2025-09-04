@@ -275,11 +275,15 @@ describe('core flows e2e', () => {
         proposalId: 0,
         txOptions: { nonce: priestNonce++ }
       }).catch(err => {
-        const iface = new ethers.Interface(templArtifact.abi);
-        const data = err?.data ?? err?.error?.data ?? '';
-        const selector = data.slice(0, 10);
-        const name = Object.values(iface.errors).find(e => e.selector === selector)?.name;
-        throw new Error(name || err.message);
+        try {
+          const iface = new ethers.Interface(templArtifact.abi);
+          const data = err?.data ?? err?.error?.data;
+          if (data) {
+            const { name } = iface.parseError(data);
+            throw new Error(name);
+          }
+        } catch {}
+        throw err;
       })
     ).rejects.toThrow(/VotingNotEnded|ProposalNotPassed/);
 
