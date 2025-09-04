@@ -145,6 +145,35 @@ See [Environment Variables](#environment-variables) for descriptions of required
 5. Build the frontend (`npm --prefix frontend run build`) and serve the static files.
 
 ## Core flows
+
+High‑level sequence for deploying, joining, and messaging:
+
+```mermaid
+sequenceDiagram
+    participant F as Frontend
+    participant C as Contract
+    participant B as Backend
+    participant X as XMTP
+
+    Note over F,C,B,X: deployTempl
+    F->>C: deployTempl()
+    C-->>F: contract address
+    F->>B: POST /templs {contract}
+    B->>X: newGroup
+    B-->>F: {groupId}
+
+    Note over F,C,B,X: purchaseAndJoin
+    F->>C: purchaseAccess()
+    C-->>F: membership granted
+    F->>B: POST /join
+    B->>X: addMembers
+    B-->>F: {groupId}
+
+    Note over F,X: messaging
+    F->>X: send message
+    X-->>F: receive message
+```
+
 1. **Templ creation** – deploy contract and create a private XMTP group with the priest added at creation time.
 2. **Pay‑to‑join** – wallet calls `purchaseAccess` and backend invites it into the group.
 3. **Messaging** – members send and receive XMTP messages in the group chat.
