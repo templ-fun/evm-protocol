@@ -5,6 +5,11 @@ setup: true
 orbs:
   path-filtering: circleci/path-filtering@0.1.4
 
+parameters:
+  run_manual_tests:
+    type: boolean
+    default: false
+
 workflows:
   filter:
     jobs:
@@ -12,6 +17,7 @@ workflows:
           name: check-paths
           base-revision: main
           config-path: .circleci/continue.yml
+          additional-parameters: run_manual_tests
           mapping: |
             contracts/.* run_contracts true
             test/.* run_contracts true
