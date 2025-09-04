@@ -427,8 +427,6 @@ export function createApp(opts) {
         logger.warn({ err }, 'Server sync after join failed');
       }
       try {
-        lastJoin.at = Date.now();
-        lastJoin.payload = { joinMeta };
         try {
           lastJoin.at = Date.now();
           lastJoin.payload = { joinMeta };
