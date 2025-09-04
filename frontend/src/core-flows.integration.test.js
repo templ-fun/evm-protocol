@@ -274,13 +274,20 @@ describe('core flows e2e', () => {
         templArtifact,
         proposalId: 0,
         txOptions: { nonce: priestNonce++ }
-      }).catch(err => {
+      }).catch((err) => {
         try {
-          const iface = new ethers.Interface(templArtifact.abi);
-          const data = err?.data ?? err?.error?.data;
-          if (data) {
-            const parsed = iface.parseError(data);
-            if (parsed?.name) throw new Error(parsed.name);
+          const data =
+            err?.data ||
+            err?.error?.data ||
+            err?.info?.error?.data ||
+            err?.info?.data;
+          const selector = typeof data === 'string' ? data.slice(0, 10) : null;
+          const errors = {
+            [ethers.id('VotingNotEnded()').slice(0, 10)]: 'VotingNotEnded',
+            [ethers.id('ProposalNotPassed()').slice(0, 10)]: 'ProposalNotPassed'
+          };
+          if (selector && errors[selector]) {
+            throw new Error(errors[selector]);
           }
         } catch {}
         throw err;
