@@ -23,6 +23,8 @@ export default function Chat({ walletAddress, signer, xmtp, session }) {
   // Load group and messages
   useEffect(() => {
     let cancelled = false;
+    let stream;
+
     async function load() {
       if (!xmtp || !session?.groupId) return;
       try {
@@ -31,16 +33,32 @@ export default function Chat({ walletAddress, signer, xmtp, session }) {
         setGroup(g);
         const history = await g.messages();
         if (cancelled) return;
-        setMessages(history.map(m => ({ senderAddress: m.senderAddress, content: m.content })));
-        g.stream?.(msg => {
-          setMessages(prev => [...prev, { senderAddress: msg.senderAddress, content: msg.content }]);
-        });
+        setMessages(
+          history.map((m) => ({
+            id: m.id,
+            senderAddress: m.senderAddress,
+            content: m.content,
+          }))
+        );
+        stream = await g.streamMessages();
+        (async () => {
+          for await (const msg of stream) {
+            if (cancelled) break;
+            setMessages((prev) => [
+              ...prev,
+              { id: msg.id, senderAddress: msg.senderAddress, content: msg.content },
+            ]);
+          }
+        })();
       } catch (err) {
         console.error(err);
       }
     }
     load();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      stream?.return?.();
+    };
   }, [xmtp, session]);
 
   // Load on-chain stats and proposals
@@ -137,8 +155,8 @@ export default function Chat({ walletAddress, signer, xmtp, session }) {
       <div>Burned: {stats.burned.toString()} | Claimable: {stats.claimable.toString()} | Treasury: {stats.treasury.toString()}</div>
       <p>DAO Status: {paused ? 'Paused' : 'Active'}</p>
       <div className="messages">
-        {messages.map((m, i) => (
-          <div key={i}>
+        {messages.map((m) => (
+          <div key={m.id}>
             <strong>{m.senderAddress}:</strong> {m.content}
           </div>
         ))}
