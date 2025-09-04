@@ -14,7 +14,7 @@ module.exports = {
   },
   networks: {
     hardhat: {
-      chainId: 1337
+      chainId: 31337
     },
     base: {
       url: process.env.RPC_URL || "https://mainnet.base.org",
