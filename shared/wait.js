@@ -1,6 +1,13 @@
 // @ts-check
 
 /**
+ * Delay for the specified milliseconds.
+ * @param {number} ms
+ * @returns {Promise<void>}
+ */
+export const delay = (ms = 0) => new Promise((r) => setTimeout(r, ms));
+
+/**
  * Generic async polling utility.
  * @param {object} opts
  * @param {() => Promise<any>} opts.check Async function returning truthy value when condition met
@@ -15,9 +22,11 @@ export async function waitFor({ check, tries = 60, delayMs = 1000, onError }) {
       const res = await check();
       if (res) return res;
     } catch (err) {
-      try { onError?.(err); } catch {}
+      try {
+        onError?.(err);
+      } catch {}
     }
-    if (i < tries - 1) await new Promise((r) => setTimeout(r, delayMs));
+    if (i < tries - 1) await delay(delayMs);
   }
   return null;
 }

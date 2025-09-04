@@ -1,8 +1,8 @@
 // XMTP helper functions
 import { ethers } from 'ethers';
 import { Client } from '@xmtp/node-sdk';
-import { waitFor } from '../../../shared/xmtp-wait.js';
-import { logger } from '../logger.js';
+import { waitFor } from '../../../shared/wait.js';
+import { logger } from '../../../shared/logger.js';
 
 export const XMTP_ENV = process.env.XMTP_ENV || 'dev';
 

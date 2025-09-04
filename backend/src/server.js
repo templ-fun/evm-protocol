@@ -15,7 +15,7 @@ import delegatesRouter from './routes/delegates.js';
 import mutesRouter from './routes/mutes.js';
 import debugRouter from './routes/debug.js';
 
-import { logger } from './logger.js';
+import { logger } from '../../shared/logger.js';
 import { createXmtpWithRotation, waitForInboxReady, XMTP_ENV } from './xmtp/index.js';
 
 export { logger, createXmtpWithRotation, waitForInboxReady, XMTP_ENV };

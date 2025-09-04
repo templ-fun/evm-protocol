@@ -1,8 +1,9 @@
 import express from 'express';
 import { syncXMTP } from '../../../shared/xmtp.js';
+import { waitFor } from '../../../shared/wait.js';
 import { requireAddresses, verifySignature } from '../middleware/validate.js';
 import { waitForInboxReady } from '../xmtp/index.js';
-import { logger } from '../logger.js';
+import { logger } from '../../../shared/logger.js';
 
 export default function templsRouter({ xmtp, groups, persist, connectContract }) {
   const router = express.Router();
@@ -27,18 +28,14 @@ export default function templsRouter({ xmtp, groups, persist, connectContract })
         // Prefer identity-based membership (Ethereum = 0) when supported
         const priestIdentifierObj = { identifier: priestAddress.toLowerCase(), identifierKind: 0 };
         // Ensure the priest identity is registered before creating a group
-        async function waitForIdentityReady(identifier, tries = 60) {
-          if (!xmtp?.findInboxIdByIdentifier) return;
-          for (let i = 0; i < tries; i++) {
-            try {
-              const found = await xmtp.findInboxIdByIdentifier(identifier);
-              if (found) return found;
-            } catch (err) { void err; }
-            await new Promise((r) => setTimeout(r, 1000));
-          }
-          return null;
-        }
-        await waitForIdentityReady(priestIdentifierObj, 60);
+        await waitFor({
+          tries: 60,
+          delayMs: 1000,
+          check: () =>
+            xmtp?.findInboxIdByIdentifier
+              ? xmtp.findInboxIdByIdentifier(priestIdentifierObj).catch(() => null)
+              : null
+        });
 
       // The SDK often reports successful syncs as errors, so capture that case.
       let group;

@@ -3,7 +3,7 @@ import { requireAddresses } from '../middleware/validate.js';
 import { syncXMTP } from '../../../shared/xmtp.js';
 import { Client } from '@xmtp/node-sdk';
 import { XMTP_ENV } from '../xmtp/index.js';
-import { logger } from '../logger.js';
+import { logger } from '../../../shared/logger.js';
 
 export default function debugRouter({ xmtp, groups, lastJoin }) {
   const router = express.Router();

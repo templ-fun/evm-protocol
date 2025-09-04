@@ -1,8 +1,9 @@
 import express from 'express';
 import { syncXMTP } from '../../../shared/xmtp.js';
+import { waitFor } from '../../../shared/wait.js';
 import { requireAddresses, verifySignature } from '../middleware/validate.js';
 import { waitForInboxReady } from '../xmtp/index.js';
-import { logger } from '../logger.js';
+import { logger } from '../../../shared/logger.js';
 
 export default function joinRouter({ xmtp, groups, hasPurchased, lastJoin }) {
   const router = express.Router();
@@ -36,14 +37,11 @@ export default function joinRouter({ xmtp, groups, hasPurchased, lastJoin }) {
         const memberIdentifier = { identifier: memberAddress.toLowerCase(), identifierKind: 0 };
         async function waitForInboxId(identifier, tries = 180) {
           if (!xmtp?.findInboxIdByIdentifier) return null;
-          for (let i = 0; i < tries; i++) {
-            try {
-              const found = await xmtp.findInboxIdByIdentifier(identifier);
-              if (found) return found;
-            } catch (e) { void e; }
-            await new Promise((r) => setTimeout(r, 1000));
-          }
-          return null;
+          return waitFor({
+            tries,
+            delayMs: 1000,
+            check: () => xmtp.findInboxIdByIdentifier(identifier).catch(() => null)
+          });
         }
         // Prefer inboxId provided by client; else wait until identity is visible on the network
         let inboxId = null;

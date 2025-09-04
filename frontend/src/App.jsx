@@ -16,6 +16,8 @@ import {
   muteMember
 } from './flows.js';
 import { syncXMTP } from '../../shared/xmtp.js';
+import { logger } from '../../shared/logger.js';
+import { delay } from '../../shared/wait.js';
 import './App.css';
 
 function App() {
@@ -55,14 +57,6 @@ function App() {
     setStatus((s) => [...s, msg]);
   }
 
-  // Minimal debug logger: prints only in dev or when explicitly enabled for e2e
-  const dlog = (...args) => {
-    try {
-      if (import.meta.env?.DEV || import.meta.env?.VITE_E2E_DEBUG === '1') {
-        console.log(...args);
-      }
-    } catch {}
-  };
 
   async function connectWallet() {
     if (!window.ethereum) return;
@@ -112,7 +106,7 @@ function App() {
       };
 
       try {
-        dlog('[app] Creating XMTP client with stable nonce', stableNonce);
+        logger.debug('[app] Creating XMTP client with stable nonce', stableNonce);
         const client = await Client.create(xmtpSigner, { env: xmtpEnv, appVersion: 'templ/0.1.0' });
         // Persist the nonce we successfully used so future runs reuse the same installation
         try { localStorage.setItem(storageKey, String(stableNonce)); } catch {}
@@ -129,12 +123,12 @@ function App() {
     }
     const client = await createXmtpStable();
     setXmtp(client);
-    dlog('[app] XMTP client created', { env: xmtpEnv, inboxId: client.inboxId });
+    logger.debug('[app] XMTP client created', { env: xmtpEnv, inboxId: client.inboxId });
     // Optional: emit aggregate network stats in e2e/local runs to aid debugging
     try {
       if (import.meta.env.VITE_E2E_DEBUG === '1' || xmtpEnv === 'local') {
         const agg = await client.debugInformation?.apiAggregateStatistics?.();
-        if (agg) dlog('[app] XMTP aggregate stats at init:\n' + agg);
+        if (agg) logger.debug('[app] XMTP aggregate stats at init:\n' + agg);
       }
     } catch {}
     try {
@@ -157,7 +151,7 @@ function App() {
   }
 
   async function handleDeploy() {
-    dlog('[app] handleDeploy clicked', { signer: !!signer, xmtp: !!xmtp });
+    logger.debug('[app] handleDeploy clicked', { signer: !!signer, xmtp: !!xmtp });
     if (!signer) return;
     if (!ethers.isAddress(tokenAddress)) return alert('Invalid token address');
     if (!ethers.isAddress(protocolFeeRecipient))
@@ -165,7 +159,7 @@ function App() {
     const nums = [entryFee, priestVoteWeight, priestWeightThreshold];
     if (!nums.every((n) => /^\d+$/.test(n))) return alert('Invalid numeric input');
     try {
-      dlog('[app] deploying templ with', { tokenAddress, protocolFeeRecipient, entryFee, priestVoteWeight, priestWeightThreshold });
+      logger.debug('[app] deploying templ with', { tokenAddress, protocolFeeRecipient, entryFee, priestVoteWeight, priestWeightThreshold });
       const result = await deployTempl({
         ethers,
         xmtp,
@@ -178,8 +172,8 @@ function App() {
         priestWeightThreshold,
         templArtifact
       });
-      dlog('[app] deployTempl returned', result);
-      dlog('[app] deployTempl groupId details', { groupId: result.groupId, has0x: String(result.groupId).startsWith('0x'), len: String(result.groupId).length });
+      logger.debug('[app] deployTempl returned', result);
+      logger.debug('[app] deployTempl groupId details', { groupId: result.groupId, has0x: String(result.groupId).startsWith('0x'), len: String(result.groupId).length });
       setTemplAddress(result.contractAddress);
       setGroup(result.group);
       setGroupId(result.groupId);
@@ -191,7 +185,7 @@ function App() {
         pushStatus('🔄 Group created, waiting for connection');
       }
     } catch (err) {
-      console.error('[app] deploy failed', err);
+      logger.error('[app] deploy failed', err);
       alert(err.message);
     }
   }
@@ -200,7 +194,7 @@ function App() {
     if (!signer || !xmtp || !templAddress) return;
     if (!ethers.isAddress(templAddress)) return alert('Invalid contract address');
     try {
-      dlog('[app] starting purchaseAndJoin', { inboxId: xmtp?.inboxId, address: walletAddress, templAddress });
+    logger.debug('[app] starting purchaseAndJoin', { inboxId: xmtp?.inboxId, address: walletAddress, templAddress });
       const result = await purchaseAndJoin({
         ethers,
         xmtp,
@@ -209,8 +203,8 @@ function App() {
         templAddress,
         templArtifact
       });
-      dlog('[app] purchaseAndJoin returned', result);
-      dlog('[app] purchaseAndJoin groupId details', { groupId: result.groupId, has0x: String(result.groupId).startsWith('0x'), len: String(result.groupId).length });
+      logger.debug('[app] purchaseAndJoin returned', result);
+      logger.debug('[app] purchaseAndJoin groupId details', { groupId: result.groupId, has0x: String(result.groupId).startsWith('0x'), len: String(result.groupId).length });
       if (result) {
         setGroup(result.group);
         setGroupId(result.groupId);
@@ -266,14 +260,14 @@ function App() {
       try {
         if (import.meta.env.VITE_E2E_DEBUG === '1') {
           const agg = await xmtp.debugInformation?.apiAggregateStatistics?.();
-          if (agg) dlog('[app] XMTP stats ' + label + '\n' + agg);
+          if (agg) logger.debug('[app] XMTP stats ' + label + '\n' + agg);
         }
       } catch {}
     }
     async function poll() {
       while (!cancelled && attempts < 120 && !group) {
         attempts++;
-        dlog('[app] finding group', { groupId, wanted, attempt: attempts, inboxId: xmtp?.inboxId });
+        logger.debug('[app] finding group', { groupId, wanted, attempt: attempts, inboxId: xmtp?.inboxId });
         try {
           // Fetch new conversations (welcome messages) from the network
           if (import.meta.env.VITE_E2E_DEBUG === '1') {
@@ -281,35 +275,35 @@ function App() {
           }
           await syncXMTP(xmtp);
           await logAgg('after syncXMTP #' + attempts);
-        } catch (e) { console.warn('[app] sync error', e?.message || e); }
+        } catch (e) { logger.warn('[app] sync error', e?.message || e); }
         try {
           // Force inbox state refresh from network
           await xmtp.preferences?.inboxState?.(true);
-        } catch (e) { console.warn('[app] preferences.inboxState error', e?.message || e); }
+        } catch (e) { logger.warn('[app] preferences.inboxState error', e?.message || e); }
         try {
           const maybe = await xmtp.conversations.getConversationById(wanted);
           if (maybe) {
-            dlog('[app] found group by id');
+            logger.debug('[app] found group by id');
             setGroup(maybe);
             pushStatus('✅ Group discovered');
             setGroupConnected(true);
             break;
           }
-        } catch (e) { console.warn('[app] getById error', e?.message || e); }
+        } catch (e) { logger.warn('[app] getById error', e?.message || e); }
         try {
           const list = await xmtp.conversations.list?.({ consentStates: ['allowed','unknown','denied'] }) || [];
-          dlog('[app] list size=', list?.length, 'firstIds=', (list||[]).slice(0,3).map(c=>c.id));
+          logger.debug('[app] list size=', list?.length, 'firstIds=', (list||[]).slice(0,3).map(c=>c.id));
           const found = list.find((c) => norm(c.id) === wanted);
           if (found) {
-            dlog('[app] found group by list');
+            logger.debug('[app] found group by list');
             setGroup(found);
             pushStatus('✅ Group discovered');
             setGroupConnected(true);
             await logAgg('post-discovery');
             break;
           }
-        } catch (e) { console.warn('[app] list error', e?.message || e); }
-        await new Promise((r) => setTimeout(r, 1000));
+        } catch (e) { logger.warn('[app] list error', e?.message || e); }
+          await delay(1000);
       }
     }
     poll();
@@ -325,7 +319,7 @@ function App() {
           if (cancelled || group) return;
           const cid = norm(conv?.id || '');
           if (cid && cid === wanted) {
-            dlog('[app] streamGroups observed conversation id=', cid);
+            logger.debug('[app] streamGroups observed conversation id=', cid);
             const maybe = await xmtp.conversations.getConversationById(wanted);
             if (maybe) {
               setGroup(maybe);
@@ -341,7 +335,7 @@ function App() {
           try {
             const cid = norm(evt?.conversationId || '');
             if (cid && cid === wanted) {
-              dlog('[app] streamAllMessages observed event in conversation id=', cid);
+              logger.debug('[app] streamAllMessages observed event in conversation id=', cid);
               const maybe = await xmtp.conversations.getConversationById(wanted);
               if (maybe) {
                 setGroup(maybe);
@@ -422,7 +416,7 @@ function App() {
       setMessageInput('');
       pushStatus('✅ Message sent');
     } catch (err) {
-      console.error('Send failed', err);
+      logger.error('Send failed', err);
     }
   }
 
@@ -516,7 +510,7 @@ function App() {
         const priestAddr = await contract.priest();
         setIsPriest(priestAddr?.toLowerCase() === walletAddress.toLowerCase());
       } catch (err) {
-        console.error('Error checking priest status:', err);
+        logger.error('Error checking priest status:', err);
       }
     }
     checkPriest();

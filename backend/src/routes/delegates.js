@@ -1,7 +1,7 @@
 import express from 'express';
 import { requireAddresses, verifySignature } from '../middleware/validate.js';
 import { buildDelegateMessage } from '../../../shared/signing.js';
-import { logger } from '../logger.js';
+import { logger } from '../../../shared/logger.js';
 
 export default function delegatesRouter({ groups, database }) {
   const router = express.Router();
