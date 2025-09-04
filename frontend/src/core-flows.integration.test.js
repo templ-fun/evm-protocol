@@ -279,7 +279,7 @@ describe('core flows e2e', () => {
         templAddress,
         templArtifact,
         proposalId: 0,
-        txOptions: { nonce: priestNonce++ }
+        txOptions: { nonce: priestNonce }
       })
     ).rejects.toHaveProperty('data', expect.stringContaining(votingNotEndedSelector));
 
@@ -294,7 +294,7 @@ describe('core flows e2e', () => {
         templAddress,
         templArtifact,
         proposalId: 0,
-        txOptions: { nonce: priestNonce++ }
+        txOptions: { nonce: priestNonce }
       })
     ).rejects.toHaveProperty(
       'data',
