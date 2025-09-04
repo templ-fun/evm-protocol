@@ -44,7 +44,7 @@ export function sendMessage(args: { group: any; content: string }): Promise<void
 export function proposeVote(args: { ethers: any; signer: any; templAddress: Address; templArtifact: any; title: string; description: string; callData: string; votingPeriod?: number; txOptions?: any }): Promise<void>
 export function voteOnProposal(args: { ethers: any; signer: any; templAddress: Address; templArtifact: any; proposalId: number; support: boolean; txOptions?: any }): Promise<void>
 export function executeProposal(args: { ethers: any; signer: any; templAddress: Address; templArtifact: any; proposalId: number; txOptions?: any }): Promise<void>
-export function watchProposals(args: { ethers: any; provider: any; templAddress: Address; templArtifact: any; onProposal: Function; onVote: Function }): any
+export function watchProposals(args: { ethers: any; provider: any; templAddress: Address; templArtifact: any; onProposal: Function; onVote: Function }): { contract: any; cleanup: () => void }
 export function delegateMute(args: { signer: any; contractAddress: Address; priestAddress: Address; delegateAddress: Address; backendUrl?: string }): Promise<boolean>
 export function muteMember(args: { signer: any; contractAddress: Address; moderatorAddress: Address; targetAddress: Address; backendUrl?: string }): Promise<number>
 export function fetchActiveMutes(args: { contractAddress: Address; backendUrl?: string }): Promise<Array<{ address: Address; count: number; until: number }>>

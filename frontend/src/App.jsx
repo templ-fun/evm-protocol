@@ -368,7 +368,7 @@ function App() {
   useEffect(() => {
     if (!templAddress || !signer) return;
     const provider = signer.provider;
-    const contract = watchProposals({
+    const { cleanup } = watchProposals({
       ethers,
       provider,
       templAddress,
@@ -395,9 +395,9 @@ function App() {
     checkPaused();
     const id = setInterval(checkPaused, 3000);
     return () => {
-      contract.removeAllListeners();
-       cancelled = true;
-       clearInterval(id);
+      cleanup();
+      cancelled = true;
+      clearInterval(id);
     };
   }, [templAddress, signer]);
 

@@ -259,11 +259,12 @@ describe('templ flows', () => {
     expect(contract.executeProposal).toHaveBeenCalledWith(2, {});
   });
 
-  it('watchProposals registers event listeners', () => {
+  it('watchProposals registers and cleans up event listeners', () => {
     const on = vi.fn();
-    const contract = { on };
+    const off = vi.fn();
+    const contract = { on, off };
     const ethers = { Contract: vi.fn().mockReturnValue(contract) };
-    watchProposals({
+    const { contract: result, cleanup } = watchProposals({
       ethers,
       provider: {},
       templAddress: '0xtempl',
@@ -272,6 +273,9 @@ describe('templ flows', () => {
       onVote: vi.fn()
     });
     expect(on).toHaveBeenCalledTimes(2);
+    cleanup();
+    expect(off).toHaveBeenCalledTimes(2);
+    expect(result).toBe(contract);
   });
 
   it('delegateMute posts delegation to backend', async () => {
