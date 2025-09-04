@@ -6,6 +6,12 @@ orbs:
   path-filtering: circleci/path-filtering@0.1.4
 
 parameters:
+  run_contracts:
+    type: boolean
+    default: false
+  run_app:
+    type: boolean
+    default: false
   run_manual_tests:
     type: boolean
     default: false
