@@ -1,7 +1,7 @@
 # TEMPL Contracts
 
 ## Overview
-This document describes the on-chain portion of TEMPL for auditors.
+This document describes the on-chain portion of TEMPL for auditors. For a full security review, see the [Web3 Audit Report](WEB3_AUDIT_REPORT.MD).
 
 ## Economic model
 - **30% Burn** – sent to `0xdead`.
