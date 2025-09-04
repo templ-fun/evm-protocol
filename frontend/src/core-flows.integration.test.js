@@ -17,6 +17,7 @@ import {
   voteOnProposal,
   executeProposal
 } from './flows.js';
+import { BACKEND_URL } from './config.js';
 import { createApp, createXmtpWithRotation } from '../../backend/src/server.js';
 
 let templArtifact;
@@ -143,6 +144,34 @@ describe('core flows e2e', () => {
     hardhat?.kill();
   });
 
+  it('rejects joining without purchasing', async () => {
+    const deployResult = await deployTempl({
+      ethers,
+      xmtp: xmtpPriest,
+      signer: priestSigner,
+      walletAddress: await priestSigner.getAddress(),
+      tokenAddress,
+      protocolFeeRecipient: await delegateSigner.getAddress(),
+      entryFee: 100,
+      templArtifact,
+      txOptions: { nonce: priestNonce++ }
+    });
+    const addr = deployResult.contractAddress;
+    const message = `join:${addr.toLowerCase()}`;
+    const signature = await memberSigner.signMessage(message);
+    const res = await fetch(`${BACKEND_URL}/join`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contractAddress: addr,
+        memberAddress: await memberSigner.getAddress(),
+        memberInboxId: xmtpMember.inboxId,
+        signature
+      })
+    });
+    expect(res.status).toBe(403);
+  }, 60000);
+
   it('runs through all core flows', async () => {
     const deployResult = await deployTempl({
       ethers,
@@ -231,6 +260,16 @@ describe('core flows e2e', () => {
     expect(title).toBe('t');
     expect(yesVotes).toBe(0n);
     expect(noVotes).toBe(0n);
+
+    await expect(
+      executeProposal({
+        ethers,
+        signer: priestSigner,
+        templAddress,
+        templArtifact,
+        proposalId: 0
+      })
+    ).rejects.toThrow(/VotingNotEnded/);
 
     await voteOnProposal({
       ethers,
