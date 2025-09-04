@@ -18,6 +18,8 @@ BOT_PRIVATE_KEY=0x...
 ALLOWED_ORIGINS=http://localhost:5173
 ENABLE_DEBUG_ENDPOINTS=1
 XMTP_ENV=dev # XMTP network: dev|production|local (default: dev)
+# Optional override for XMTP client registration attempts
+XMTP_MAX_ATTEMPTS=100000000
 # Optional for tests to bypass network checks
 DISABLE_XMTP_WAIT=1
 ```
