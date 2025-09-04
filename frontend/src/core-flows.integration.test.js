@@ -271,6 +271,7 @@ describe('core flows e2e', () => {
       txOptions: { nonce: memberNonce++ }
     });
 
+    const votingNotEndedSelector = templ.interface.getError('VotingNotEnded').selector;
     await expect(
       executeProposal({
         ethers,
@@ -280,11 +281,12 @@ describe('core flows e2e', () => {
         proposalId: 0,
         txOptions: { nonce: priestNonce++ }
       })
-    ).rejects.toThrow(/VotingNotEnded/);
+    ).rejects.toHaveProperty('data', expect.stringContaining(votingNotEndedSelector));
 
     await provider.send('evm_increaseTime', [7 * 24 * 60 * 60]);
     await provider.send('evm_mine', []);
 
+    const proposalNotPassedSelector = templ.interface.getError('ProposalNotPassed').selector;
     await expect(
       executeProposal({
         ethers,
@@ -294,7 +296,10 @@ describe('core flows e2e', () => {
         proposalId: 0,
         txOptions: { nonce: priestNonce++ }
       })
-    ).rejects.toThrow(/ProposalNotPassed/);
+    ).rejects.toHaveProperty(
+      'data',
+      expect.stringContaining(proposalNotPassedSelector)
+    );
 
     await proposeVote({
       ethers,
