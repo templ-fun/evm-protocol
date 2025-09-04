@@ -1,4 +1,4 @@
-import { defineConfig, configDefaults } from 'vitest/config'
+import { defineConfig, configDefaults, coverageConfigDefaults } from 'vitest/config'
 
 export default defineConfig({
   // Use a writable cache directory for Vite transforms
@@ -31,5 +31,14 @@ export default defineConfig({
       'playwright*.config.*',
       'playwright-*.config.*',
     ],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'lcov'],
+      reportsDirectory: 'coverage',
+      exclude: [
+        ...coverageConfigDefaults.exclude,
+        'e2e/**',
+      ],
+    },
   },
 })
