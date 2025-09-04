@@ -3,10 +3,10 @@
 DAO‑governed token‑gated private groups with onchain treasury management and XMTP messaging
 
 <p align="center">
-<img width="300" alt="templ logo" src="https://github.com/user-attachments/assets/fa3513b4-75e4-4dbf-a1fb-73e9e27d766f" />
+<img width="300" alt="TEMPL logo" src="https://github.com/user-attachments/assets/fa3513b4-75e4-4dbf-a1fb-73e9e27d766f" />
 </p>
 <p align="center">
-<a href="https://templ.fun">templ.fun</a> 
+<a href="https://templ.fun">TEMPL.fun</a>
 </p>
 
 ## Architecture
@@ -21,6 +21,18 @@ The frontend calls the contract to purchase membership, then asks the backend to
 the wallet into the group. The backend can also watch contract events and forward
 proposal or vote updates to the chat.
 
+```mermaid
+sequenceDiagram
+    participant Frontend
+    participant Backend
+    participant Contracts
+
+    Frontend->>Contracts: purchaseAccess()
+    Frontend->>Backend: requestInvite()
+    Contracts-->>Backend: Purchase event
+    Backend-->>Frontend: Invite & updates
+```
+
 ## Documentation
 Use the docs below to dive into each component:
 
@@ -33,78 +45,32 @@ Use the docs below to dive into each component:
   
 ## Monorepo Structure
 - `contracts/` – Hardhat + Solidity 0.8.23
-- `backend/` – Node service that owns the XMTP group and exposes an HTTP API
+- `backend/` – Node service with XMTP bot and HTTP API
 - `frontend/` – Vite + React demo app with Playwright e2e
+- `shared/` – JS utilities shared by backend and frontend
+- `deployments/` – network-specific contract records
+- `scripts/` – Hardhat deployment and utility scripts
+- `test/` – Hardhat contract tests
+- `artifacts/` – compiled contract artifacts
+- `cache/` – Hardhat compilation cache
 
 ## Quick Start
-1. **Clone & install**
-   - Requires Node.js `>=22.18.0`; mismatched versions may break scripts or tests.
-     ```bash
-     nvm install 22.18.0 && nvm use 22.18.0
-     ```
+1. **Install**  
+   Install dependencies for contracts, the backend, and the frontend. See [CONTRACTS.md](./CONTRACTS.md), [BACKEND.md](./BACKEND.md), and [FRONTEND.md](./FRONTEND.md) for detailed commands.
+
+2. **Test**  
+   Run the full suite:
    ```bash
-   git clone <repo>
-   cd templ
-   npm install # install contract tests and deployment dependencies
-   npm --prefix backend install
-   npm --prefix frontend install
-   npm run prepare # enable Husky pre‑commit
-   pipx install slither-analyzer solc-select # install Slither and solc-select
+   npm run test:all
    ```
-2. **Run tests**
-   ```bash
-   npm run test:all # full sweep: contracts, slither, types, lint, unit, integration, e2e
-   npm test # run contract tests
-   npm run slither
-   npm --prefix backend test
-   npm --prefix frontend test # unit tests
-   npm --prefix frontend test -- src/core-flows.integration.test.js # integration tests
-   npm --prefix frontend run test:e2e # end‑to‑end tests
-   npm --prefix backend run typecheck && npm --prefix frontend run typecheck
-   npm --prefix backend run lint && npm --prefix frontend run lint
-   ```
-   Common dev commands:
-   - Contracts: `npm run compile`, `npm test`, `npm run node`, `npm run deploy:local`
-   - Backend (dev): `RPC_URL=http://127.0.0.1:8545 BOT_PRIVATE_KEY=<hardhat-0> ALLOWED_ORIGINS=http://localhost:5173 ENABLE_DEBUG_ENDPOINTS=1 XMTP_ENV=dev npm --prefix backend start`
-   - Frontend (dev): `VITE_XMTP_ENV=production VITE_E2E_DEBUG=1 npm --prefix frontend run dev`
-   To run e2e against a local XMTP node:
-   ```bash
-   git clone https://github.com/xmtp/xmtp-local-node.git
-   # requires Docker; this brings up ports 5555 (API) and 5558 (history)
-   npm run xmtp:local:up
-   E2E_XMTP_LOCAL=1 npm --prefix frontend run test:e2e -- --project=tech-demo
-   # tear down when done
-   npm run xmtp:local:down
-   ```
-   Check node logs with:
-   ```bash
-   (cd xmtp-local-node && docker compose logs -f)
-   ```
-   End‑to‑end details: Playwright spins up Hardhat (8545), the backend bot (3001), and serves the built frontend (5179). The e2e uses XMTP production to mirror real‑world behavior and exercises discovery and the full core flows.
-3. **Deploy contracts**
-   ```bash
-   npx hardhat run scripts/deploy.js --network base
-   ```
-4. **Configure environment files**
-   - **Root `.env`** – used by deployment scripts. Populate values like RPC URL and deployer keys (see *Deploying to production* below).
-  - **`backend/.env`** – used only by the XMTP bot. Copy any shared values from the root `.env` or provide separate ones as needed.
-    Include `ALLOWED_ORIGINS` with the frontend URLs allowed to call the API.
-  ```env
-  # backend/.env
-  RPC_URL=https://mainnet.base.org
-  BOT_PRIVATE_KEY=0x...
-  ALLOWED_ORIGINS=http://localhost:5173
-  ```
-5. **Launch backend bot**
-   ```bash
-   npm --prefix backend start
-   ```
-6. **Start frontend**
-   ```bash
-   npm --prefix frontend run dev
-   ```
+   Component-specific test commands are documented in [CONTRACTS.md](./CONTRACTS.md), [BACKEND.md](./BACKEND.md), and [FRONTEND.md](./FRONTEND.md).
+
+3. **Run**  
+   Start the backend and frontend services. Deployment and runtime details are available in [CONTRACTS.md](./CONTRACTS.md), [BACKEND.md](./BACKEND.md), and [FRONTEND.md](./FRONTEND.md).
 
 ## Environment Variables
+
+Minimal local setup requires only a handful of variables:
 
 | Variable | Description | Location |
 | --- | --- | --- |
@@ -112,20 +78,11 @@ Use the docs below to dive into each component:
 | `PRIVATE_KEY` | Deployer wallet key for contract deployments | `.env` |
 | `BOT_PRIVATE_KEY` | XMTP bot wallet key | `backend/.env` |
 | `ALLOWED_ORIGINS` | Comma-separated frontend origins allowed to call the backend | `backend/.env` |
-| `PROTOCOL_FEE_RECIPIENT` | Address receiving protocol fees | `.env` |
-| `TOKEN_ADDRESS` | ERC-20 token used for membership purchases | `.env` |
-| `ENTRY_FEE` | Membership cost in wei | `.env` |
-| `PRIEST_VOTE_WEIGHT` | Priest vote weight multiplier | `.env` |
-| `PRIEST_WEIGHT_THRESHOLD` | Total weight required for priest proposals | `.env` |
-| `BASESCAN_API_KEY` | API key for contract verification on BaseScan | `.env` |
-| `XMTP_ENV` | XMTP network (`dev`, `production`, or `local`) | `backend/.env` |
-| `ENABLE_DEBUG_ENDPOINTS` | Enable backend debug endpoints | `backend/.env` |
-| `PORT` | Backend HTTP server port | `backend/.env` |
-| `DISABLE_XMTP_WAIT` | Skip XMTP readiness checks in tests | `backend/.env` |
-| `XMTP_MAX_ATTEMPTS` | Max XMTP client rotation attempts | `backend/.env` |
+
+See [BACKEND.md#environment-variables](./BACKEND.md#environment-variables) and [CONTRACTS.md#configuration](./CONTRACTS.md#configuration) for complete lists.
 
 ## Deploying to production
-See [Environment Variables](#environment-variables) for descriptions of required configuration.
+See [BACKEND.md#environment-variables](./BACKEND.md#environment-variables) and [CONTRACTS.md#configuration](./CONTRACTS.md#configuration) for descriptions of required configuration.
 1. Create a `.env` file in the project root for the deployment scripts. This file is distinct from `backend/.env` used by the bot; copy any overlapping variables (e.g., `RPC_URL`, keys) into `backend/.env` if the bot requires them. The bot's key (`BOT_PRIVATE_KEY`) belongs only in `backend/.env`. The deploying wallet becomes the priest automatically, so `PRIEST_ADDRESS` is only needed when overriding in tests.
     ```env
     PROTOCOL_FEE_RECIPIENT=0x...
@@ -174,19 +131,9 @@ sequenceDiagram
     X-->>F: receive message
 ```
 
-1. **Templ creation** – deploy contract and create a private XMTP group with the priest added at creation time.
-2. **Pay‑to‑join** – wallet calls `purchaseAccess` and backend invites it into the group.
-3. **Messaging** – members send and receive XMTP messages in the group chat.
-4. **Priest muting** – priest can silence members or delegate that power to
-   other moderators via the backend. Each mute is recorded in SQLite with
-   escalating durations of 1 hour, 1 day, 1 week, 1 month and finally
-   permanent after the fifth strike. Frontends query the backend for active
-   mutes and hide messages from muted addresses.
-5. **Proposal creation** – any member drafts a proposal to call one of the allowlisted DAO actions (pause/unpause, update config, withdraw treasury, sweep remainder). The backend rebroadcasts ProposalCreated as JSON to the group.
-6. **Voting** – members cast yes/no votes and see live tallies as events arrive.
-7. **Proposal execution** – proposals that pass execute the allowlisted action atomically.
+Core flows cover **TEMPL creation** with contract deployment and a private XMTP group, pay‑to‑join onboarding where `purchaseAccess` triggers an invitation, ongoing group messaging, priest‑controlled muting with escalating durations, proposal drafting for allowlisted actions with backend rebroadcasts, live yes/no voting, and atomic execution of passing proposals.
 
-For auditing guides, continue with the docs linked above.
+Full diagrams are in [CORE_FLOW_DOCS.MD](./CORE_FLOW_DOCS.MD).
 
 ## Security considerations
 
