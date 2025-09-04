@@ -1,6 +1,8 @@
 # TEMPL
 
-[![codecov](https://codecov.io/github/MarcoWorms/templ/graph/badge.svg?token=M8SPKQX6UD)](https://codecov.io/github/MarcoWorms/templ)
+[![contracts coverage](https://codecov.io/github/MarcoWorms/templ/graph/badge.svg?token=M8SPKQX6UD&flag=contracts)](https://codecov.io/github/MarcoWorms/templ?flag=contracts)
+[![backend coverage](https://codecov.io/github/MarcoWorms/templ/graph/badge.svg?token=M8SPKQX6UD&flag=backend)](https://codecov.io/github/MarcoWorms/templ?flag=backend)
+[![frontend coverage](https://codecov.io/github/MarcoWorms/templ/graph/badge.svg?token=M8SPKQX6UD&flag=frontend)](https://codecov.io/github/MarcoWorms/templ?flag=frontend)
 
 DAO‑governed token‑gated private groups with onchain treasury management and XMTP messaging
 
