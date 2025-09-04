@@ -30,6 +30,7 @@ describe('core flows e2e', () => {
   let priestSigner;
   let memberSigner;
   let delegateSigner;
+  let intruderSigner;
   let xmtpPriest;
   let xmtpMember;
   let xmtpServer;
@@ -77,10 +78,12 @@ describe('core flows e2e', () => {
     memberSigner = ethers.Wallet.createRandom().connect(provider);
     // Use a fresh delegate each run to avoid XMTP dev installation limits
     delegateSigner = ethers.Wallet.createRandom().connect(provider);
+    // Wallet attempting to join without purchasing
+    intruderSigner = ethers.Wallet.createRandom().connect(provider);
 
     // fund all signers with ETH for gas
     let nonce = await funder.getNonce();
-    for (const wallet of [priestSigner, memberSigner, delegateSigner]) {
+    for (const wallet of [priestSigner, memberSigner, delegateSigner, intruderSigner]) {
       const tx = await funder.sendTransaction({
         to: await wallet.getAddress(),
         value: ethers.parseEther('1'),
@@ -188,6 +191,21 @@ describe('core flows e2e', () => {
     expect(pj.groupId).toBeDefined();
     expect(await templ.hasAccess(await memberSigner.getAddress())).toBe(true);
 
+    // Attempt to join without purchasing should be rejected
+    const intruderJoin = await fetch('http://127.0.0.1:3001/join', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contractAddress: templAddress,
+        memberAddress: await intruderSigner.getAddress(),
+        signature: await intruderSigner.signMessage(
+          `join:${templAddress.toLowerCase()}`
+        )
+      })
+    });
+    expect(intruderJoin.status).toBe(403);
+    expect(await templ.hasAccess(await intruderSigner.getAddress())).toBe(false);
+
     await sendMessage({ group, content: 'hello' });
     // Give the network a beat and confirm server can still see the group
     await wait(500);
@@ -231,6 +249,10 @@ describe('core flows e2e', () => {
     expect(title).toBe('t');
     expect(yesVotes).toBe(0n);
     expect(noVotes).toBe(0n);
+
+    await expect(
+      templ.connect(priestSigner).executeProposal(0, { nonce: priestNonce++ })
+    ).rejects.toThrow(/VotingNotEnded/);
 
     await voteOnProposal({
       ethers,
