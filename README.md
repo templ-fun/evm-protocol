@@ -11,15 +11,15 @@ DAO‑governed token‑gated private groups with onchain treasury management and
 
 ## Architecture
 
-A TEMPL is composed of three parts that work together:
+```mermaid
+graph LR
+  C[Contract] <--> B[Backend]
+  B <--> F[Frontend]
+  F --> C
+```
 
-- **Smart contracts** on Base gate access by requiring a paid `purchaseAccess` call.
-- **Backend bot** owns the XMTP group and only invites wallets that purchased.
-- **React frontend** deploys contracts, verifies purchases and lets members chat.
-
-The frontend calls the contract to purchase membership, then asks the backend to invite
-the wallet into the group. The backend can also watch contract events and forward
-proposal or vote updates to the chat.
+Frontend calls the contract to purchase access and requests an invite from the backend.
+The backend listens to contract events and mediates chat for verified wallets.
 
 ## Documentation
 Use the docs below to dive into each component:
