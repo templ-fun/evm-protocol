@@ -279,8 +279,8 @@ describe('core flows e2e', () => {
           const iface = new ethers.Interface(templArtifact.abi);
           const data = err?.data ?? err?.error?.data;
           if (data) {
-            const { name } = iface.parseError(data);
-            throw new Error(name);
+            const parsed = iface.parseError(data);
+            if (parsed?.name) throw new Error(parsed.name);
           }
         } catch {}
         throw err;
