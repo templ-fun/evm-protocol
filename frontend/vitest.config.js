@@ -7,6 +7,11 @@ export default defineConfig({
     // Avoid writing into node_modules which can be read-only
     dir: 'test-results/.vitest',
   },
+  server: {
+    fs: {
+      allow: ['..'],
+    },
+  },
   test: {
     // Avoid worker teardown issues in constrained sandboxes by using forks pool
     pool: 'forks',
@@ -17,6 +22,7 @@ export default defineConfig({
     // Give integration hooks more time; individual tests can override
     hookTimeout: 180_000,
     testTimeout: 180_000,
+    include: [...configDefaults.include, '../shared/**/*.test.js'],
     // Do not collect Playwright E2E specs with Vitest
     exclude: [
       ...configDefaults.exclude, // keep node_modules and common defaults excluded
