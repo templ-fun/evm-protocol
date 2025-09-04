@@ -244,12 +244,61 @@ describe('core flows e2e', () => {
     const mutes = await fetchActiveMutes({ contractAddress: templAddress });
     expect(mutes.map(m => m.address.toLowerCase())).toContain((await memberSigner.getAddress()).toLowerCase());
 
+    const tampered = await fetch('http://localhost:3001/mute', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contractAddress: templAddress,
+        moderatorAddress: await delegateSigner.getAddress(),
+        targetAddress: await memberSigner.getAddress(),
+        signature: '0x'.padEnd(132, '0')
+      })
+    });
+    expect(tampered.status).toBe(403);
+
     const iface = new ethers.Interface(templArtifact.abi);
     const callData = iface.encodeFunctionData('setPausedDAO', [true]);
 
     await proposeVote({
       ethers,
-      signer: memberSigner, // Use member who has purchased access
+      signer: memberSigner,
+      templAddress,
+      templArtifact,
+      title: 'p0',
+      description: 'no votes',
+      callData,
+      votingPeriod: 7 * 24 * 60 * 60,
+      txOptions: { nonce: memberNonce++ }
+    });
+
+    await expect(
+      executeProposal({
+        ethers,
+        signer: priestSigner,
+        templAddress,
+        templArtifact,
+        proposalId: 0,
+        txOptions: { nonce: priestNonce++ }
+      })
+    ).rejects.toThrow(/VotingNotEnded/);
+
+    await provider.send('evm_increaseTime', [7 * 24 * 60 * 60]);
+    await provider.send('evm_mine', []);
+
+    await expect(
+      executeProposal({
+        ethers,
+        signer: priestSigner,
+        templAddress,
+        templArtifact,
+        proposalId: 0,
+        txOptions: { nonce: priestNonce++ }
+      })
+    ).rejects.toThrow(/ProposalNotPassed/);
+
+    await proposeVote({
+      ethers,
+      signer: memberSigner,
       templAddress,
       templArtifact,
       title: 't',
@@ -258,8 +307,7 @@ describe('core flows e2e', () => {
       votingPeriod: 7 * 24 * 60 * 60,
       txOptions: { nonce: memberNonce++ }
     });
-    // Verify proposal created
-    const [proposer, title,, yesVotes, noVotes] = await templ.getProposal(0);
+    const [proposer, title,, yesVotes, noVotes] = await templ.getProposal(1);
     expect(proposer.toLowerCase()).toBe((await memberSigner.getAddress()).toLowerCase());
     expect(title).toBe('t');
     expect(yesVotes).toBe(0n);
@@ -270,11 +318,11 @@ describe('core flows e2e', () => {
       signer: memberSigner,
       templAddress,
       templArtifact,
-      proposalId: 0,
+      proposalId: 1,
       support: true,
       txOptions: { nonce: memberNonce++ }
     });
-    const voted = await templ.hasVoted(0, await memberSigner.getAddress());
+    const voted = await templ.hasVoted(1, await memberSigner.getAddress());
     expect(voted[0]).toBe(true);
 
     await provider.send('evm_increaseTime', [7 * 24 * 60 * 60]);
@@ -285,7 +333,7 @@ describe('core flows e2e', () => {
       signer: priestSigner,
       templAddress,
       templArtifact,
-      proposalId: 0,
+      proposalId: 1,
       txOptions: { nonce: priestNonce++ }
     });
     expect(await templ.paused()).toBe(true);
