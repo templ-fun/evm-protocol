@@ -2,6 +2,15 @@
 
 This document illustrates the components and message flows powering TEMPL's core protocol.
 
+## Flow overview
+- [1. Templ creation](#1-templ-creation)
+- [2. Pay-to-join](#2-pay-to-join)
+- [3. Messaging](#3-messaging)
+- [4. Moderation](#4-moderation)
+- [5. Proposal creation](#5-proposal-creation)
+- [6. Voting](#6-voting)
+- [7. Proposal execution](#7-proposal-execution)
+
 ## Actors & Legend
 - Frontend: Browser app (XMTP Browser SDK) where users deploy, join, chat, and govern.
 - Backend: Node service (XMTP Node SDK) that owns the group, verifies on-chain state, and manages moderation.
@@ -9,7 +18,7 @@ This document illustrates the components and message flows powering TEMPL's core
 - XMTP: Messaging network (env: local|dev|production).
 - SQLite: Backend persistence for groups, delegates, and mutes.
 
-Legend in diagrams: F = Frontend, B = Backend, C = Smart Contract, X = XMTP, D = SQLite.
+Legend in diagrams: F = Frontend, B = Backend, C = Smart Contract, X = XMTP, D = SQLite, M = Member (delegates), P = Priest.
 
 ## 1. Templ creation
 The backend bot creates and owns the XMTP group when a TEMPL is deployed.
@@ -98,7 +107,7 @@ sequenceDiagram
 The backend mirrors on-chain proposal events into the XMTP group.
 ```mermaid
 flowchart LR
-    F[Member] -->|createProposal| C[Smart Contract]
+    M[Member] -->|createProposal| C[Smart Contract]
     C -->|ProposalCreated event| B[Backend]
     B -->|send proposal JSON| X[XMTP Group]
 ```
@@ -111,7 +120,7 @@ Notes
 Members vote on proposals and the backend broadcasts vote events.
 ```mermaid
 flowchart LR
-    F[Member] -->|vote| C[Smart Contract]
+    M[Member] -->|vote| C[Smart Contract]
     C -->|VoteCast event| B[Backend]
     B -->|send vote JSON| X[XMTP Group]
 ```
@@ -120,7 +129,7 @@ flowchart LR
 Execution is limited to an allowlisted set of contract functions.
 ```mermaid
 flowchart LR
-    F[Member] -->|executeProposal| C[Smart Contract]
+    M[Member] -->|executeProposal| C[Smart Contract]
     C -->|call allowlisted action| C
 ```
 
