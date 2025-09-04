@@ -2,6 +2,7 @@ const { expect } = require("chai");
 const { ethers } = require("hardhat");
 const { deployTempl } = require("./utils/deploy");
 const { mintToUsers, purchaseAccess } = require("./utils/mintAndPurchase");
+const { buildWithdrawCall, buildWithdrawAllCall } = require("./utils/callBuilders");
 
 describe("Treasury Withdrawal Reverts", function () {
     let templ;
@@ -22,14 +23,11 @@ describe("Treasury Withdrawal Reverts", function () {
 
     describe("withdrawTreasuryDAO", function () {
         it("should revert with InvalidRecipient", async function () {
-            const iface = new ethers.Interface([
-                "function withdrawTreasuryDAO(address,uint256,string)"
-            ]);
-            const callData = iface.encodeFunctionData("withdrawTreasuryDAO", [
+            const callData = buildWithdrawCall(
                 ethers.ZeroAddress,
                 ethers.parseUnits("1", 18),
                 "Invalid"
-            ]);
+            );
 
             await templ.connect(user1).createProposal(
                 "Bad withdraw",
@@ -49,14 +47,11 @@ describe("Treasury Withdrawal Reverts", function () {
         });
 
         it("should revert with AmountZero", async function () {
-            const iface = new ethers.Interface([
-                "function withdrawTreasuryDAO(address,uint256,string)"
-            ]);
-            const callData = iface.encodeFunctionData("withdrawTreasuryDAO", [
+            const callData = buildWithdrawCall(
                 user1.address,
                 0,
                 "Zero"
-            ]);
+            );
 
             await templ.connect(user1).createProposal(
                 "Zero amount",
@@ -76,15 +71,12 @@ describe("Treasury Withdrawal Reverts", function () {
         });
 
         it("should revert with InsufficientTreasuryBalance", async function () {
-            const iface = new ethers.Interface([
-                "function withdrawTreasuryDAO(address,uint256,string)"
-            ]);
             const treasury = await templ.treasuryBalance();
-            const callData = iface.encodeFunctionData("withdrawTreasuryDAO", [
+            const callData = buildWithdrawCall(
                 user1.address,
                 treasury + 1n,
                 "Too much"
-            ]);
+            );
 
             await templ.connect(user1).createProposal(
                 "Too much",
@@ -106,13 +98,10 @@ describe("Treasury Withdrawal Reverts", function () {
 
     describe("withdrawAllTreasuryDAO", function () {
         it("should revert with InvalidRecipient", async function () {
-            const iface = new ethers.Interface([
-                "function withdrawAllTreasuryDAO(address,string)"
-            ]);
-            const callData = iface.encodeFunctionData("withdrawAllTreasuryDAO", [
+            const callData = buildWithdrawAllCall(
                 ethers.ZeroAddress,
                 "Invalid"
-            ]);
+            );
 
             await templ.connect(user1).createProposal(
                 "Withdraw all bad",
@@ -132,13 +121,10 @@ describe("Treasury Withdrawal Reverts", function () {
         });
 
         it("should revert with NoTreasuryFunds", async function () {
-            const iface = new ethers.Interface([
-                "function withdrawAllTreasuryDAO(address,string)"
-            ]);
-            const callData = iface.encodeFunctionData("withdrawAllTreasuryDAO", [
+            const callData = buildWithdrawAllCall(
                 user1.address,
                 "Valid"
-            ]);
+            );
 
             // First, withdraw all funds to empty treasury
             await templ.connect(user1).createProposal(
