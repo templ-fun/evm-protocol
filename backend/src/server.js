@@ -12,6 +12,7 @@ import Database from 'better-sqlite3';
 import pino from 'pino';
 import { buildDelegateMessage, buildMuteMessage } from '../../shared/signing.js';
 import { requireAddresses, verifySignature } from './middleware/validate.js';
+import { syncXMTP } from '../../shared/xmtp.js';
 
 export const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
 const XMTP_ENV = process.env.XMTP_ENV || 'dev';
@@ -140,7 +141,7 @@ export function createApp(opts) {
         // Capture baseline set of server conversations to help identify the new one
         let beforeIds = [];
         try {
-          if (xmtp.conversations?.sync) await xmtp.conversations.sync();
+          await syncXMTP(xmtp);
           const beforeList = (await xmtp.conversations?.list?.()) ?? [];
           beforeIds = beforeList.map((c) => c.id);
         } catch (err) {
@@ -178,11 +179,7 @@ export function createApp(opts) {
       } catch (err) {
         if (err.message && err.message.includes('succeeded')) {
           logger.info({ message: err.message }, 'XMTP sync message during group creation - attempting deterministic resolve');
-            try {
-              if (xmtp.conversations.sync) await xmtp.conversations.sync();
-            } catch (err) {
-              handleError(err, 'Group recovery sync failed');
-            }
+          try { await syncXMTP(xmtp); } catch (err) { handleError(err, 'Group recovery sync failed'); }
           const afterList = (await xmtp.conversations.list?.()) ?? [];
           const afterIds = afterList.map((c) => c.id);
           // Prefer new conversations that appeared since beforeIds snapshot
@@ -233,23 +230,22 @@ export function createApp(opts) {
             if (!msg.includes('already') && !msg.includes('succeeded')) throw addErr;
           }
           try {
-            if (xmtp.conversations?.sync) await xmtp.conversations.sync();
-            } catch (err) {
-              handleError(err, 'Server sync after priest add failed');
-            }
-            try {
-              const afterAgg = xmtp?.debugInformation?.apiAggregateStatistics?.();
-              logger.info({ beforeAgg, afterAgg }, 'XMTP API stats around priest add');
-            } catch (err) {
-              handleError(err, 'Failed to capture XMTP stats after priest add');
-            }
-            try {
-              // Attempt to read members for diagnostics
-              const members = Array.isArray(group.members) ? group.members : [];
-              logger.info({ members }, 'Group members snapshot after priest add');
-            } catch (err) {
-              handleError(err, 'Failed to snapshot members after priest add');
-            }
+            await syncXMTP(xmtp);
+          } catch (err) {
+            handleError(err, 'Server sync after priest add failed')
+          }
+          try {
+            const afterAgg = xmtp?.debugInformation?.apiAggregateStatistics?.();
+            logger.info({ beforeAgg, afterAgg }, 'XMTP API stats around priest add');
+          } catch (err) {
+            handleError(err, 'Failed to capture XMTP stats after priest add');
+          }
+          try {
+            const members = Array.isArray(group.members) ? group.members : [];
+            logger.info({ members }, 'Group members snapshot after priest add');
+          } catch (e) {
+            handleError(err, 'Failed to snapshot members after priest add');
+          }
         }
       } catch (err) {
         logger.warn({ err }, 'Unable to explicitly add priest by inboxId');
@@ -299,11 +295,11 @@ export function createApp(opts) {
       }
 
       // Ensure the group is fully synced before returning
-      if (xmtp.conversations.sync) {
-        try { await xmtp.conversations.sync(); } catch (err) {
-          if (!String(err?.message || '').includes('succeeded')) throw err;
-          logger.info({ message: err.message }, 'XMTP sync message after creation - ignoring');
-        }
+      try {
+        await syncXMTP(xmtp);
+      } catch (err) {
+        if (!String(err?.message || '').includes('succeeded')) throw err;
+        logger.info({ message: err.message }, 'XMTP sync message after creation - ignoring');
       }
       
       const record = {
@@ -424,7 +420,15 @@ export function createApp(opts) {
       }
 
       // Re-sync server view and warm the conversation
-      try { if (xmtp.conversations.sync) await xmtp.conversations.sync(); logger.info('Server conversations synced after join'); } catch (err) { logger.warn({ err }, 'Server sync after join failed'); }
+      try {
+        await syncXMTP(xmtp);
+        logger.info('Server conversations synced after join');
+      } catch (err) {
+        logger.warn({ err }, 'Server sync after join failed');
+      }
+      try {
+        lastJoin.at = Date.now();
+        lastJoin.payload = { joinMeta };
         try {
           lastJoin.at = Date.now();
           lastJoin.payload = { joinMeta };
@@ -604,7 +608,7 @@ export function createApp(opts) {
           contains: null,
         };
         try {
-          if (xmtp?.conversations?.sync) await xmtp.conversations.sync();
+          await syncXMTP(xmtp);
           const members = Array.isArray(record.group?.members)
             ? record.group.members
             : [];
@@ -639,9 +643,9 @@ export function createApp(opts) {
           membersCount: null,
           members: null,
         };
-        if (refresh && xmtp?.conversations?.sync) {
+        if (refresh) {
           try {
-            await xmtp.conversations.sync();
+            await syncXMTP(xmtp);
           } catch (e) {
             logger.warn({ err: e?.message || e });
           }
@@ -676,9 +680,7 @@ export function createApp(opts) {
   app.get('/debug/conversations', async (req, res) => {
     try {
       const limit = Number.parseInt(String(req.query.limit || '10'), 10) || 10;
-      if (xmtp?.conversations?.sync) {
-        try { await xmtp.conversations.sync(); } catch (e) { logger.warn({ err: e?.message || e }) }
-      }
+      try { await syncXMTP(xmtp); } catch (e) { logger.warn({ err: e?.message || e }); }
       const list = xmtp?.conversations?.list ? await xmtp.conversations.list() : [];
       const ids = (list || []).map(c => c.id);
       const result = { count: ids.length, firstIds: ids.slice(0, limit) };
