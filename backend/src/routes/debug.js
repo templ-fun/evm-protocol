@@ -27,13 +27,21 @@ export default function debugRouter({ xmtp, groups, lastJoin }) {
           contains: null,
         };
         try {
+          // Ensure we have a fresh group handle if not yet hydrated
+          try {
+            if ((!record.group || !record.group.id) && record.groupId && xmtp?.conversations?.getConversationById) {
+              const maybe = await xmtp.conversations.getConversationById(record.groupId);
+              if (maybe) record.group = maybe;
+            }
+          } catch (e) { logger.warn({ e }, 'rehydrate group failed'); }
           await syncXMTP(xmtp);
-          const members = Array.isArray(record.group?.members)
-            ? record.group.members
-            : [];
-          // Emit members only on debug endpoint; keep as-is
-          info.members = members;
-          info.contains = who ? members.includes(who) : null;
+          try { await record.group?.sync?.(); } catch { /* ignore */ }
+          const rawMembers = Array.isArray(record.group?.members) ? record.group.members : [];
+          // Normalize inboxIds to compare regardless of 0x prefix formatting
+          const norm = (s) => String(s || '').replace(/^0x/i, '').toLowerCase();
+          const members = rawMembers.map(norm);
+          info.members = rawMembers; // keep original surface for debug
+          info.contains = who ? members.includes(norm(who)) : null;
         } catch (e) {
           logger.warn({ e }, 'membership debug failed');
         }
