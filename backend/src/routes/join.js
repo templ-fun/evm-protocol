@@ -210,7 +210,8 @@ export default function joinRouter({ xmtp, groups, hasPurchased, lastJoin, datab
           for (let i = 0; i < max; i++) {
             try { await record.group?.sync?.(); } catch { /* ignore */ }
             const members = Array.isArray(record.group?.members) ? record.group.members : [];
-            if (members.includes(inboxId)) break;
+            const norm = (s) => String(s || '').replace(/^0x/i, '').toLowerCase();
+            if (members.some((m) => norm(m) === norm(inboxId))) break;
             await new Promise((r) => setTimeout(r, delay));
           }
         } catch { /* ignore */ }
