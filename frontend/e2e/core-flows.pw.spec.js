@@ -477,6 +477,15 @@ test.describe('TEMPL E2E - All 7 Core Flows', () => {
         const dbgMem = await fetch(`http://localhost:3001/debug/membership?contractAddress=${templAddress}&inboxId=${memberInboxId}`).then(r => r.json());
         if (dbgMem && dbgMem.contains === true) connected = true;
       } catch {}
+      if (!connected) {
+        try {
+          const g = await fetch(`http://localhost:3001/debug/group?contractAddress=${templAddress}&refresh=1`).then(r => r.json());
+          const norm = (s) => String(s || '').replace(/^0x/i, '').toLowerCase();
+          if (Array.isArray(g?.members) && norm(memberInboxId) && g.members.some((m) => norm(m) === norm(memberInboxId))) {
+            connected = true;
+          }
+        } catch {}
+      }
       if (!connected) await new Promise(r => setTimeout(r, 500));
     }
     expect(connected, 'Backend did not confirm membership in time').toBeTruthy();
