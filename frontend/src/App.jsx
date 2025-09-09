@@ -1493,6 +1493,7 @@ function App() {
                 <button className={`btn ${proposeAction==='pause'?'btn-primary':''}`} onClick={() => setProposeAction('pause')}>Pause DAO</button>
                 <button className={`btn ${proposeAction==='unpause'?'btn-primary':''}`} onClick={() => setProposeAction('unpause')}>Unpause DAO</button>
                 <button className={`btn ${proposeAction==='moveTreasuryToMe'?'btn-primary':''}`} onClick={() => setProposeAction('moveTreasuryToMe')}>Move Treasury To Me</button>
+                <button className={`btn ${proposeAction==='disband'?'btn-primary':''}`} onClick={() => setProposeAction('disband')}>Disband Treasury</button>
                 <button className={`btn ${proposeAction==='reprice'?'btn-primary':''}`} onClick={() => setProposeAction('reprice')}>Reprice Entry Fee</button>
                 <button className={`btn ${proposeAction==='none'?'btn-primary':''}`} onClick={() => setProposeAction('none')}>Custom/None</button>
               </div>
@@ -1533,6 +1534,13 @@ function App() {
                       callData = iface.encodeFunctionData('updateConfigDAO', [ethers.ZeroAddress, newFee]);
                       if (!proposeTitle) setProposeTitle('Reprice Entry Fee');
                       if (!proposeDesc) setProposeDesc(`Set new entry fee to ${String(newFee)}`);
+                    } catch {}
+                  } else if (proposeAction === 'disband') {
+                    try {
+                      const iface = new ethers.Interface(['function disbandTreasuryDAO()']);
+                      callData = iface.encodeFunctionData('disbandTreasuryDAO', []);
+                      if (!proposeTitle) setProposeTitle('Disband Treasury');
+                      if (!proposeDesc) setProposeDesc('Allocate treasury equally to all members as claimable rewards');
                     } catch {}
                   }
                   await proposeVote({ ethers, signer, templAddress, templArtifact, title: proposeTitle || 'Untitled', description: (proposeDesc || proposeTitle || 'Proposal'), callData });

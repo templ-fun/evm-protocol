@@ -121,6 +121,12 @@ contract TEMPL is ReentrancyGuard {
     );
 
     event ContractPaused(bool isPaused);
+    event TreasuryDisbanded(
+        uint256 indexed proposalId,
+        uint256 amount,
+        uint256 perMember,
+        uint256 remainder
+    );
 
     modifier onlyMember() {
         if (!members[msg.sender].purchased) revert TemplErrors.NotMember();
@@ -417,7 +423,8 @@ contract TEMPL is ReentrancyGuard {
             selector == this.setPausedDAO.selector ||
             selector == this.updateConfigDAO.selector ||
             selector == this.withdrawTreasuryDAO.selector ||
-            selector == this.withdrawAllTreasuryDAO.selector
+            selector == this.withdrawAllTreasuryDAO.selector ||
+            selector == this.disbandTreasuryDAO.selector
         );
     }
     
@@ -499,6 +506,35 @@ contract TEMPL is ReentrancyGuard {
     function setPausedDAO(bool _paused) external onlyDAO {
         paused = _paused;
         emit ContractPaused(_paused);
+    }
+
+    /**
+     * @notice Distribute entire treasury equally among all current members by allocating to the member pool.
+     * @dev Increases memberPoolBalance by treasury amount and increments cumulativeMemberRewards by per-member share.
+     *      Any division remainder is added to memberRewardRemainder for future distribution.
+     */
+    function disbandTreasuryDAO() external onlyDAO {
+        uint256 amount = treasuryBalance;
+        if (amount == 0) revert TemplErrors.NoTreasuryFunds();
+        uint256 n = memberList.length;
+        if (n == 0) revert TemplErrors.NoMembers();
+
+        uint256 proposalId = executingProposalId;
+        if (proposalId >= proposalCount) revert TemplErrors.InvalidProposal();
+
+        // Move accounting from treasury to member pool
+        treasuryBalance = 0;
+        memberPoolBalance += amount;
+
+        uint256 perMember = amount / n;
+        uint256 remainder = amount % n;
+
+        // Make per-member share claimable for all members via cumulative global increment
+        cumulativeMemberRewards += perMember;
+        // Carry remainder for future distribution to keep accounting exact
+        memberRewardRemainder += remainder;
+
+        emit TreasuryDisbanded(proposalId, amount, perMember, remainder);
     }
     
     /**

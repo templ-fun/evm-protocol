@@ -70,4 +70,6 @@ library TemplErrors {
     error InvalidCallData();
     /// @notice Thrown when attempting to change the access token via governance.
     error TokenChangeDisabled();
+    /// @notice Thrown when an action requires members but none exist.
+    error NoMembers();
 }
