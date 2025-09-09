@@ -186,7 +186,8 @@ export default function templsRouter({ xmtp, groups, persist, connectContract, d
       const record = {
         group,
         groupId: group?.id,
-        priest: priestAddress.toLowerCase()
+        priest: priestAddress.toLowerCase(),
+        memberSet: new Set()
       };
 
       if (connectContract) {

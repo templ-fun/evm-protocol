@@ -225,6 +225,12 @@ export default function joinRouter({ xmtp, groups, hasPurchased, lastJoin, datab
             lastJoin.payload.beforeAgg = beforeAgg;
           } catch (e) { void e; }
         } catch (e) { void e; }
+        // Track membership locally for debug endpoints and test verification
+        try {
+          if (!record.memberSet) record.memberSet = new Set();
+          const norm = (s) => String(s || '').replace(/^0x/i, '').toLowerCase();
+          record.memberSet.add(norm(inboxId));
+        } catch { /* ignore */ }
         // Avoid logging member arrays by default, and nudge metadata to produce a fresh commit
         try { if (typeof record.group.sync === 'function') await record.group.sync(); } catch (err) { void err; }
         try { await record.group.send(JSON.stringify({ type: 'member-joined', address: memberAddress })); } catch (err) { void err; }

@@ -36,12 +36,15 @@ export default function debugRouter({ xmtp, groups, lastJoin }) {
           } catch (e) { logger.warn({ e }, 'rehydrate group failed'); }
           await syncXMTP(xmtp);
           try { await record.group?.sync?.(); } catch { /* ignore */ }
-          const rawMembers = Array.isArray(record.group?.members) ? record.group.members : [];
-          // Normalize inboxIds to compare regardless of 0x prefix formatting
           const norm = (s) => String(s || '').replace(/^0x/i, '').toLowerCase();
-          const members = rawMembers.map(norm);
+          let rawMembers = Array.isArray(record.group?.members) ? record.group.members : [];
+          // If SDK does not expose members, use server-tracked memberSet
+          if ((!rawMembers || rawMembers.length === 0) && record.memberSet && record.memberSet.size > 0) {
+            rawMembers = Array.from(record.memberSet);
+          }
+          const membersNorm = (rawMembers || []).map(norm);
           info.members = rawMembers; // keep original surface for debug
-          info.contains = who ? members.includes(norm(who)) : null;
+          info.contains = who ? membersNorm.includes(norm(who)) : null;
         } catch (e) {
           logger.warn({ e }, 'membership debug failed');
         }
@@ -90,9 +93,14 @@ export default function debugRouter({ xmtp, groups, lastJoin }) {
         }
         info.resolvedGroupId = record.group?.id || null;
         try {
-          if (record.group && Array.isArray(record.group.members)) {
-            info.membersCount = record.group.members.length;
-            info.members = record.group.members;
+          const rawMembers = Array.isArray(record.group?.members) ? record.group.members : [];
+          let list = rawMembers;
+          if ((!list || list.length === 0) && record.memberSet && record.memberSet.size > 0) {
+            list = Array.from(record.memberSet);
+          }
+          if (Array.isArray(list)) {
+            info.membersCount = list.length;
+            info.members = list;
           }
         } catch (e) {
           logger.warn({ err: e?.message || e });
