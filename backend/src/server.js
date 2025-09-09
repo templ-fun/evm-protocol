@@ -74,7 +74,7 @@ export function createApp(opts) {
       for (const row of rows) {
         try {
           const group = await xmtp.conversations.getConversationById(row.groupId);
-          groups.set(row.contract, { group, groupId: row.groupId, priest: row.priest });
+          groups.set(row.contract, { group, groupId: row.groupId, priest: row.priest, memberSet: new Set() });
         } catch {
           /* ignore */
         }
