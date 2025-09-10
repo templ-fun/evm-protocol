@@ -26,17 +26,13 @@ describe("Treasury Withdrawal Reverts", function () {
 
     describe("withdrawTreasuryDAO", function () {
         it("should revert with InvalidRecipient", async function () {
-            const callData = encodeWithdrawTreasuryDAO(
+            await templ.connect(user1).createProposalWithdrawTreasury(
+                "Bad withdraw",
+                "Invalid recipient",
                 token.target,
                 ethers.ZeroAddress,
                 ethers.parseUnits("1", 18),
-                "Invalid"
-            );
-
-            await templ.connect(user1).createProposal(
-                "Bad withdraw",
-                "Invalid recipient",
-                callData,
+                "Invalid",
                 7 * 24 * 60 * 60
             );
 
@@ -51,17 +47,13 @@ describe("Treasury Withdrawal Reverts", function () {
         });
 
         it("should revert with AmountZero", async function () {
-            const callData = encodeWithdrawTreasuryDAO(
+            await templ.connect(user1).createProposalWithdrawTreasury(
+                "Zero amount",
+                "Zero withdrawal",
                 token.target,
                 user1.address,
                 0,
-                "Zero"
-            );
-
-            await templ.connect(user1).createProposal(
-                "Zero amount",
-                "Zero withdrawal",
-                callData,
+                "Zero",
                 7 * 24 * 60 * 60
             );
 
@@ -77,17 +69,13 @@ describe("Treasury Withdrawal Reverts", function () {
 
         it("should revert with InsufficientTreasuryBalance", async function () {
             const treasury = await templ.treasuryBalance();
-            const callData = encodeWithdrawTreasuryDAO(
+            await templ.connect(user1).createProposalWithdrawTreasury(
+                "Too much",
+                "Exceeds balance",
                 token.target,
                 user1.address,
                 treasury + 1n,
-                "Too much"
-            );
-
-            await templ.connect(user1).createProposal(
                 "Too much",
-                "Exceeds balance",
-                callData,
                 7 * 24 * 60 * 60
             );
 
@@ -105,17 +93,13 @@ describe("Treasury Withdrawal Reverts", function () {
             const OtherToken = await ethers.getContractFactory("TestToken");
             const otherToken = await OtherToken.deploy("Other", "OTH", 18);
 
-            const callData = encodeWithdrawTreasuryDAO(
+            await templ.connect(user1).createProposalWithdrawTreasury(
+                "Withdraw other token",
+                "should fail",
                 otherToken.target,
                 user1.address,
                 1n,
-                "No balance"
-            );
-
-            await templ.connect(user1).createProposal(
-                "Withdraw other token",
-                "should fail",
-                callData,
+                "No balance",
                 7 * 24 * 60 * 60
             );
 
@@ -133,16 +117,12 @@ describe("Treasury Withdrawal Reverts", function () {
 
     describe("withdrawAllTreasuryDAO", function () {
         it("should revert with InvalidRecipient", async function () {
-            const callData = encodeWithdrawAllTreasuryDAO(
-                token.target,
-                ethers.ZeroAddress,
-                "Invalid"
-            );
-
-            await templ.connect(user1).createProposal(
+            await templ.connect(user1).createProposalWithdrawAllTreasury(
                 "Withdraw all bad",
                 "Invalid recipient",
-                callData,
+                token.target,
+                ethers.ZeroAddress,
+                "Invalid",
                 7 * 24 * 60 * 60
             );
 
@@ -157,17 +137,13 @@ describe("Treasury Withdrawal Reverts", function () {
         });
 
         it("should revert with NoTreasuryFunds", async function () {
-            const callData = encodeWithdrawAllTreasuryDAO(
-                token.target,
-                user1.address,
-                "Valid"
-            );
-
             // First, withdraw all funds to empty treasury
-            await templ.connect(user1).createProposal(
+            await templ.connect(user1).createProposalWithdrawAllTreasury(
                 "Withdraw all",
                 "Empty treasury",
-                callData,
+                token.target,
+                user1.address,
+                "Valid",
                 7 * 24 * 60 * 60
             );
 
@@ -179,10 +155,12 @@ describe("Treasury Withdrawal Reverts", function () {
             expect(await templ.treasuryBalance()).to.equal(0n);
 
             // Now, attempt another withdrawAll with empty treasury
-            await templ.connect(user1).createProposal(
+            await templ.connect(user1).createProposalWithdrawAllTreasury(
                 "Withdraw again",
                 "No funds",
-                callData,
+                token.target,
+                user1.address,
+                "Valid",
                 7 * 24 * 60 * 60
             );
 
@@ -199,16 +177,12 @@ describe("Treasury Withdrawal Reverts", function () {
             const OtherToken = await ethers.getContractFactory("TestToken");
             const otherToken = await OtherToken.deploy("Other", "OTH", 18);
 
-            const callData = encodeWithdrawAllTreasuryDAO(
-                otherToken.target,
-                user1.address,
-                "no balance"
-            );
-
-            await templ.connect(user1).createProposal(
+            await templ.connect(user1).createProposalWithdrawAllTreasury(
                 "Withdraw absent token",
                 "nothing to withdraw",
-                callData,
+                otherToken.target,
+                user1.address,
+                "no balance",
                 7 * 24 * 60 * 60
             );
 
@@ -222,4 +196,3 @@ describe("Treasury Withdrawal Reverts", function () {
         });
     });
 });
-

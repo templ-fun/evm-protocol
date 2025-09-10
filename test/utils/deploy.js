@@ -20,6 +20,10 @@ async function deployTempl({ entryFee = ethers.parseUnits("100", 18) } = {}) {
       entryFee
     );
     await templ.waitForDeployment();
+    try {
+      const { attachCreateProposalCompat } = require("./proposal");
+      attachCreateProposalCompat(templ);
+    } catch {}
 
     return {
       templ,

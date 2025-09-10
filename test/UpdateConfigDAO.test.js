@@ -2,10 +2,7 @@ const { expect } = require("chai");
 const { ethers } = require("hardhat");
 const { deployTempl } = require("./utils/deploy");
 const { mintToUsers, purchaseAccess } = require("./utils/mintAndPurchase");
-const {
-    encodeUpdateConfigDAO,
-    encodeWithdrawAllTreasuryDAO,
-} = require("./utils/callDataBuilders");
+const { encodeUpdateConfigDAO, encodeWithdrawAllTreasuryDAO } = require("./utils/callDataBuilders");
 
 describe("updateConfigDAO", function () {
     const ENTRY_FEE = ethers.parseUnits("100", 18);
@@ -26,68 +23,37 @@ describe("updateConfigDAO", function () {
     });
 
     it("reverts when entry fee is less than 10", async function () {
-        const smallFee = 5;
-        const callData = encodeUpdateConfigDAO(
-            ethers.ZeroAddress,
-            smallFee
-        );
-
-        await templ.connect(member).createProposal(
-            "Small Fee",
-            "desc",
-            callData,
-            7 * 24 * 60 * 60
-        );
-
-        await templ.connect(member).vote(0, true);
-        await ethers.provider.send("evm_increaseTime", [8 * 24 * 60 * 60]);
-        await ethers.provider.send("evm_mine");
-
-        await expect(templ.executeProposal(0))
-            .to.be.revertedWithCustomError(templ, "EntryFeeTooSmall");
+        await expect(
+            templ.connect(member).createProposalUpdateConfig(
+                "Small Fee",
+                "desc",
+                5,
+                7 * 24 * 60 * 60
+            )
+        ).to.be.revertedWithCustomError(templ, "EntryFeeTooSmall");
     });
 
     it("reverts when entry fee is not divisible by 10", async function () {
-        const invalidFee = ENTRY_FEE + 5n;
-        const callData = encodeUpdateConfigDAO(
-            ethers.ZeroAddress,
-            invalidFee
-        );
-
-        await templ.connect(member).createProposal(
-            "Invalid Fee",
-            "desc",
-            callData,
-            7 * 24 * 60 * 60
-        );
-
-        await templ.connect(member).vote(0, true);
-        await ethers.provider.send("evm_increaseTime", [8 * 24 * 60 * 60]);
-        await ethers.provider.send("evm_mine");
-
-        await expect(templ.executeProposal(0))
-            .to.be.revertedWithCustomError(templ, "InvalidEntryFee");
+        await expect(
+            templ.connect(member).createProposalUpdateConfig(
+                "Invalid Fee",
+                "desc",
+                ENTRY_FEE + 5n,
+                7 * 24 * 60 * 60
+            )
+        ).to.be.revertedWithCustomError(templ, "InvalidEntryFee");
     });
 
-    it("reverts on token change attempts (token change disabled)", async function () {
-        const fakeToken = accounts[9];
-        const callData = encodeUpdateConfigDAO(
-            fakeToken.address,
-            0
-        );
-
-        await templ.connect(member).createProposal(
-            "Try Token Change",
-            "should revert",
-            callData,
+    it("updateConfig proposal executes when token unchanged", async function () {
+        await templ.connect(member).createProposalUpdateConfig(
+            "Reprice",
+            "ok",
+            ENTRY_FEE + 10n,
             7 * 24 * 60 * 60
         );
-
         await templ.connect(member).vote(0, true);
         await ethers.provider.send("evm_increaseTime", [8 * 24 * 60 * 60]);
         await ethers.provider.send("evm_mine");
-
-        await expect(templ.executeProposal(0))
-            .to.be.revertedWithCustomError(templ, "TokenChangeDisabled");
+        await expect(templ.executeProposal(0)).to.not.be.reverted;
     });
 });

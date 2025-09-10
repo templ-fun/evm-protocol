@@ -18,17 +18,8 @@ describe("Self Purchase Guard", function () {
     await purchaseAccess(templ, token, [member]);
   });
 
-  it("reverts when DAO attempts to propose self purchase", async function () {
-    const callData = encodePurchaseAccess();
-
-    await expect(
-      templ.connect(member).createProposal(
-        "Self Purchase",
-        "DAO tries to buy access",
-        callData,
-        7 * 24 * 60 * 60
-      )
-    ).to.be.revertedWithCustomError(templ, "InvalidCallData");
+  it("does not expose arbitrary purchase proposals (typed-only governance)", async function () {
+    expect(typeof templ.createProposal).to.equal('undefined');
   });
 
   it("reverts when DAO invokes helper calling purchaseAccess", async function () {

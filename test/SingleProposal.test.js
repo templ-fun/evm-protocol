@@ -2,10 +2,7 @@ const { expect } = require("chai");
 const { ethers } = require("hardhat");
 const { deployTempl } = require("./utils/deploy");
 const { mintToUsers, purchaseAccess } = require("./utils/mintAndPurchase");
-const {
-    encodeWithdrawTreasuryDAO,
-    encodeSetPausedDAO,
-} = require("./utils/callDataBuilders");
+const { encodeWithdrawTreasuryDAO, encodeSetPausedDAO } = require("./utils/callDataBuilders");
 
 describe("Single Active Proposal Restriction", function () {
     let templ;
@@ -33,10 +30,13 @@ describe("Single Active Proposal Restriction", function () {
                 "Test withdrawal"
             );
 
-            await expect(templ.connect(member1).createProposal(
+            await expect(templ.connect(member1).createProposalWithdrawTreasury(
                 "First Proposal",
                 "Testing single proposal restriction",
-                callData,
+                token.target,
+                member1.address,
+                ethers.parseUnits("10", 18),
+                "Test withdrawal",
                 7 * 24 * 60 * 60
             )).to.emit(templ, "ProposalCreated");
 
@@ -53,18 +53,24 @@ describe("Single Active Proposal Restriction", function () {
             );
 
             // Create first proposal
-            await templ.connect(member1).createProposal(
+            await templ.connect(member1).createProposalWithdrawTreasury(
                 "First Proposal",
                 "Description 1",
-                callData,
+                token.target,
+                member1.address,
+                ethers.parseUnits("10", 18),
+                "Test",
                 7 * 24 * 60 * 60
             );
 
             // Try to create second proposal - should fail
-            await expect(templ.connect(member1).createProposal(
+            await expect(templ.connect(member1).createProposalWithdrawTreasury(
                 "Second Proposal",
                 "Description 2",
-                callData,
+                token.target,
+                member1.address,
+                ethers.parseUnits("10", 18),
+                "Test",
                 7 * 24 * 60 * 60
             )).to.be.revertedWithCustomError(templ, "ActiveProposalExists");
         });
@@ -78,26 +84,35 @@ describe("Single Active Proposal Restriction", function () {
             );
 
             // Member 1 creates proposal
-            await templ.connect(member1).createProposal(
+            await templ.connect(member1).createProposalWithdrawTreasury(
                 "Member 1 Proposal",
                 "Description",
-                callData,
+                token.target,
+                member1.address,
+                ethers.parseUnits("10", 18),
+                "Test",
                 7 * 24 * 60 * 60
             );
 
             // Member 2 creates proposal - should succeed
-            await templ.connect(member2).createProposal(
+            await templ.connect(member2).createProposalWithdrawTreasury(
                 "Member 2 Proposal",
                 "Description",
-                callData,
+                token.target,
+                member1.address,
+                ethers.parseUnits("10", 18),
+                "Test",
                 7 * 24 * 60 * 60
             );
 
             // Member 3 creates proposal - should succeed
-            await templ.connect(member3).createProposal(
+            await templ.connect(member3).createProposalWithdrawTreasury(
                 "Member 3 Proposal",
                 "Description",
-                callData,
+                token.target,
+                member1.address,
+                ethers.parseUnits("10", 18),
+                "Test",
                 7 * 24 * 60 * 60
             );
 
@@ -115,11 +130,11 @@ describe("Single Active Proposal Restriction", function () {
             const callData2 = encodeSetPausedDAO(false);
 
             // Create and execute first proposal
-            await templ.connect(member1).createProposal(
+            await templ.connect(member1).createProposalSetPaused(
                 "First Proposal",
                 "Pause contract",
-                callData1,
-                7 * 24 * 60 * 60 // 7 days
+                true,
+                7 * 24 * 60 * 60
             );
 
             // Vote to pass
@@ -137,10 +152,10 @@ describe("Single Active Proposal Restriction", function () {
             expect(await templ.activeProposalId(member1.address)).to.equal(0);
 
             // Now member1 should be able to create a new proposal
-            await expect(templ.connect(member1).createProposal(
+            await expect(templ.connect(member1).createProposalSetPaused(
                 "Second Proposal",
                 "Unpause contract",
-                callData2,
+                false,
                 7 * 24 * 60 * 60
             )).to.emit(templ, "ProposalCreated");
 
@@ -157,10 +172,13 @@ describe("Single Active Proposal Restriction", function () {
             );
 
             // Create first proposal
-            await templ.connect(member1).createProposal(
+            await templ.connect(member1).createProposalWithdrawTreasury(
                 "First Proposal",
                 "Will expire",
-                callData,
+                token.target,
+                member1.address,
+                ethers.parseUnits("10", 18),
+                "Test",
                 7 * 24 * 60 * 60 // 7 days
             );
 
@@ -169,10 +187,13 @@ describe("Single Active Proposal Restriction", function () {
             await ethers.provider.send("evm_mine");
 
             // Try to create second proposal - should succeed because first one expired
-            await expect(templ.connect(member1).createProposal(
+            await expect(templ.connect(member1).createProposalWithdrawTreasury(
                 "Second Proposal",
                 "After expiry",
-                callData,
+                token.target,
+                member1.address,
+                ethers.parseUnits("10", 18),
+                "Test",
                 7 * 24 * 60 * 60
             )).to.emit(templ, "ProposalCreated");
 
@@ -189,10 +210,13 @@ describe("Single Active Proposal Restriction", function () {
             );
 
             // Create first proposal
-            await templ.connect(member1).createProposal(
+            await templ.connect(member1).createProposalWithdrawTreasury(
                 "First Proposal",
                 "Will fail",
-                callData,
+                token.target,
+                member1.address,
+                ethers.parseUnits("10", 18),
+                "Test",
                 7 * 24 * 60 * 60
             );
 
@@ -263,17 +287,13 @@ describe("Single Active Proposal Restriction", function () {
             await ethers.provider.send("evm_mine");
 
             // Now should be able to create another proposal since the first expired
-            const callData = encodeWithdrawTreasuryDAO(
+            await expect(templ.connect(member1).createProposalWithdrawTreasury(
+                "Another Proposal",
+                "After expiry",
                 token.target,
                 member1.address,
                 ethers.parseUnits("10", 18),
-                "Test"
-            );
-
-            await expect(templ.connect(member1).createProposal(
-                "Another Proposal",
-                "After expiry",
-                callData,
+                "Test",
                 7 * 24 * 60 * 60
             )).to.emit(templ, "ProposalCreated");
         });
@@ -284,10 +304,10 @@ describe("Single Active Proposal Restriction", function () {
             const callData = encodeSetPausedDAO(true);
 
             // First proposal gets ID 0
-            await templ.connect(member1).createProposal(
+            await templ.connect(member1).createProposalSetPaused(
                 "Proposal Zero",
                 "First proposal",
-                callData,
+                true,
                 7 * 24 * 60 * 60
             );
 
@@ -312,10 +332,10 @@ describe("Single Active Proposal Restriction", function () {
         it("Should track active proposals correctly across multiple cycles", async function () {
 
             // Cycle 1: Create, pass, execute
-            await templ.connect(member1).createProposal(
+            await templ.connect(member1).createProposalSetPaused(
                 "Cycle 1",
                 "First cycle",
-                encodeSetPausedDAO(true),
+                true,
                 7 * 24 * 60 * 60
             );
             
@@ -326,10 +346,10 @@ describe("Single Active Proposal Restriction", function () {
             await templ.executeProposal(0);
 
             // Cycle 2: Create, let expire
-            await templ.connect(member1).createProposal(
+            await templ.connect(member1).createProposalSetPaused(
                 "Cycle 2",
                 "Second cycle",
-                encodeSetPausedDAO(false),
+                false,
                 7 * 24 * 60 * 60
             );
             
@@ -337,10 +357,10 @@ describe("Single Active Proposal Restriction", function () {
             await ethers.provider.send("evm_mine");
 
             // Cycle 3: Create new one after expiry
-            await templ.connect(member1).createProposal(
+            await templ.connect(member1).createProposalSetPaused(
                 "Cycle 3",
                 "Third cycle",
-                encodeSetPausedDAO(true),
+                true,
                 7 * 24 * 60 * 60
             );
 

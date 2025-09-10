@@ -26,17 +26,13 @@ describe("Vote reverts", function () {
     });
 
     it("reverts when voting after endTime", async function () {
-        const callData = encodeWithdrawTreasuryDAO(
+        await templ.connect(member1).createProposalWithdrawTreasury(
+            "Test Proposal",
+            "Test description",
             token.target,
             member1.address,
             ethers.parseUnits("10", 18),
-            "Test"
-        );
-
-        await templ.connect(member1).createProposal(
-            "Test Proposal",
-            "Test description",
-            callData,
+            "Test",
             7 * 24 * 60 * 60
         );
 
@@ -47,4 +43,3 @@ describe("Vote reverts", function () {
             .to.be.revertedWithCustomError(templ, "VotingEnded");
     });
 });
-
