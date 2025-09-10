@@ -15,9 +15,16 @@ contract TEMPL is ReentrancyGuard {
     using SafeERC20 for IERC20;
     using TemplErrors for *;
 
+    // Constants for fee split (must sum to 100)
+    uint256 private constant BURN_BP = 30;
+    uint256 private constant TREASURY_BP = 30;
+    uint256 private constant MEMBER_POOL_BP = 30;
+    uint256 private constant PROTOCOL_BP = 10;
+    address private constant DEAD_ADDRESS = 0x000000000000000000000000000000000000dEaD;
+
     address public immutable priest;
     address public immutable protocolFeeRecipient;
-    address public accessToken;
+    address public immutable accessToken;
     uint256 public entryFee;
     uint256 public treasuryBalance;
     uint256 public memberPoolBalance;
@@ -43,7 +50,15 @@ contract TEMPL is ReentrancyGuard {
         address proposer;
         string title;
         string description;
-        bytes callData;
+        bytes callData; // kept for compatibility/UX; decoded fields below are source of truth
+        Action action;
+        // Decoded parameters (used based on action)
+        address token;
+        address recipient;
+        uint256 amount;
+        string reason;
+        bool paused;
+        uint256 newEntryFee;
         uint256 yesVotes;
         uint256 noVotes;
         uint256 endTime;
@@ -54,6 +69,34 @@ contract TEMPL is ReentrancyGuard {
         mapping(address => bool) voteChoice;
     }
     
+    function _populateProposalParams(Proposal storage p, bytes calldata cd) internal {
+        bytes4 selector = bytes4(cd[0:4]);
+        if (selector == this.setPausedDAO.selector) {
+            if (cd.length != 4 + 32) revert TemplErrors.InvalidCallData();
+            bool pausedVal = abi.decode(cd[4:], (bool));
+            p.action = Action.SetPaused;
+            p.paused = pausedVal;
+        } else if (selector == this.updateConfigDAO.selector) {
+            if (cd.length != 4 + 64) revert TemplErrors.InvalidCallData();
+            (p.token, p.newEntryFee) = abi.decode(cd[4:], (address, uint256));
+            p.action = Action.UpdateConfig;
+        } else if (selector == this.withdrawTreasuryDAO.selector) {
+            if (cd.length < 4 + 160) revert TemplErrors.InvalidCallData();
+            (p.token, p.recipient, p.amount, p.reason) = abi.decode(cd[4:], (address, address, uint256, string));
+            p.action = Action.WithdrawTreasury;
+        } else if (selector == this.withdrawAllTreasuryDAO.selector) {
+            if (cd.length < 4 + 128) revert TemplErrors.InvalidCallData();
+            (p.token, p.recipient, p.reason) = abi.decode(cd[4:], (address, address, string));
+            p.action = Action.WithdrawAllTreasury;
+        } else if (selector == this.disbandTreasuryDAO.selector) {
+            if (cd.length != 4) revert TemplErrors.InvalidCallData();
+            p.action = Action.DisbandTreasury;
+        } else {
+            revert TemplErrors.InvalidCallData();
+        }
+    }
+
+    // no longer needed: calldata can be range-sliced directly
     uint256 public proposalCount;
     mapping(uint256 => Proposal) public proposals;
     mapping(address => uint256) public activeProposalId;
@@ -62,7 +105,14 @@ contract TEMPL is ReentrancyGuard {
     uint256 public constant MIN_VOTING_PERIOD = 7 days;
     uint256 public constant MAX_VOTING_PERIOD = 30 days;
 
-    uint256 private executingProposalId = type(uint256).max;
+    // Governance actions supported by the DAO
+    enum Action {
+        SetPaused,
+        UpdateConfig,
+        WithdrawTreasury,
+        WithdrawAllTreasury,
+        DisbandTreasury
+    }
     
     uint256 public totalPurchases;
     uint256 public totalBurned;
@@ -102,11 +152,7 @@ contract TEMPL is ReentrancyGuard {
         uint256 timestamp
     );
     
-    event ProposalExecuted(
-        uint256 indexed proposalId,
-        bool success,
-        bytes returnData
-    );
+    event ProposalExecuted(uint256 indexed proposalId, bool success, bytes returnData);
     
     event TreasuryAction(
         uint256 indexed proposalId,
@@ -190,8 +236,9 @@ contract TEMPL is ReentrancyGuard {
         Member storage m = members[msg.sender];
         if (m.purchased) revert TemplErrors.AlreadyPurchased();
 
-        uint256 thirtyPercent = (entryFee * 30) / 100;
-        uint256 tenPercent = (entryFee * 10) / 100;
+        uint256 burnAmount = (entryFee * BURN_BP) / 100;
+        uint256 toContract = (entryFee * (TREASURY_BP + MEMBER_POOL_BP)) / 100; // 60%
+        uint256 protocolAmount = (entryFee * PROTOCOL_BP) / 100;
 
         if (IERC20(accessToken).balanceOf(msg.sender) < entryFee) revert TemplErrors.InsufficientBalance();
 
@@ -203,7 +250,7 @@ contract TEMPL is ReentrancyGuard {
         totalPurchases++;
 
         if (memberList.length > 1) {
-            uint256 totalRewards = thirtyPercent + memberRewardRemainder;
+            uint256 totalRewards = ((entryFee * MEMBER_POOL_BP) / 100) + memberRewardRemainder; // 30% + remainder
             uint256 rewardPerMember = totalRewards / (memberList.length - 1);
             memberRewardRemainder = totalRewards % (memberList.length - 1);
             cumulativeMemberRewards += rewardPerMember;
@@ -211,30 +258,29 @@ contract TEMPL is ReentrancyGuard {
 
         m.rewardSnapshot = cumulativeMemberRewards;
 
+        uint256 thirtyPercent = (entryFee * 30) / 100; // retained for totals/events clarity
         treasuryBalance += thirtyPercent;
         memberPoolBalance += thirtyPercent;
-        totalBurned += thirtyPercent;
+        totalBurned += burnAmount;
         totalToTreasury += thirtyPercent;
         totalToMemberPool += thirtyPercent;
-        totalToProtocol += tenPercent;
+        totalToProtocol += protocolAmount;
 
         IERC20 token = IERC20(accessToken);
-        token.safeTransferFrom(
-            msg.sender,
-            address(0x000000000000000000000000000000000000dEaD),
-            thirtyPercent
-        );
-        token.safeTransferFrom(msg.sender, address(this), thirtyPercent);
-        token.safeTransferFrom(msg.sender, address(this), thirtyPercent);
-        token.safeTransferFrom(msg.sender, protocolFeeRecipient, tenPercent);
+        // 30% burn
+        token.safeTransferFrom(msg.sender, DEAD_ADDRESS, burnAmount);
+        // 60% to contract (30% treasury + 30% member pool)
+        token.safeTransferFrom(msg.sender, address(this), toContract);
+        // 10% to protocol fee recipient
+        token.safeTransferFrom(msg.sender, protocolFeeRecipient, protocolAmount);
         
         emit AccessPurchased(
             msg.sender,
             entryFee,
+            burnAmount,
             thirtyPercent,
             thirtyPercent,
-            thirtyPercent,
-            tenPercent,
+            protocolAmount,
             block.timestamp,
             block.number,
             totalPurchases - 1
@@ -253,21 +299,13 @@ contract TEMPL is ReentrancyGuard {
     function createProposal(
         string memory _title,
         string memory _description,
-        bytes memory _callData,
+        bytes calldata _callData,
         uint256 _votingPeriod
     ) external onlyMember returns (uint256) {
         if (bytes(_title).length == 0) revert TemplErrors.TitleRequired();
         if (bytes(_description).length == 0) revert TemplErrors.DescriptionRequired();
         if (_callData.length == 0) revert TemplErrors.CallDataRequired();
         if (_callData.length < 4) revert TemplErrors.CallDataTooShort();
-        // Restrict proposals to allowed DAO function selectors
-        bytes4 selector;
-        assembly {
-            selector := mload(add(_callData, 32))
-        }
-        bool allowed = _isAllowedSelector(selector);
-        if (!allowed) revert TemplErrors.InvalidCallData();
-        
         if (hasActiveProposal[msg.sender]) {
             uint256 existingId = activeProposalId[msg.sender];
             Proposal storage existingProposal = proposals[existingId];
@@ -294,6 +332,7 @@ contract TEMPL is ReentrancyGuard {
         proposal.title = _title;
         proposal.description = _description;
         proposal.callData = _callData;
+        _populateProposalParams(proposal, _callData);
         proposal.endTime = block.timestamp + period;
         proposal.createdAt = block.timestamp;
         proposal.eligibleVoters = memberList.length;
@@ -372,62 +411,29 @@ contract TEMPL is ReentrancyGuard {
 
         proposal.executed = true;
 
-        address proposer = proposal.proposer;
-        if (hasActiveProposal[proposer] && activeProposalId[proposer] == _proposalId) {
-            hasActiveProposal[proposer] = false;
-            activeProposalId[proposer] = 0;
+        address proposerAddr = proposal.proposer;
+        if (hasActiveProposal[proposerAddr] && activeProposalId[proposerAddr] == _proposalId) {
+            hasActiveProposal[proposerAddr] = false;
+            activeProposalId[proposerAddr] = 0;
         }
 
-        _startProposalExecution(_proposalId);
-        bytes memory returnData = _executeCall(proposal.callData);
-        _clearProposalExecution();
-
-        emit ProposalExecuted(_proposalId, true, returnData);
-    }
-
-    function _startProposalExecution(uint256 proposalId) internal {
-        executingProposalId = proposalId;
-    }
-
-    function _clearProposalExecution() internal {
-        executingProposalId = type(uint256).max;
-    }
-
-    function _executeCall(bytes memory callData) internal returns (bytes memory) {
-        bytes4 selector;
-        assembly {
-            selector := mload(add(callData, 32))
+        // Execute the decoded action with stored parameters
+        if (proposal.action == Action.SetPaused) {
+            _setPaused(proposal.paused);
+        } else if (proposal.action == Action.UpdateConfig) {
+            _updateConfig(proposal.token, proposal.newEntryFee);
+        } else if (proposal.action == Action.WithdrawTreasury) {
+            _withdrawTreasury(proposal.token, proposal.recipient, proposal.amount, proposal.reason, _proposalId);
+        } else if (proposal.action == Action.WithdrawAllTreasury) {
+            _withdrawAllTreasury(proposal.token, proposal.recipient, proposal.reason, _proposalId);
+        } else if (proposal.action == Action.DisbandTreasury) {
+            _disbandTreasury(_proposalId);
         }
 
-        // Allow only specific DAO functions to be executed by proposals
-        bool allowed = _isAllowedSelector(selector);
-
-        if (!allowed) {
-            revert TemplErrors.InvalidCallData();
-        }
-
-        (bool success, bytes memory returnData) = address(this).call(callData);
-        if (!success) {
-            if (returnData.length > 0) {
-                assembly {
-                    revert(add(returnData, 32), mload(returnData))
-                }
-            } else {
-                revert TemplErrors.ProposalExecutionFailed();
-            }
-        }
-        return returnData;
+        emit ProposalExecuted(_proposalId, true, hex"");
     }
 
-    function _isAllowedSelector(bytes4 selector) internal pure returns (bool) {
-        return (
-            selector == this.setPausedDAO.selector ||
-            selector == this.updateConfigDAO.selector ||
-            selector == this.withdrawTreasuryDAO.selector ||
-            selector == this.withdrawAllTreasuryDAO.selector ||
-            selector == this.disbandTreasuryDAO.selector
-        );
-    }
+    // (legacy decoder removed; decoding occurs in createProposal)
     
     /**
      * @notice Withdraw assets held by this contract (proposal required)
@@ -443,28 +449,7 @@ contract TEMPL is ReentrancyGuard {
         uint256 amount,
         string memory reason
     ) external onlyDAO {
-        if (recipient == address(0)) revert TemplErrors.InvalidRecipient();
-        if (amount == 0) revert TemplErrors.AmountZero();
-
-        uint256 proposalId = executingProposalId;
-        if (proposalId >= proposalCount) revert TemplErrors.InvalidProposal();
-
-        if (token == accessToken) {
-            if (amount > treasuryBalance) revert TemplErrors.InsufficientTreasuryBalance();
-            treasuryBalance -= amount;
-            IERC20(accessToken).safeTransfer(recipient, amount);
-        } else if (token == address(0)) {
-            if (amount > address(this).balance) revert TemplErrors.InsufficientTreasuryBalance();
-            (bool success, ) = payable(recipient).call{value: amount}("");
-            if (!success) revert TemplErrors.ProposalExecutionFailed();
-        } else {
-            if (amount > IERC20(token).balanceOf(address(this))) {
-                revert TemplErrors.InsufficientTreasuryBalance();
-            }
-            IERC20(token).safeTransfer(recipient, amount);
-        }
-
-        emit TreasuryAction(proposalId, token, recipient, amount, reason);
+        _withdrawTreasury(token, recipient, amount, reason, 0);
     }
 
     /**
@@ -479,11 +464,66 @@ contract TEMPL is ReentrancyGuard {
         address recipient,
         string memory reason
     ) external onlyDAO {
+        _withdrawAllTreasury(token, recipient, reason, 0);
+    }
+
+    // Governance can move any assets held by the contract
+    
+    /**
+     * @notice Update contract configuration via DAO proposal
+     * @param _token New ERC20 token address (or address(0) to keep current)
+     * @param _entryFee New entry fee amount (or 0 to keep current)
+     */
+    function updateConfigDAO(address _token, uint256 _entryFee) external onlyDAO {
+        _updateConfig(_token, _entryFee);
+    }
+    
+    /**
+     * @notice Pause or unpause new memberships via DAO proposal
+     * @param _paused true to pause, false to unpause
+     */
+    function setPausedDAO(bool _paused) external onlyDAO { _setPaused(_paused); }
+
+    /**
+     * @notice Distribute entire treasury equally among all current members by allocating to the member pool.
+     * @dev Increases memberPoolBalance by treasury amount and increments cumulativeMemberRewards by per-member share.
+     *      Any division remainder is added to memberRewardRemainder for future distribution.
+     */
+    function disbandTreasuryDAO() external onlyDAO { _disbandTreasury(0); }
+
+    // Internal implementations used by proposal execution and wrappers
+    function _withdrawTreasury(
+        address token,
+        address recipient,
+        uint256 amount,
+        string memory reason,
+        uint256 proposalId
+    ) internal {
         if (recipient == address(0)) revert TemplErrors.InvalidRecipient();
+        if (amount == 0) revert TemplErrors.AmountZero();
 
-        uint256 proposalId = executingProposalId;
-        if (proposalId >= proposalCount) revert TemplErrors.InvalidProposal();
+        if (token == accessToken) {
+            if (amount > treasuryBalance) revert TemplErrors.InsufficientTreasuryBalance();
+            treasuryBalance -= amount;
+            IERC20(accessToken).safeTransfer(recipient, amount);
+        } else if (token == address(0)) {
+            if (amount > address(this).balance) revert TemplErrors.InsufficientTreasuryBalance();
+            (bool success, ) = payable(recipient).call{value: amount}("");
+            if (!success) revert TemplErrors.ProposalExecutionFailed();
+        } else {
+            if (amount > IERC20(token).balanceOf(address(this))) revert TemplErrors.InsufficientTreasuryBalance();
+            IERC20(token).safeTransfer(recipient, amount);
+        }
+        emit TreasuryAction(proposalId, token, recipient, amount, reason);
+    }
 
+    function _withdrawAllTreasury(
+        address token,
+        address recipient,
+        string memory reason,
+        uint256 proposalId
+    ) internal {
+        if (recipient == address(0)) revert TemplErrors.InvalidRecipient();
         uint256 amount;
         if (token == accessToken) {
             if (treasuryBalance == 0) revert TemplErrors.NoTreasuryFunds();
@@ -500,64 +540,36 @@ contract TEMPL is ReentrancyGuard {
             if (amount == 0) revert TemplErrors.NoTreasuryFunds();
             IERC20(token).safeTransfer(recipient, amount);
         }
-
         emit TreasuryAction(proposalId, token, recipient, amount, reason);
     }
 
-    // Governance can move any assets held by the contract
-    
-    /**
-     * @notice Update contract configuration via DAO proposal
-     * @param _token New ERC20 token address (or address(0) to keep current)
-     * @param _entryFee New entry fee amount (or 0 to keep current)
-     */
-    function updateConfigDAO(address _token, uint256 _entryFee) external onlyDAO {
-        // Token changes via governance are disabled; only repricing is allowed.
-        if (_token != address(0) && _token != accessToken) {
-            revert TemplErrors.TokenChangeDisabled();
-        }
+    function _updateConfig(address _token, uint256 _entryFee) internal {
+        if (_token != address(0) && _token != accessToken) revert TemplErrors.TokenChangeDisabled();
         if (_entryFee > 0) {
             if (_entryFee < 10) revert TemplErrors.EntryFeeTooSmall();
             if (_entryFee % 10 != 0) revert TemplErrors.InvalidEntryFee();
             entryFee = _entryFee;
         }
-        
         emit ConfigUpdated(accessToken, entryFee);
     }
-    
-    /**
-     * @notice Pause or unpause new memberships via DAO proposal
-     * @param _paused true to pause, false to unpause
-     */
-    function setPausedDAO(bool _paused) external onlyDAO {
+
+    function _setPaused(bool _paused) internal {
         paused = _paused;
         emit ContractPaused(_paused);
     }
 
-    /**
-     * @notice Distribute entire treasury equally among all current members by allocating to the member pool.
-     * @dev Increases memberPoolBalance by treasury amount and increments cumulativeMemberRewards by per-member share.
-     *      Any division remainder is added to memberRewardRemainder for future distribution.
-     */
-    function disbandTreasuryDAO() external onlyDAO {
+    function _disbandTreasury(uint256 proposalId) internal {
         uint256 amount = treasuryBalance;
         if (amount == 0) revert TemplErrors.NoTreasuryFunds();
         uint256 n = memberList.length;
         if (n == 0) revert TemplErrors.NoMembers();
 
-        uint256 proposalId = executingProposalId;
-        if (proposalId >= proposalCount) revert TemplErrors.InvalidProposal();
-
-        // Move accounting from treasury to member pool
         treasuryBalance = 0;
         memberPoolBalance += amount;
 
         uint256 perMember = amount / n;
         uint256 remainder = amount % n;
-
-        // Make per-member share claimable for all members via cumulative global increment
         cumulativeMemberRewards += perMember;
-        // Carry remainder for future distribution to keep accounting exact
         memberRewardRemainder += remainder;
 
         emit TreasuryDisbanded(proposalId, amount, perMember, remainder);

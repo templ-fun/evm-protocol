@@ -23,26 +23,18 @@ describe("executeProposal reverts", function () {
     );
   });
 
-  it("reverts when proposal call data execution fails", async function () {
+  it("rejects malformed call data at proposal creation", async function () {
     await mintToUsers(token, [owner], ENTRY_FEE);
     await purchaseAccess(templ, token, [owner]);
 
-    const selector = templ.interface.getFunction(
+    const selectorOnly = templ.interface.getFunction(
       "withdrawTreasuryDAO"
     ).selector;
 
-    await templ
-      .connect(owner)
-      .createProposal("Test", "Revert", selector, 7 * 24 * 60 * 60);
-
-    await templ.connect(owner).vote(0, true);
-
-    await ethers.provider.send("evm_increaseTime", [7 * 24 * 60 * 60]);
-    await ethers.provider.send("evm_mine");
-
-    await expect(templ.executeProposal(0)).to.be.revertedWithCustomError(
-      templ,
-      "ProposalExecutionFailed"
-    );
+    await expect(
+      templ
+        .connect(owner)
+        .createProposal("Test", "Revert", selectorOnly, 7 * 24 * 60 * 60)
+    ).to.be.revertedWithCustomError(templ, "InvalidCallData");
   });
 });
