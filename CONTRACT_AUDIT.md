@@ -220,3 +220,57 @@ Views & helpers
 
 The TEMPL contract is well‑structured with a strong security posture, clear accounting invariants, and comprehensive tests. No critical or high‑severity issues were identified. The minor issues and recommendations above are non‑blocking and focus on UX clarity and further hardening/documentation.
 
+## Slither Report & Justifications
+
+- Command executed: `slither . --config-file slither.config.json`
+- Compiler path: Hardhat-compiled (resolves stack-too-deep via viaIR in `hardhat.config.js`).
+- Config notes: `detectors_to_exclude: ["arbitrary-send-eth"]` (arbitrary external execution is not possible due to typed governance and `onlyDAO` design), `fail_on: medium`.
+
+Summary (abridged): Slither analyzed 19 contracts (including mocks) and reported 71 results. No critical issues in production code were identified. Below are the main categories with justifications.
+
+- Weak PRNG (Info):
+  - Locations: `contracts/TEMPL.sol:215` (`memberRewardRemainder = totalRewards % (memberList.length - 1)`), `contracts/TEMPL.sol:582` (`remainder = amount % n`).
+  - Justification: No randomness is used for security; modulo is a deterministic, accounting-only remainder in reward/treasury splits. Not exploitable as PRNG.
+
+- Dangerous strict equalities (Info):
+  - Examples: `amount == 0` (e.g., `contracts/TEMPL.sol:546,551,574,609`).
+  - Justification: Intentional input and state validations. Equality-to-zero checks are appropriate and tested; not a source of logic error here.
+
+- Reentrancy (Medium, heuristic “event-after-call” pattern):
+  - Locations: `_withdrawTreasury` and `_withdrawAllTreasury` due to external ETH `call` then event emission.
+  - Justification: Execution path is gated:
+    - External entry is only via `executeProposal` (marked `nonReentrant`) or `onlyDAO` wrappers (require `msg.sender == address(this)`, making them callable only from within the contract, which occurs via `executeProposal`).
+    - State changes (e.g., `treasuryBalance` adjustments) occur before external calls; no sensitive state is written after the call besides emitting an event.
+    - ERC20 transfers use `SafeERC20` and external entry points that transfer tokens (`purchaseAccess`, `claimMemberPool`) are `nonReentrant`.
+    - Tests include explicit reentrancy attempts with a malicious token and verify reverts.
+  - Conclusion: Not exploitable given current design; acceptable false positive.
+
+- Timestamp dependence / dangerous comparisons (Info):
+  - Examples: Voting window checks (`block.timestamp < endTime/ >= endTime`) and join-time eligibility (`members[msg.sender].timestamp >= proposal.createdAt`).
+  - Justification: Timestamps are used only for governance deadlines/eligibility, not for randomness. Typical miner manipulation (seconds) has negligible impact on week-long windows. See “Findings #1” for a UX nuance on the `>=` comparison.
+
+- Low-level call usage (Info):
+  - Locations: ETH transfer via `.call{value: amount}("")`.
+  - Justification: This is the recommended pattern over `transfer`/`send` (2300 stipend). Success is checked and failures revert. Amounts are bounded by available treasury logic that preserves the member pool.
+
+- Naming conventions (Style):
+  - Underscore-prefixed parameters (e.g., `_proposalId`, `_votingPeriod`) flagged as “not mixedCase”. This is a stylistic preference; not a security issue and consistent across the codebase and tests.
+
+- Local variable shadowing (Mocks only):
+  - In `contracts/mocks/DaoCallerHarness.sol` constructor parameters shadow base state names. The harness is for testing only; no effect on production deployment.
+
+- Missing zero-address validation (Mocks only):
+  - In `contracts/mocks/PurchaseCaller.sol` and `contracts/mocks/ReentrantToken.sol`. These are test utilities; not deployed in production.
+
+- State variable could be immutable (Mock only):
+  - `PurchaseCaller.templ` suggested as `immutable`. Test-only contract; no action needed.
+
+Appendix: Slither CLI excerpt
+
+- Detectors (selection):
+  - Weak PRNG at TEMPL.purchaseAccess() and TEMPL._disbandTreasury(): modulo remainder used for distribution only.
+  - Reentrancy (event-after-call) in `_withdrawTreasury` / `_withdrawAllTreasury` due to `call{value:amount}`; see justification above.
+  - Timestamp-based comparisons in voting and proposal windows; acceptable for governance.
+  - Low-level call presence; success checked and reverted on failure.
+  - Style notices (naming), shadowing and zero-address checks in mocks.
+
