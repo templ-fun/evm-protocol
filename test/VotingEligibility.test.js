@@ -39,17 +39,13 @@ describe("Voting Eligibility Based on Join Time", function () {
             await ethers.provider.send("evm_mine");
 
             // Member 1 creates proposal
-            const callData = encodeWithdrawTreasuryDAO(
+            await templ.connect(member1).createProposalWithdrawTreasury(
+                "Test Proposal",
+                "Testing voting eligibility",
                 token.target,
                 member1.address,
                 ethers.parseUnits("10", 18),
-                "Test"
-            );
-
-            await templ.connect(member1).createProposal(
-                "Test Proposal",
-                "Testing voting eligibility",
-                callData,
+                "Test",
                 7 * 24 * 60 * 60
             );
 
@@ -86,17 +82,13 @@ describe("Voting Eligibility Based on Join Time", function () {
             await ethers.provider.send("evm_mine");
 
             // Create proposal
-            const callData = encodeWithdrawTreasuryDAO(
+            await templ.connect(member1).createProposalWithdrawTreasury(
+                "Early Proposal",
+                "Only early members can vote",
                 token.target,
                 member1.address,
                 ethers.parseUnits("10", 18),
-                "Test"
-            );
-
-            await templ.connect(member1).createProposal(
-                "Early Proposal",
-                "Only early members can vote",
-                callData,
+                "Test",
                 7 * 24 * 60 * 60
             );
 
@@ -138,12 +130,10 @@ describe("Voting Eligibility Based on Join Time", function () {
             await ethers.provider.send("evm_mine");
 
             // Create proposal - should have 3 eligible voters
-            const callData = encodeSetPausedDAO(true);
-
-            await templ.connect(member1).createProposal(
+            await templ.connect(member1).createProposalSetPaused(
                 "Pause Proposal",
                 "Test eligible voters",
-                callData,
+                true,
                 7 * 24 * 60 * 60
             );
 
@@ -192,17 +182,13 @@ describe("Voting Eligibility Based on Join Time", function () {
             await ethers.provider.send("evm_mine");
 
             // Create contentious proposal where member2 would vote no
-            const callData = encodeWithdrawTreasuryDAO(
-                token.target,
-                member1.address, // Only benefits member1
-                ethers.parseUnits("50", 18),
-                "Selfish withdrawal"
-            );
-
-            await templ.connect(member1).createProposal(
+            await templ.connect(member1).createProposalWithdrawTreasury(
                 "Contentious Proposal",
                 "Member1 wants treasury funds",
-                callData,
+                token.target,
+                member1.address,
+                ethers.parseUnits("50", 18),
+                "Selfish withdrawal",
                 7 * 24 * 60 * 60
             );
 

@@ -2,12 +2,7 @@ const { expect } = require("chai");
 const { ethers } = require("hardhat");
 const { deployTempl } = require("./utils/deploy");
 const { mintToUsers, purchaseAccess } = require("./utils/mintAndPurchase");
-const {
-    encodeSetPausedDAO,
-    encodeWithdrawTreasuryDAO,
-    encodeWithdrawAllTreasuryDAO,
-    encodeUpdateConfigDAO,
-} = require("./utils/callDataBuilders");
+const { encodeSetPausedDAO, encodeWithdrawTreasuryDAO, encodeWithdrawAllTreasuryDAO, encodeUpdateConfigDAO } = require("./utils/callDataBuilders");
 
 describe("TEMPL Contract with DAO Governance", function () {
     let templ;
@@ -136,13 +131,12 @@ describe("TEMPL Contract with DAO Governance", function () {
         it("Should allow members to create proposals", async function () {
             const title = "Test Proposal";
             const description = "This is a test proposal";
-            const callData = encodeSetPausedDAO(false);
             const votingPeriod = 7 * 24 * 60 * 60; // 7 days
 
-            await expect(templ.connect(user1).createProposal(
+            await expect(templ.connect(user1).createProposalSetPaused(
                 title,
                 description,
-                callData,
+                false,
                 votingPeriod
             )).to.emit(templ, "ProposalCreated");
 
@@ -155,74 +149,64 @@ describe("TEMPL Contract with DAO Governance", function () {
         });
 
         it("Should prevent non-members from creating proposals", async function () {
-            const callData = encodeSetPausedDAO(false);
-            await expect(templ.connect(user2).createProposal(
+            await expect(templ.connect(user2).createProposalSetPaused(
                 "Test",
                 "Description",
-                callData,
+                false,
                 7 * 24 * 60 * 60
             )).to.be.revertedWithCustomError(templ, "NotMember");
         });
 
         it("Should allow creating a proposal to withdraw treasury funds", async function () {
-            const callData = encodeWithdrawTreasuryDAO(
-                token.target,
-                treasury.address,
-                ethers.parseUnits("1", 18),
-                "Move funds"
-            );
             await expect(
-                templ.connect(user1).createProposal(
+                templ.connect(user1).createProposalWithdrawTreasury(
                     "Treasury Withdraw",
                     "Propose to move funds",
-                    callData,
+                    token.target,
+                    treasury.address,
+                    ethers.parseUnits("1", 18),
+                    "Move funds",
                     7 * 24 * 60 * 60
                 )
             ).to.emit(templ, "ProposalCreated");
         });
 
         it("Should allow creating a proposal to withdraw all treasury funds", async function () {
-            const callData = encodeWithdrawAllTreasuryDAO(
-                token.target,
-                treasury.address,
-                "Drain treasury"
-            );
             await expect(
-                templ.connect(user1).createProposal(
+                templ.connect(user1).createProposalWithdrawAllTreasury(
                     "Full Treasury Withdraw",
                     "Propose to move all funds",
-                    callData,
+                    token.target,
+                    treasury.address,
+                    "Drain treasury",
                     7 * 24 * 60 * 60
                 )
             ).to.emit(templ, "ProposalCreated");
         });
 
         it("Should enforce minimum voting period", async function () {
-            const cd2 = encodeSetPausedDAO(false);
-            await expect(templ.connect(user1).createProposal(
+            await expect(templ.connect(user1).createProposalSetPaused(
                 "Test",
                 "Description",
-                cd2,
-                6 * 24 * 60 * 60 // 6 days (less than minimum 7 days)
+                false,
+                6 * 24 * 60 * 60
             )).to.be.revertedWithCustomError(templ, "VotingPeriodTooShort");
         });
 
         it("Should enforce maximum voting period", async function () {
-            const cd3 = encodeSetPausedDAO(false);
-            await expect(templ.connect(user1).createProposal(
+            await expect(templ.connect(user1).createProposalSetPaused(
                 "Test",
                 "Description",
-                cd3,
-                31 * 24 * 60 * 60 // 31 days (too long)
+                false,
+                31 * 24 * 60 * 60
             )).to.be.revertedWithCustomError(templ, "VotingPeriodTooLong");
         });
 
         it("Should default to standard voting period when none provided", async function () {
-            const cd = encodeSetPausedDAO(false);
-            await templ.connect(user1).createProposal(
+            await templ.connect(user1).createProposalSetPaused(
                 "Default period",
                 "Uses default",
-                cd,
+                false,
                 0
             );
             const proposal = await templ.proposals(0);
@@ -231,44 +215,24 @@ describe("TEMPL Contract with DAO Governance", function () {
         });
 
         it("Should require non-empty title", async function () {
-            const cd4 = encodeSetPausedDAO(false);
-            await expect(templ.connect(user1).createProposal(
+            await expect(templ.connect(user1).createProposalSetPaused(
                 "",
                 "Description",
-                cd4,
+                false,
                 7 * 24 * 60 * 60
             )).to.be.revertedWithCustomError(templ, "TitleRequired");
         });
 
         it("Should require non-empty description", async function () {
-            const cd5 = encodeSetPausedDAO(false);
-            await expect(templ.connect(user1).createProposal(
+            await expect(templ.connect(user1).createProposalSetPaused(
                 "Test",
                 "",
-                cd5,
+                false,
                 7 * 24 * 60 * 60
             )).to.be.revertedWithCustomError(templ, "DescriptionRequired");
         });
 
-        it("Should require non-empty call data", async function () {
-            await expect(templ.connect(user1).createProposal(
-                "Test",
-                "Description",
-                "0x",
-                7 * 24 * 60 * 60
-            )).to.be.revertedWithCustomError(templ, "CallDataRequired");
-        });
-
-        it("Should reject call data shorter than 4 bytes", async function () {
-            await expect(
-                templ.connect(user1).createProposal(
-                    "Test",
-                    "Description",
-                    "0x123456",
-                    7 * 24 * 60 * 60
-                )
-            ).to.be.revertedWithCustomError(templ, "CallDataTooShort");
-        });
+        // callData not used in typed interface
 
         it("Should revert when retrieving a non-existent proposal", async function () {
             await expect(templ.getProposal(0))
@@ -908,21 +872,7 @@ describe("TEMPL Contract with DAO Governance", function () {
         });
 
 
-        it("Should reject proposal with invalid calldata at creation", async function () {
-            await purchaseAccess(templ, token, [user1]);
-
-            // Create proposal with calldata for non-existent function
-            const badCallData = "0x12345678"; // Invalid function selector
-
-            await expect(
-                templ.connect(user1).createProposal(
-                    "Bad Proposal",
-                    "This will fail",
-                    badCallData,
-                    7 * 24 * 60 * 60
-                )
-            ).to.be.revertedWithCustomError(templ, "InvalidCallData");
-        });
+        // invalid calldata is not applicable anymore
     });
 
     describe("Additional DAO Functions", function () {

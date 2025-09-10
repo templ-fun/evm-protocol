@@ -41,11 +41,10 @@ describe("Uniform vote weight (no priest bonus)", function () {
     await token.connect(member1).approve(await templ.getAddress(), ENTRY_FEE);
     await templ.connect(member1).purchaseAccess();
 
-    const callData = encodeSetPausedDAO(true);
-    await templ.connect(priest).createProposal(
+    await templ.connect(priest).createProposalSetPaused(
       "Test Proposal",
       "No weighting",
-      callData,
+      true,
       7 * 24 * 60 * 60
     );
 
@@ -61,4 +60,3 @@ describe("Uniform vote weight (no priest bonus)", function () {
     expect(proposal.passed).to.be.false;
   });
 });
-

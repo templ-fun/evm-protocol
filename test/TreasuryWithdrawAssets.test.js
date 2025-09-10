@@ -32,16 +32,17 @@ describe("Treasury withdrawals for arbitrary assets", function () {
   });
 
   it("should withdraw donated ERC20 tokens", async function () {
-    const callData = encodeWithdrawTreasuryDAO(
-      otherToken.target,
-      member1.address,
-      DONATED_AMOUNT,
-      "withdraw donated ERC20"
-    );
-
     await templ
       .connect(member1)
-      .createProposal("Withdraw ERC20", "test", callData, 7 * 24 * 60 * 60);
+      .createProposalWithdrawTreasury(
+        "Withdraw ERC20",
+        "test",
+        otherToken.target,
+        member1.address,
+        DONATED_AMOUNT,
+        "withdraw donated ERC20",
+        7 * 24 * 60 * 60
+      );
 
     await templ.connect(member1).vote(0, true);
     await templ.connect(member2).vote(0, true);
@@ -55,16 +56,17 @@ describe("Treasury withdrawals for arbitrary assets", function () {
   });
 
   it("should withdraw donated ETH", async function () {
-    const callData = encodeWithdrawTreasuryDAO(
-      ethers.ZeroAddress,
-      member2.address,
-      DONATED_AMOUNT,
-      "withdraw donated ETH"
-    );
-
     await templ
       .connect(member1)
-      .createProposal("Withdraw ETH", "test", callData, 7 * 24 * 60 * 60);
+      .createProposalWithdrawTreasury(
+        "Withdraw ETH",
+        "test",
+        ethers.ZeroAddress,
+        member2.address,
+        DONATED_AMOUNT,
+        "withdraw donated ETH",
+        7 * 24 * 60 * 60
+      );
 
     await templ.connect(member1).vote(0, true);
     await templ.connect(member2).vote(0, true);
@@ -79,15 +81,16 @@ describe("Treasury withdrawals for arbitrary assets", function () {
   });
 
   it("should withdraw all donated ETH", async function () {
-    const callData = encodeWithdrawAllTreasuryDAO(
-      ethers.ZeroAddress,
-      member1.address,
-      "withdraw all donated ETH"
-    );
-
     await templ
       .connect(member1)
-      .createProposal("Withdraw All ETH", "test", callData, 7 * 24 * 60 * 60);
+      .createProposalWithdrawAllTreasury(
+        "Withdraw All ETH",
+        "test",
+        ethers.ZeroAddress,
+        member1.address,
+        "withdraw all donated ETH",
+        7 * 24 * 60 * 60
+      );
 
     await templ.connect(member1).vote(0, true);
     await templ.connect(member2).vote(0, true);
@@ -103,15 +106,16 @@ describe("Treasury withdrawals for arbitrary assets", function () {
   });
 
   it("should withdraw all donated ERC20 tokens", async function () {
-    const callData = encodeWithdrawAllTreasuryDAO(
-      otherToken.target,
-      member2.address,
-      "withdraw all donated ERC20"
-    );
-
     await templ
       .connect(member1)
-      .createProposal("Withdraw All ERC20", "test", callData, 7 * 24 * 60 * 60);
+      .createProposalWithdrawAllTreasury(
+        "Withdraw All ERC20",
+        "test",
+        otherToken.target,
+        member2.address,
+        "withdraw all donated ERC20",
+        7 * 24 * 60 * 60
+      );
 
     await templ.connect(member1).vote(0, true);
     await templ.connect(member2).vote(0, true);

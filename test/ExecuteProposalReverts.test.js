@@ -23,18 +23,11 @@ describe("executeProposal reverts", function () {
     );
   });
 
-  it("rejects malformed call data at proposal creation", async function () {
+  it("rejects invalid update fee at creation", async function () {
     await mintToUsers(token, [owner], ENTRY_FEE);
     await purchaseAccess(templ, token, [owner]);
-
-    const selectorOnly = templ.interface.getFunction(
-      "withdrawTreasuryDAO"
-    ).selector;
-
     await expect(
-      templ
-        .connect(owner)
-        .createProposal("Test", "Revert", selectorOnly, 7 * 24 * 60 * 60)
-    ).to.be.revertedWithCustomError(templ, "InvalidCallData");
+      templ.connect(owner).createProposalUpdateConfig("Invalid", "fee", 5, 7 * 24 * 60 * 60)
+    ).to.be.revertedWithCustomError(templ, "EntryFeeTooSmall");
   });
 });
