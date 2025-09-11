@@ -30,8 +30,8 @@ npm --prefix backend install
 | Variable | Purpose | Default |
 | --- | --- | --- |
 | `LOG_LEVEL` | Pino log level (`info`, `debug`, etc.) | `info` |
-| `RATE_LIMIT_STORE` | Rate limit store (`memory` or `redis`) | `memory` |
-| `REDIS_URL` | Redis URL when `RATE_LIMIT_STORE=redis` | — |
+| `RATE_LIMIT_STORE` | Rate limit store (`memory` or `redis`) | auto (uses `redis` when `REDIS_URL` is set; else `memory`) |
+| `REDIS_URL` | Redis URL for distributed rate limiting | — |
 | `DISABLE_XMTP_WAIT` | Skip XMTP readiness checks in tests | `0` |
 | `XMTP_MAX_ATTEMPTS` | Limit XMTP client rotation attempts | unlimited |
 | `DB_PATH` | Custom SQLite path for group metadata | `backend/groups.db` |
@@ -50,7 +50,11 @@ When `REQUIRE_CONTRACT_VERIFY=1` (or `NODE_ENV=production`), the server requires
 
 ### Rate limiting
 
-The API rate-limits requests. Use the default in-memory store or install `redis`/`rate-limit-redis` and set `RATE_LIMIT_STORE=redis` with `REDIS_URL`.
+The API rate-limits requests.
+- In development and tests, it uses the in-memory store.
+- In production, when `REDIS_URL` is set, it automatically uses Redis (no extra config needed).
+- To force Redis explicitly, set `RATE_LIMIT_STORE=redis` and provide `REDIS_URL`.
+- If Redis is unavailable or misconfigured, it safely falls back to memory and logs a warning. Avoid memory in production as it is not resilient or horizontally scalable.
 
 ## Development
 Start the API service:
