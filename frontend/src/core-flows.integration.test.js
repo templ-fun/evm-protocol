@@ -290,8 +290,6 @@ describe('core flows e2e', () => {
     // Disband treasury: allocate equally to all members (integration)
     const tBefore = await templ.treasuryBalance();
     if (tBefore > 0n) {
-      const i3 = new ethers.Interface(templArtifact.abi);
-      const cd3 = i3.encodeFunctionData('disbandTreasuryDAO', []);
       await proposeVote({
         ethers,
         signer: memberSigner,
@@ -299,7 +297,7 @@ describe('core flows e2e', () => {
         templArtifact,
         title: 'disband',
         description: 'split',
-        callData: cd3,
+        action: 'disbandTreasury',
         votingPeriod: 7 * 24 * 60 * 60,
         txOptions: { nonce: memberNonce++ }
       });

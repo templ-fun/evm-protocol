@@ -69,22 +69,21 @@ describe("Voting Eligibility Based on Join Time", function () {
             expect(proposal.noVotes).to.equal(1);
         });
 
-        it("Should prevent members who joined after proposal from voting", async function () {
-            // Initial members join
+        it("Should prevent members who joined after quorum from voting", async function () {
+            // Initial members join (ensure no auto-quorum at creation)
             await token.connect(member1).approve(await templ.getAddress(), ENTRY_FEE);
             await templ.connect(member1).purchaseAccess();
-            
             await token.connect(member2).approve(await templ.getAddress(), ENTRY_FEE);
             await templ.connect(member2).purchaseAccess();
+            await token.connect(member3).approve(await templ.getAddress(), ENTRY_FEE);
+            await templ.connect(member3).purchaseAccess();
+            await token.connect(member4).approve(await templ.getAddress(), ENTRY_FEE);
+            await templ.connect(member4).purchaseAccess();
 
-            // Wait to ensure clear timestamp
-            await ethers.provider.send("evm_increaseTime", [100]);
-            await ethers.provider.send("evm_mine");
-
-            // Create proposal
+            // Create proposal (4 members total; auto-yes alone won't meet quorum)
             await templ.connect(member1).createProposalWithdrawTreasury(
                 "Early Proposal",
-                "Only early members can vote",
+                "Only pre-quorum members can vote",
                 token.target,
                 member1.address,
                 ethers.parseUnits("10", 18),
@@ -92,44 +91,39 @@ describe("Voting Eligibility Based on Join Time", function () {
                 7 * 24 * 60 * 60
             );
 
-            // Wait a bit
-            await ethers.provider.send("evm_increaseTime", [100]);
-            await ethers.provider.send("evm_mine");
+            // Reach quorum with pre-quorum members
+            await templ.connect(member2).vote(0, true); // yesVotes = 2 of 4 (>=33%)
 
-            // New member joins AFTER proposal was created
+            // New member joins AFTER quorum is reached
             await token.connect(lateMember).approve(await templ.getAddress(), ENTRY_FEE);
             await templ.connect(lateMember).purchaseAccess();
 
-            // Late member should NOT be able to vote
+            // Late member should NOT be able to vote after quorum
             await expect(templ.connect(lateMember).vote(0, true))
                 .to.be.revertedWithCustomError(templ, "JoinedAfterProposal");
 
-            // But original members still can
-            await expect(templ.connect(member1).vote(0, true))
-                .to.emit(templ, "VoteCast");
-            
-            await expect(templ.connect(member2).vote(0, false))
-                .to.emit(templ, "VoteCast");
+            // Pre-quorum members can still vote
+            await expect(templ.connect(member3).vote(0, false)).to.emit(templ, "VoteCast");
         });
 
-        it("Should track eligible voters correctly", async function () {
-            // 3 members join initially
+        it("Should track eligible voters dynamically before quorum and freeze eligibility after quorum", async function () {
+            // 4 members join initially (avoid auto-quorum at creation)
             await token.connect(member1).approve(await templ.getAddress(), ENTRY_FEE);
             await templ.connect(member1).purchaseAccess();
-            
             await token.connect(member2).approve(await templ.getAddress(), ENTRY_FEE);
             await templ.connect(member2).purchaseAccess();
-            
             await token.connect(member3).approve(await templ.getAddress(), ENTRY_FEE);
             await templ.connect(member3).purchaseAccess();
+            await token.connect(member4).approve(await templ.getAddress(), ENTRY_FEE);
+            await templ.connect(member4).purchaseAccess();
 
-            expect(await templ.getMemberCount()).to.equal(3);
+            expect(await templ.getMemberCount()).to.equal(4);
 
             // Wait before creating proposal
             await ethers.provider.send("evm_increaseTime", [100]);
             await ethers.provider.send("evm_mine");
 
-            // Create proposal - should have 3 eligible voters
+            // Create proposal - starts with 4 eligible voters
             await templ.connect(member1).createProposalSetPaused(
                 "Pause Proposal",
                 "Test eligible voters",
@@ -137,39 +131,25 @@ describe("Voting Eligibility Based on Join Time", function () {
                 7 * 24 * 60 * 60
             );
 
-            // Now more members join AFTER proposal
-            await token.connect(member4).approve(await templ.getAddress(), ENTRY_FEE);
-            await templ.connect(member4).purchaseAccess();
-            
+            // Now one more member joins BEFORE quorum is reached
             await token.connect(lateMember).approve(await templ.getAddress(), ENTRY_FEE);
             await templ.connect(lateMember).purchaseAccess();
 
-            // Total members is now 5
+            // Total members is now 5 and the new member can vote pre-quorum
             expect(await templ.getMemberCount()).to.equal(5);
 
-            // But only the original 3 can vote
             await ethers.provider.send("evm_increaseTime", [10]);
             await ethers.provider.send("evm_mine");
 
-            // Original members vote
-            await templ.connect(member1).vote(0, true);
-            await templ.connect(member2).vote(0, true);
-            await templ.connect(member3).vote(0, false);
+            // Votes before quorum: include the new member
+            await templ.connect(member2).vote(0, false); // still no quorum (yesVotes stays 1)
+            await expect(templ.connect(lateMember).vote(0, true)).to.emit(templ, "VoteCast"); // reaches quorum (2/5)
 
-            // New members cannot vote
-            await expect(templ.connect(member4).vote(0, true))
-                .to.be.revertedWithCustomError(templ, "JoinedAfterProposal");
-
-            await expect(templ.connect(lateMember).vote(0, true))
-                .to.be.revertedWithCustomError(templ, "JoinedAfterProposal");
-
-            // Check final vote tally - should be 2 yes, 1 no (from 3 eligible voters)
-            const proposal = await templ.getProposal(0);
-            expect(proposal.yesVotes).to.equal(2);
-            expect(proposal.noVotes).to.equal(1);
+            // After quorum, pre-quorum members can still vote; late joiners after quorum cannot (not tested here)
+            await expect(templ.connect(member3).vote(0, true)).to.emit(templ, "VoteCast");
         });
 
-        it("Should prevent gaming the system by adding members after proposal", async function () {
+        it("Should prevent gaming the system by adding members after quorum", async function () {
             // Start with just 2 members
             await token.connect(member1).approve(await templ.getAddress(), ENTRY_FEE);
             await templ.connect(member1).purchaseAccess();
@@ -192,27 +172,22 @@ describe("Voting Eligibility Based on Join Time", function () {
                 7 * 24 * 60 * 60
             );
 
-            // Member1 tries to game by adding friendly members AFTER proposal
+            // Reach quorum immediately with the two existing members
+            await templ.connect(member1).vote(0, true);
+            // yesVotes = 2 of 2 (auto-yes + member1), quorum reached; now add friendly members
             await token.connect(member3).approve(await templ.getAddress(), ENTRY_FEE);
             await templ.connect(member3).purchaseAccess();
-            
             await token.connect(member4).approve(await templ.getAddress(), ENTRY_FEE);
             await templ.connect(member4).purchaseAccess();
 
-            // Wait for voting
-            await ethers.provider.send("evm_increaseTime", [100]);
-            await ethers.provider.send("evm_mine");
-
-            // Original members vote
-            await templ.connect(member1).vote(0, true);
-            await templ.connect(member2).vote(0, false);
-
-            // New "friendly" members CANNOT vote to help member1
+            // New members cannot vote post-quorum
             await expect(templ.connect(member3).vote(0, true))
                 .to.be.revertedWithCustomError(templ, "JoinedAfterProposal");
-
             await expect(templ.connect(member4).vote(0, true))
                 .to.be.revertedWithCustomError(templ, "JoinedAfterProposal");
+
+            // Member2 can still vote (pre-quorum)
+            await templ.connect(member2).vote(0, false);
 
             // Result: 1 yes, 1 no - tie means proposal fails
             const proposal = await templ.getProposal(0);
