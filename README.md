@@ -179,7 +179,7 @@ Core flows include TEMPL creation, paid onboarding, chat, moderation, proposal d
   - Server enforces replay protection (SQLite `signatures` table). In production (or when `REQUIRE_CONTRACT_VERIFY=1`), the server verifies contract code, chainId, and that on‑chain `priest()` equals the signing address on `/templs`.
   - Debug endpoints are disabled by default; when enabled, they are restricted to localhost.
   - CORS must be set via `ALLOWED_ORIGINS` for standalone deployments.
-  - Rate‑limit store defaults to in‑memory; optionally use Redis via `RATE_LIMIT_STORE=redis`.
+  - Rate‑limit store: auto‑uses Redis when `REDIS_URL` is set; otherwise falls back to in‑memory (not recommended for production).
 - Identity resolution
   - The backend resolves XMTP inboxIds server‑side and waits for visibility before inviting. Client‑supplied inboxIds are ignored in normal environments. In local/test fallback modes (e.g., E2E), if network resolution is unavailable the server may deterministically accept a provided inboxId or generate one to keep tests moving.
 - Data at rest

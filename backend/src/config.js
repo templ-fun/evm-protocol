@@ -1,4 +1,5 @@
 import { MemoryStore } from 'express-rate-limit';
+import { logger } from './logger.js';
 
 /**
  * Create a rate limit store based on environment configuration.
@@ -11,8 +12,12 @@ import { MemoryStore } from 'express-rate-limit';
  * If initialization fails, the memory store is returned.
  */
 export async function createRateLimitStore() {
-  const kind = process.env.RATE_LIMIT_STORE;
-  if (kind === 'redis') {
+  const envKind = process.env.RATE_LIMIT_STORE; // 'memory' | 'redis' | undefined
+  // Auto-detect: prefer Redis when REDIS_URL is present, else fallback to envKind/memory
+  const shouldUseRedis =
+    envKind === 'redis' || (!envKind && typeof process.env.REDIS_URL === 'string' && process.env.REDIS_URL.length > 0);
+
+  if (shouldUseRedis) {
     try {
       const [{ default: RedisStore }, { createClient }] = await Promise.all([
         import('rate-limit-redis'),
@@ -20,15 +25,26 @@ export async function createRateLimitStore() {
       ]);
       const client = createClient({ url: process.env.REDIS_URL });
       await client.connect();
-      const store = new RedisStore({
-        sendCommand: (...args) => client.sendCommand(args)
-      });
+      const store = new RedisStore({ sendCommand: (...args) => client.sendCommand(args) });
+      // Annotate for tests/diagnostics
+      // @ts-ignore
+      store.kind = 'redis';
       store.shutdown = () => client.quit();
       return store;
-    } catch {
-      // Fallback to memory store when redis dependencies are unavailable
-      return new MemoryStore();
+    } catch (e) {
+      logger?.warn?.({ err: String(e?.message || e) }, 'redis rate-limit store unavailable; falling back to memory');
+      const store = new MemoryStore();
+      // @ts-ignore
+      store.kind = 'memory';
+      return store;
     }
   }
-  return new MemoryStore();
+
+  const store = new MemoryStore();
+  // @ts-ignore
+  store.kind = 'memory';
+  if (process.env.NODE_ENV === 'production') {
+    logger?.warn?.('Using in-memory rate limit store in production; set REDIS_URL or RATE_LIMIT_STORE=redis');
+  }
+  return store;
 }
