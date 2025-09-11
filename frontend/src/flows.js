@@ -321,7 +321,12 @@ export async function proposeVote({
       case 'updateConfig':
         tx = await contract.createProposalUpdateConfig(title, description, p.newEntryFee || 0n, votingPeriod, txOptions); break;
       case 'disbandTreasury':
-        tx = await contract.createProposalDisbandTreasury(title, description, votingPeriod, txOptions); break;
+        if (p.token) {
+          tx = await contract['createProposalDisbandTreasury(string,string,address,uint256)'](title, description, p.token, votingPeriod, txOptions);
+        } else {
+          tx = await contract['createProposalDisbandTreasury(string,string,uint256)'](title, description, votingPeriod, txOptions);
+        }
+        break;
       default:
         throw new Error('Unknown action: ' + action);
     }
@@ -341,29 +346,54 @@ export async function proposeVote({
     }
     try {
       const sig = callData.slice(0, 10).toLowerCase();
-      const sel = (name) => new ethers.Interface([`function ${name}`]).getFunction(name).selector.toLowerCase();
-      if (sig === sel('setPausedDAO(bool)')) {
-        const [paused] = new ethers.Interface(['function setPausedDAO(bool)']).decodeFunctionData('setPausedDAO', callData);
+      // Prefer decoding against the full ABI to avoid name ambiguities
+      const full = new ethers.Interface(templArtifact.abi);
+      const fn = full.getFunction(sig);
+      if (fn?.name === 'setPausedDAO') {
+        const [paused] = full.decodeFunctionData(fn, callData);
         const tx = await contract.createProposalSetPaused(title, description, paused, votingPeriod, txOptions);
         return await tx.wait();
       }
-      if (sig === sel('withdrawTreasuryDAO(address,address,uint256,string)')) {
-        const [token, recipient, amount, reason] = new ethers.Interface(['function withdrawTreasuryDAO(address,address,uint256,string)']).decodeFunctionData('withdrawTreasuryDAO', callData);
-        const tx = await contract.createProposalWithdrawTreasury(title, description, token, recipient, amount, reason, votingPeriod, txOptions);
-        return await tx.wait();
+      if (fn?.name === 'withdrawTreasuryDAO') {
+        if (fn.inputs.length === 4) {
+          const [token, recipient, amount, reason] = full.decodeFunctionData(fn, callData);
+          const tx = await contract.createProposalWithdrawTreasury(title, description, token, recipient, amount, reason, votingPeriod, txOptions);
+          return await tx.wait();
+        }
       }
-      if (sig === sel('withdrawAllTreasuryDAO(address,address,string)')) {
-        const [token, recipient, reason] = new ethers.Interface(['function withdrawAllTreasuryDAO(address,address,string)']).decodeFunctionData('withdrawAllTreasuryDAO', callData);
-        const tx = await contract.createProposalWithdrawAllTreasury(title, description, token, recipient, reason, votingPeriod, txOptions);
-        return await tx.wait();
+      if (fn?.name === 'withdrawAllTreasuryDAO') {
+        if (fn.inputs.length === 3) {
+          const [token, recipient, reason] = full.decodeFunctionData(fn, callData);
+          const tx = await contract.createProposalWithdrawAllTreasury(title, description, token, recipient, reason, votingPeriod, txOptions);
+          return await tx.wait();
+        }
       }
-      if (sig === sel('updateConfigDAO(address,uint256)')) {
-        const [, newEntryFee] = new ethers.Interface(['function updateConfigDAO(address,uint256)']).decodeFunctionData('updateConfigDAO', callData);
-        const tx = await contract.createProposalUpdateConfig(title, description, newEntryFee, votingPeriod, txOptions);
-        return await tx.wait();
+      if (fn?.name === 'updateConfigDAO') {
+        if (fn.inputs.length === 2) {
+          const [, newEntryFee] = full.decodeFunctionData(fn, callData);
+          const tx = await contract.createProposalUpdateConfig(title, description, newEntryFee, votingPeriod, txOptions);
+          return await tx.wait();
+        }
       }
-      if (sig === sel('disbandTreasuryDAO()')) {
+      if (fn?.name === 'disbandTreasuryDAO') {
+        if (fn.inputs.length === 0) {
+          const tx = await contract.createProposalDisbandTreasury(title, description, votingPeriod, txOptions);
+          return await tx.wait();
+        }
+        if (fn.inputs.length === 1) {
+          const [token] = full.decodeFunctionData(fn, callData);
+          const tx = await contract.createProposalDisbandTreasury(title, description, token, votingPeriod, txOptions);
+          return await tx.wait();
+        }
+      }
+      // Final guard against ABI/interface ambiguity: match by raw selector
+      if (sig === '0x28337886') { // disbandTreasuryDAO()
         const tx = await contract.createProposalDisbandTreasury(title, description, votingPeriod, txOptions);
+        return await tx.wait();
+      }
+      if (sig === '0xf2be51ea') { // disbandTreasuryDAO(address)
+        const [token] = new ethers.Interface(['function disbandTreasuryDAO(address)']).decodeFunctionData('disbandTreasuryDAO', callData);
+        const tx = await contract.createProposalDisbandTreasury(title, description, token, votingPeriod, txOptions);
         return await tx.wait();
       }
       return await fallbackCreate();

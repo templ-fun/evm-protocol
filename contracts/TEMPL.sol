@@ -371,6 +371,28 @@ contract TEMPL is ReentrancyGuard {
     ) external onlyMember returns (uint256) {
         (uint256 id, Proposal storage p) = _createBaseProposal(_title, _description, _votingPeriod);
         p.action = Action.DisbandTreasury;
+        // Default to access token balance for disbanding
+        p.token = accessToken;
+        // priest exception: disband proposed by priest has no quorum requirement
+        if (msg.sender == priest) {
+            p.quorumExempt = true;
+        }
+        return id;
+    }
+
+    /**
+     * @notice Create a proposal to disband the full available balance of a token into the member pool
+     * @dev Currently only the access token is supported for disbanding into the pool
+     */
+    function createProposalDisbandTreasury(
+        string memory _title,
+        string memory _description,
+        address _token,
+        uint256 _votingPeriod
+    ) external onlyMember returns (uint256) {
+        (uint256 id, Proposal storage p) = _createBaseProposal(_title, _description, _votingPeriod);
+        p.action = Action.DisbandTreasury;
+        p.token = _token;
         // priest exception: disband proposed by priest has no quorum requirement
         if (msg.sender == priest) {
             p.quorumExempt = true;
@@ -389,8 +411,14 @@ contract TEMPL is ReentrancyGuard {
         Proposal storage proposal = proposals[_proposalId];
 
         if (block.timestamp >= proposal.endTime) revert TemplErrors.VotingEnded();
-        if (members[msg.sender].timestamp >= proposal.createdAt)
-            revert TemplErrors.JoinedAfterProposal();
+        // Voting eligibility relative to quorum time:
+        // - Before quorum: any member may vote (including those who joined after creation)
+        // - After quorum: only members who joined before quorum may vote
+        if (!proposal.quorumExempt && proposal.quorumReachedAt != 0) {
+            if (members[msg.sender].timestamp >= proposal.quorumReachedAt) {
+                revert TemplErrors.JoinedAfterProposal();
+            }
+        }
 
         bool hadVoted = proposal.hasVoted[msg.sender];
         bool previous = proposal.voteChoice[msg.sender];
@@ -415,6 +443,8 @@ contract TEMPL is ReentrancyGuard {
         }
         
         if (!proposal.quorumExempt && proposal.quorumReachedAt == 0) {
+            // Update eligible voters dynamically until quorum is first reached
+            proposal.eligibleVoters = memberList.length;
             if (proposal.yesVotes * 100 >= quorumPercent * proposal.eligibleVoters) {
                 proposal.quorumReachedAt = block.timestamp;
                 proposal.endTime = block.timestamp + executionDelayAfterQuorum;
@@ -465,7 +495,7 @@ contract TEMPL is ReentrancyGuard {
         } else if (proposal.action == Action.WithdrawAllTreasury) {
             _withdrawAllTreasury(proposal.token, proposal.recipient, proposal.reason, _proposalId);
         } else if (proposal.action == Action.DisbandTreasury) {
-            _disbandTreasury(_proposalId);
+            _disbandTreasury(proposal.token, _proposalId);
         } else {
             revert TemplErrors.InvalidCallData();
         }
@@ -524,7 +554,13 @@ contract TEMPL is ReentrancyGuard {
      * @notice Distribute all treasury to the member pool equally
      * @dev Increases memberPoolBalance and updates reward snapshots
      */
-    function disbandTreasuryDAO() external onlyDAO { _disbandTreasury(0); }
+    function disbandTreasuryDAO() external onlyDAO { _disbandTreasury(accessToken, 0); }
+
+    /**
+     * @notice Distribute the full available balance of a token to the member pool equally (DAO only)
+     * @dev Currently only the access token is supported; other tokens cannot be pooled
+     */
+    function disbandTreasuryDAO(address token) external onlyDAO { _disbandTreasury(token, 0); }
 
     function _withdrawTreasury(
         address token,
@@ -600,13 +636,22 @@ contract TEMPL is ReentrancyGuard {
         emit ContractPaused(_paused);
     }
 
-    function _disbandTreasury(uint256 proposalId) internal {
-        uint256 amount = treasuryBalance;
-        if (amount == 0) revert TemplErrors.NoTreasuryFunds();
+    function _disbandTreasury(address token, uint256 proposalId) internal {
+        // Only the access token can be pooled/claimed
+        if (token != accessToken) revert TemplErrors.InvalidCallData();
+
+        uint256 current = IERC20(accessToken).balanceOf(address(this));
+        // Only the portion not already reserved for the member pool is available to disband
+        if (current <= memberPoolBalance) revert TemplErrors.NoTreasuryFunds();
+        uint256 amount = current - memberPoolBalance;
+
         uint256 n = memberList.length;
         if (n == 0) revert TemplErrors.NoMembers();
 
-        treasuryBalance = 0;
+        // Reduce tracked treasury by the portion sourced from fees; donations are not tracked
+        uint256 fromFees = amount <= treasuryBalance ? amount : treasuryBalance;
+        treasuryBalance -= fromFees;
+
         memberPoolBalance += amount;
 
         uint256 perMember = amount / n;
