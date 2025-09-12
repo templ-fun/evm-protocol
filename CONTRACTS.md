@@ -29,7 +29,7 @@ sequenceDiagram
 
 ## Governance
 - One member = one vote; votes are changeable until eligibility windows close.
-- One live proposal per address: creating a second while the first is active reverts `ActiveProposalExists`. Slot is cleared on execution or after expiry.
+- One live proposal per address: creating a second while the first is active reverts `ActiveProposalExists`. The slot is cleared on execution. After expiry, attempting to create a new proposal clears the old slot before proceeding.
 - Voting period bounds: 7–30 days (`0` means default 7 days).
 - Execution: Any address may call `executeProposal(id)`. Execution is atomic and non‑reentrant.
 - Typed proposals only (no arbitrary calls). The allowed actions are:
@@ -94,6 +94,7 @@ Note: Proposal metadata (title/description) is not stored on‑chain. Keep human
   - `ConfigUpdated(token,entryFee)`
   - `ContractPaused(isPaused)`
   - `TreasuryDisbanded(proposalId,amount,perMember,remainder)`
+  - `PriestChanged(oldPriest,newPriest)`
  - Custom errors (from `TemplErrors.sol`): `NotMember`, `NotDAO`, `ContractPausedError`, `AlreadyPurchased`, `InsufficientBalance`, `ActiveProposalExists`, `VotingPeriodTooShort`, `VotingPeriodTooLong`, `InvalidProposal`, `VotingEnded`, `JoinedAfterProposal`, `VotingNotEnded`, `AlreadyExecuted`, `ProposalNotPassed`, `ProposalExecutionFailed`, `InvalidRecipient`, `AmountZero`, `InsufficientTreasuryBalance`, `NoTreasuryFunds`, `EntryFeeTooSmall`, `InvalidEntryFee`, `NoRewardsToClaim`, `InsufficientPoolBalance`, `LimitOutOfRange`, `InvalidSender`, `InvalidCallData`, `TokenChangeDisabled`, `NoMembers`, `QuorumNotReached`, `ExecutionDelayActive`.
 
 ## Flows
