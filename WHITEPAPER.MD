@@ -30,7 +30,7 @@ sequenceDiagram
     B->>X: create group (ephemeral key)
     B-->>F: {groupId}
 
-    Note over F,B,C: Join
+    Note over F,B: Join
     F->>C: approve + purchaseAccess()
     F->>B: POST /join {member, contract, sig}
     B->>C: hasAccess(member)
