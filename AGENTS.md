@@ -4,7 +4,7 @@
 - `contracts/`: Solidity sources (0.8.23) with Hardhat; tests in `test/`; deployment utilities in `scripts/`.
 - `backend/`: Node (ESM) service. Entry `backend/src/server.js`; tests in `backend/test/*.test.js`; runtime config in `backend/.env`.
 - `frontend/`: Vite + React app. Source in `frontend/src/`; unit tests in `frontend/src/*.test.js`; e2e in `frontend/e2e/` (Playwright configs provided).
-- CI: `.circleci/`; Docs: `README.md`, `BACKEND.md`, `FRONTEND.md`, `CONTRACTS.md`, `CORE_FLOW_DOCS.MD`, `PERSISTENCE.md`, `WEB3_AUDIT_REPORT.MD`.
+- CI: `.circleci/`; Docs: `README.md`, `BACKEND.md`, `FRONTEND.md`, `CONTRACTS.md`, `CORE_FLOW_DOCS.MD`, `PERSISTENCE.md`.
 
 ## Build, Test, and Development Commands
 - Contracts: `npm run compile`, `npm test`, `npm run node`, `npm run deploy:local`, `npm run slither`.
@@ -50,7 +50,7 @@
 - Group discovery: the app renders chat as soon as `groupId` is known and keeps syncing to find the XMTP group; the backend also sends a welcome message to “warm” the conversation.
 - Accounts: backend bot uses a random bot key; e2e wallets rotate to avoid nonce/installation collisions.
 
-## Best Pratices
+## Best Practices
 
 - Use `npm run test:all` to make sure the entire project works after doing code changes
 - Don't leave comments about previous implementations that were removed
