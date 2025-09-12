@@ -35,8 +35,6 @@ describe("Treasury withdrawals for arbitrary assets", function () {
     await templ
       .connect(member1)
       .createProposalWithdrawTreasury(
-        "Withdraw ERC20",
-        "test",
         otherToken.target,
         member1.address,
         DONATED_AMOUNT,
@@ -59,8 +57,6 @@ describe("Treasury withdrawals for arbitrary assets", function () {
     await templ
       .connect(member1)
       .createProposalWithdrawTreasury(
-        "Withdraw ETH",
-        "test",
         ethers.ZeroAddress,
         member2.address,
         DONATED_AMOUNT,
@@ -84,8 +80,6 @@ describe("Treasury withdrawals for arbitrary assets", function () {
     await templ
       .connect(member1)
       .createProposalWithdrawAllTreasury(
-        "Withdraw All ETH",
-        "test",
         ethers.ZeroAddress,
         member1.address,
         "withdraw all donated ETH",
@@ -109,8 +103,6 @@ describe("Treasury withdrawals for arbitrary assets", function () {
     await templ
       .connect(member1)
       .createProposalWithdrawAllTreasury(
-        "Withdraw All ERC20",
-        "test",
         otherToken.target,
         member2.address,
         "withdraw all donated ERC20",
@@ -160,8 +152,6 @@ describe("Treasury withdrawals for arbitrary assets", function () {
     await templ
       .connect(member1)
       .createProposalWithdrawTreasury(
-        "Withdraw donated accessToken",
-        "test",
         token.target,
         member1.address,
         withdrawAmount,
@@ -208,8 +198,6 @@ describe("Treasury withdrawals for arbitrary assets", function () {
     await templ
       .connect(member1)
       .createProposalWithdrawAllTreasury(
-        "Drain available accessToken",
-        "includes donations",
         token.target,
         member2.address,
         "all accessToken available",

@@ -28,7 +28,7 @@ describe("Disband Treasury", function () {
     const before2 = await templ.getClaimablePoolAmount(m2.address);
     const before3 = await templ.getClaimablePoolAmount(m3.address);
 
-    await templ.connect(m1).createProposalDisbandTreasury("Disband", "split treasury", 7 * 24 * 60 * 60);
+    await templ.connect(m1).createProposalDisbandTreasury(7 * 24 * 60 * 60);
     await templ.connect(m1).vote(0, true);
     await templ.connect(m2).vote(0, true);
 
@@ -62,7 +62,7 @@ describe("Disband Treasury", function () {
 
   it("reverts when treasury is empty", async function () {
     // First disband to empty
-    await templ.connect(m1).createProposalDisbandTreasury("Disband", "split treasury", 7 * 24 * 60 * 60);
+    await templ.connect(m1).createProposalDisbandTreasury(7 * 24 * 60 * 60);
     await templ.connect(m1).vote(0, true);
     await templ.connect(m2).vote(0, true);
     await ethers.provider.send("evm_increaseTime", [8 * 24 * 60 * 60]);
@@ -70,7 +70,7 @@ describe("Disband Treasury", function () {
     await templ.executeProposal(0);
 
     // propose again with empty treasury
-    await templ.connect(m1).createProposalDisbandTreasury("Disband2", "empty", 7 * 24 * 60 * 60);
+    await templ.connect(m1).createProposalDisbandTreasury(7 * 24 * 60 * 60);
     await templ.connect(m1).vote(1, true);
     await templ.connect(m2).vote(1, true);
     await ethers.provider.send("evm_increaseTime", [8 * 24 * 60 * 60]);

@@ -42,8 +42,6 @@ describe("Uniform vote weight (no priest bonus)", function () {
     await templ.connect(member1).purchaseAccess();
 
     await templ.connect(priest).createProposalSetPaused(
-      "Test Proposal",
-      "No weighting",
       true,
       7 * 24 * 60 * 60
     );

@@ -27,8 +27,6 @@ describe("Treasury Withdrawal Reverts", function () {
     describe("withdrawTreasuryDAO", function () {
         it("should revert with InvalidRecipient", async function () {
             await templ.connect(user1).createProposalWithdrawTreasury(
-                "Bad withdraw",
-                "Invalid recipient",
                 token.target,
                 ethers.ZeroAddress,
                 ethers.parseUnits("1", 18),
@@ -48,8 +46,6 @@ describe("Treasury Withdrawal Reverts", function () {
 
         it("should revert with AmountZero", async function () {
             await templ.connect(user1).createProposalWithdrawTreasury(
-                "Zero amount",
-                "Zero withdrawal",
                 token.target,
                 user1.address,
                 0,
@@ -70,8 +66,6 @@ describe("Treasury Withdrawal Reverts", function () {
         it("should revert with InsufficientTreasuryBalance", async function () {
             const treasury = await templ.treasuryBalance();
             await templ.connect(user1).createProposalWithdrawTreasury(
-                "Too much",
-                "Exceeds balance",
                 token.target,
                 user1.address,
                 treasury + 1n,
@@ -94,8 +88,6 @@ describe("Treasury Withdrawal Reverts", function () {
             const otherToken = await OtherToken.deploy("Other", "OTH", 18);
 
             await templ.connect(user1).createProposalWithdrawTreasury(
-                "Withdraw other token",
-                "should fail",
                 otherToken.target,
                 user1.address,
                 1n,
@@ -118,8 +110,6 @@ describe("Treasury Withdrawal Reverts", function () {
     describe("withdrawAllTreasuryDAO", function () {
         it("should revert with InvalidRecipient", async function () {
             await templ.connect(user1).createProposalWithdrawAllTreasury(
-                "Withdraw all bad",
-                "Invalid recipient",
                 token.target,
                 ethers.ZeroAddress,
                 "Invalid",
@@ -139,8 +129,6 @@ describe("Treasury Withdrawal Reverts", function () {
         it("should revert with NoTreasuryFunds", async function () {
             // First, withdraw all funds to empty treasury
             await templ.connect(user1).createProposalWithdrawAllTreasury(
-                "Withdraw all",
-                "Empty treasury",
                 token.target,
                 user1.address,
                 "Valid",
@@ -156,8 +144,6 @@ describe("Treasury Withdrawal Reverts", function () {
 
             // Now, attempt another withdrawAll with empty treasury
             await templ.connect(user1).createProposalWithdrawAllTreasury(
-                "Withdraw again",
-                "No funds",
                 token.target,
                 user1.address,
                 "Valid",
@@ -178,8 +164,6 @@ describe("Treasury Withdrawal Reverts", function () {
             const otherToken = await OtherToken.deploy("Other", "OTH", 18);
 
             await templ.connect(user1).createProposalWithdrawAllTreasury(
-                "Withdraw absent token",
-                "nothing to withdraw",
                 otherToken.target,
                 user1.address,
                 "no balance",

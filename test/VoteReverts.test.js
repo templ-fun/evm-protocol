@@ -27,8 +27,6 @@ describe("Vote reverts", function () {
 
     it("reverts when voting after endTime", async function () {
         await templ.connect(member1).createProposalWithdrawTreasury(
-            "Test Proposal",
-            "Test description",
             token.target,
             member1.address,
             ethers.parseUnits("10", 18),

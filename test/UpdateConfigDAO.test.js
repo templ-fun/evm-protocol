@@ -25,8 +25,6 @@ describe("updateConfigDAO", function () {
     it("reverts when entry fee is less than 10", async function () {
         await expect(
             templ.connect(member).createProposalUpdateConfig(
-                "Small Fee",
-                "desc",
                 5,
                 7 * 24 * 60 * 60
             )
@@ -36,8 +34,6 @@ describe("updateConfigDAO", function () {
     it("reverts when entry fee is not divisible by 10", async function () {
         await expect(
             templ.connect(member).createProposalUpdateConfig(
-                "Invalid Fee",
-                "desc",
                 ENTRY_FEE + 5n,
                 7 * 24 * 60 * 60
             )
@@ -46,8 +42,6 @@ describe("updateConfigDAO", function () {
 
     it("updateConfig proposal executes when token unchanged", async function () {
         await templ.connect(member).createProposalUpdateConfig(
-            "Reprice",
-            "ok",
             ENTRY_FEE + 10n,
             7 * 24 * 60 * 60
         );
