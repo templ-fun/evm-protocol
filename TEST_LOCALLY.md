@@ -140,7 +140,7 @@ The chat auto‑loads the last 100 messages and any past proposals. Use “Load 
 
 ## 9) Try governance in chat
 
-- Click `Propose vote` (priest or any member): set a title and use “Pause DAO” quick action (encodes `setPausedDAO(true)`). Submit and sign the tx.
+- Click `Propose vote` (priest or any member): optionally set a title (shared via XMTP only) and use the “Pause DAO” quick action (encodes `setPausedDAO(true)`). Submit and sign the tx.
 - A poll bubble appears in chat.
 - Vote via `Vote Yes/No`; each voter signs their tx.
 - If you’re the priest, an `Execute` button appears after the voting period (or advance time on Hardhat).

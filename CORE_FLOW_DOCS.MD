@@ -104,12 +104,12 @@ sequenceDiagram
 ```
 
 ## 5. Proposal creation
-The backend mirrors on-chain proposal events into the XMTP group.
+Members create typed proposals on-chain; the backend mirrors on-chain proposal events into the XMTP group. Proposal titles/descriptions live only in XMTP messages, not on-chain.
 ```mermaid
 flowchart LR
-    M[Member] -->|createProposal| C[Contract]
-    C -->|ProposalCreated event| B[Backend]
-    B -->|send proposal JSON| X[XMTP]
+    M[Member] -->|createProposalSetPaused / UpdateConfig / Withdraw / Disband| C[Contract]
+    C -->|ProposalCreated(id,proposer,endTime)| B[Backend]
+    B -->|send {type:"proposal", id, proposer, endTime}| X[XMTP]
 ```
 
 Notes
@@ -137,17 +137,17 @@ flowchart LR
 - Arbitrary external calls are disabled.
 
 End-to-end proposal lifecycle (sequence):
-This sequence shows proposal creation, voting, and execution across the system.
+This sequence shows proposal creation, voting, and execution across the system. Human‑readable metadata (title/description) is carried only in XMTP messages.
 ```mermaid
 sequenceDiagram
     participant M as Member
     participant C as Contract
     participant B as Backend
     participant X as XMTP
-    M->>C: createProposal(title, description, callData, period)
-    C-->>M: ProposalCreated(id,...)
-    C-->>B: ProposalCreated(id,...)
-    B->>X: send {type:"proposal", id, ...}
+    M->>C: createProposalX(..., period)
+    C-->>M: ProposalCreated(id, proposer, endTime)
+    C-->>B: ProposalCreated(id, proposer, endTime)
+    B->>X: send {type:"proposal", id, proposer, endTime}
     M->>C: vote(id, support)
     C-->>B: VoteCast(id, voter, support,...)
     B->>X: send {type:"vote", id, voter, support, ...}
@@ -165,9 +165,9 @@ sequenceDiagram
     participant X as XMTP
     participant T as Treasury
     participant R as Recipient
-    M->>C: createProposal(withdrawTreasuryDAO(token, R, amount))
-    C-->>B: ProposalCreated(id,...)
-    B->>X: send {type:"proposal", id, ...}
+    M->>C: createProposalWithdrawTreasury(token, R, amount, reason)
+    C-->>B: ProposalCreated(id, proposer, endTime)
+    B->>X: send {type:"proposal", id, proposer, endTime}
     M->>C: vote(id, support)
     C-->>B: VoteCast(id, voter, support,...)
     B->>X: send {type:"vote", id, voter, support, ...}
