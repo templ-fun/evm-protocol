@@ -49,11 +49,14 @@ sequenceDiagram
   - priest exception: `createProposalDisbandTreasury(...)` proposed by `priest` is quorum‑exempt and respects only its `endTime`.
 
 ### Proposal Types (create functions)
-- `createProposalSetPaused(string title, string description, bool paused, uint256 votingPeriod)`
-- `createProposalUpdateConfig(string title, string description, uint256 newEntryFee, uint256 votingPeriod)`
-- `createProposalWithdrawTreasury(string title, string description, address token, address recipient, uint256 amount, string reason, uint256 votingPeriod)`
-- `createProposalWithdrawAllTreasury(string title, string description, address token, address recipient, string reason, uint256 votingPeriod)`
-- `createProposalDisbandTreasury(string title, string description, uint256 votingPeriod)` and overloaded `createProposalDisbandTreasury(string title, string description, address token, uint256 votingPeriod)` (token must equal the access token at execution).
+- `createProposalSetPaused(bool paused, uint256 votingPeriod)`
+- `createProposalUpdateConfig(uint256 newEntryFee, uint256 votingPeriod)`
+- `createProposalWithdrawTreasury(address token, address recipient, uint256 amount, string reason, uint256 votingPeriod)`
+- `createProposalWithdrawAllTreasury(address token, address recipient, string reason, uint256 votingPeriod)`
+- `createProposalDisbandTreasury(uint256 votingPeriod)` and overloaded
+  `createProposalDisbandTreasury(address token, uint256 votingPeriod)` (token must equal the access token at execution).
+
+Note: Proposal metadata (title/description) is not stored on‑chain. Keep human‑readable text in XMTP group messages alongside the on‑chain proposal id.
 
 ### Security Notes
 - Reentrancy: `purchaseAccess`, `claimMemberPool`, and `executeProposal` are non‑reentrant.
@@ -67,7 +70,7 @@ sequenceDiagram
 - `claimMemberPool()` — withdraw accrued rewards; emits `MemberPoolClaimed`.
 - `getActiveProposals()` — returns IDs of active proposals.
 - `getActiveProposalsPaginated(uint256 offset, uint256 limit)` — returns `(ids, hasMore)`; `limit` in [1,100], else `LimitOutOfRange`.
-- `getProposal(uint256 id)` — returns struct subset plus computed `passed` according to quorum/delay rules.
+- `getProposal(uint256 id)` — returns `(proposer, yesVotes, noVotes, endTime, executed, passed)` with `passed` computed according to quorum/delay rules.
 - `hasVoted(uint256 id, address voter)` — returns `(voted, support)`.
 - `hasAccess(address user)` — returns membership status.
 - `getPurchaseDetails(address user)` — returns `(purchased, timestamp, blockNum)`.
@@ -84,14 +87,14 @@ sequenceDiagram
 - Events:
   - `AccessPurchased(purchaser,totalAmount,burnedAmount,treasuryAmount,memberPoolAmount,protocolAmount,timestamp,blockNumber,purchaseId)`
   - `MemberPoolClaimed(member,amount,timestamp)`
-  - `ProposalCreated(proposalId,proposer,title,endTime)`
+  - `ProposalCreated(proposalId,proposer,endTime)`
   - `VoteCast(proposalId,voter,support,timestamp)`
   - `ProposalExecuted(proposalId,success,returnData)`
   - `TreasuryAction(proposalId,token,recipient,amount,description)`
   - `ConfigUpdated(token,entryFee)`
   - `ContractPaused(isPaused)`
   - `TreasuryDisbanded(proposalId,amount,perMember,remainder)`
-- Custom errors (from `TemplErrors.sol`): `NotMember`, `NotDAO`, `ContractPausedError`, `AlreadyPurchased`, `InsufficientBalance`, `TitleRequired`, `DescriptionRequired`, `ActiveProposalExists`, `VotingPeriodTooShort`, `VotingPeriodTooLong`, `InvalidProposal`, `VotingEnded`, `JoinedAfterProposal`, `VotingNotEnded`, `AlreadyExecuted`, `ProposalNotPassed`, `ProposalExecutionFailed`, `InvalidRecipient`, `AmountZero`, `InsufficientTreasuryBalance`, `NoTreasuryFunds`, `EntryFeeTooSmall`, `InvalidEntryFee`, `NoRewardsToClaim`, `InsufficientPoolBalance`, `LimitOutOfRange`, `InvalidSender`, `InvalidCallData`, `TokenChangeDisabled`, `NoMembers`, `QuorumNotReached`, `ExecutionDelayActive`.
+ - Custom errors (from `TemplErrors.sol`): `NotMember`, `NotDAO`, `ContractPausedError`, `AlreadyPurchased`, `InsufficientBalance`, `ActiveProposalExists`, `VotingPeriodTooShort`, `VotingPeriodTooLong`, `InvalidProposal`, `VotingEnded`, `JoinedAfterProposal`, `VotingNotEnded`, `AlreadyExecuted`, `ProposalNotPassed`, `ProposalExecutionFailed`, `InvalidRecipient`, `AmountZero`, `InsufficientTreasuryBalance`, `NoTreasuryFunds`, `EntryFeeTooSmall`, `InvalidEntryFee`, `NoRewardsToClaim`, `InsufficientPoolBalance`, `LimitOutOfRange`, `InvalidSender`, `InvalidCallData`, `TokenChangeDisabled`, `NoMembers`, `QuorumNotReached`, `ExecutionDelayActive`.
 
 ## Flows
 ### Membership Purchase

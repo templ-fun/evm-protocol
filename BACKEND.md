@@ -86,6 +86,10 @@ npm --prefix backend run lint
 - **Persistence** – group metadata persists to a SQLite database at `backend/groups.db` (or a custom path via `createApp({ dbPath })` in tests). The database is read on startup and updated when groups change; back it up to avoid losing state.
  - **On‑chain surface** – proposal allowlist and events are defined in the contracts. See [CONTRACTS.md](./CONTRACTS.md#dao-governance) for allowed actions and events mirrored into chat.
 
+When watching governance events, the backend relays:
+- `ProposalCreated(id, proposer, endTime)` → sends `{ type: 'proposal', id, proposer, endTime }` to the group. Human‑readable metadata (title/description) is not on‑chain and should be sent by clients as a regular XMTP message alongside the id.
+- `VoteCast(id, voter, support, timestamp)` → sends `{ type: 'vote', id, voter, support, timestamp }`.
+
 ### Endpoint flows
 
 #### Group creation (`/templs`)
