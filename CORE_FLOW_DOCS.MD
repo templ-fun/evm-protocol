@@ -21,7 +21,7 @@ Components and message flows powering TEMPL's core protocol.
 Legend: F=Frontend, B=Backend, C=Contract, X=XMTP, D=SQLite, M=Member, P=Priest.
 
 ## 1. TEMPL creation
-The backend bot creates and owns the XMTP group when a TEMPL is deployed.
+The backend creates the XMTP group when a TEMPL is deployed. By default it uses a short‑lived ephemeral creator key to create the group, and then operates it via the server’s invite‑bot identity (which invites members but does not need admin privileges).
 ```mermaid
 flowchart LR
     F[Frontend] -->|deploy contract| C[Contract]
@@ -30,7 +30,7 @@ flowchart LR
     B -->|newGroup| X[XMTP]
 ```
 
-- Frontend posts `{contract}`; backend verifies the contract and on-chain priest in production, resolves the priest inbox from the network, creates the group, adds the priest, and stores the `groupId`.
+- Frontend posts `{contract}`; backend verifies the contract and on-chain priest in production, resolves the priest inbox from the network, creates the group (including the priest), and stores the `groupId`.
 
 ## 2. Pay-to-join
 Members sign a join message, and the backend verifies purchase before inviting them.
@@ -107,7 +107,7 @@ sequenceDiagram
 Members create typed proposals on-chain; the backend mirrors on-chain proposal events into the XMTP group. Proposal titles/descriptions live only in XMTP messages, not on-chain.
 ```mermaid
 flowchart LR
-    M[Member] -->|createProposalSetPaused / UpdateConfig / Withdraw / Disband| C[Contract]
+    M[Member] -->|createProposalSetPaused / UpdateConfig / Withdraw / Disband / ChangePriest| C[Contract]
     C -->|ProposalCreated(id,proposer,endTime)| B[Backend]
     B -->|send {type:"proposal", id, proposer, endTime}| X[XMTP]
 ```
@@ -133,7 +133,7 @@ flowchart LR
     C -->|call allowlisted action| C
 ```
 
-- Only pause/unpause, fee repricing, and transfers of assets held by the contract are permitted. Token changes remain disabled, and member pool funds cannot be moved.
+- Only pause/unpause, change priest, fee repricing (entry fee only), transfers of assets held by the contract, and disbanding treasury into the member pool are permitted. Token changes remain disabled, and member pool funds cannot be moved.
 - Arbitrary external calls are disabled.
 
 End-to-end proposal lifecycle (sequence):
@@ -196,7 +196,11 @@ sequenceDiagram
   - Signature: EIP‑712 `{ action:'mute', contract, target, server, nonce, issuedAt, expiry }` signed by priest or a delegate.
   - Response: `{ mutedUntil }` (ms since epoch; 0 means permanent after 5th strike).
 - GET `/mutes?contractAddress=...` – list active mutes: `{ mutes: [{ address, count, until }] }`
-- Debug (when `ENABLE_DEBUG_ENDPOINTS=1`): `/debug/group`, `/debug/conversations`, `/debug/membership`, `/debug/last-join`, `/debug/inbox-state`.
+- GET `/templs` – list known TEMPLs: `{ templs: [{ contract, priest, groupId? }] }` (include `?include=groupId` to include ids).
+- Debug (when `ENABLE_DEBUG_ENDPOINTS=1`): `/debug/group`, `/debug/conversations`, `/debug/membership`, `/debug/last-join`, `/debug/inbox-state`, `/debug/send`.
+
+Notes
+- EIP‑712 messages include a `server` string; the backend verifies signatures against its own `BACKEND_SERVER_ID` (which must match the frontend’s `VITE_BACKEND_SERVER_ID`). A mismatch causes signature verification to fail.
 
 Backend resolves inboxIds from the XMTP network via `findInboxIdByIdentifier` and waits for identity readiness before `addMembers`. In normal environments, client‑supplied inboxIds are ignored. In local/test fallback modes (e.g., during E2E runs), the server may deterministically accept a provided inboxId or generate one when network resolution is unavailable, to keep tests moving.
 
