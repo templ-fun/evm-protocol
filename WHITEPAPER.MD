@@ -9,34 +9,19 @@ TEMPL is a DAO‑governed, token‑gated private group system that combines:
 - One‑member‑one‑vote governance over an allowlisted set of safe actions
 - Views and signatures that let a backend enforce access to an XMTP group chat
 
-This document explains the technical surface, constraints, and operations end‑to‑end.
-
-## Design Goals
-
-- Simple governance: one member = one vote; typed actions only.
-- Fair onboarding: each new member rewards existing members via a claimable member pool.
-- Safety: no arbitrary external calls; reentrancy guards; proposal allowlist.
-- Clear separation: on‑chain membership/treasury; off‑chain group messaging and moderation.
-- Operational clarity: explicit environment, signatures, and persistence for backend/frontend.
-
 ## System Overview
 
 - Smart contracts (Solidity 0.8.23) gate membership and manage the treasury and member pool.
 - Backend (Node/Express) creates the XMTP group with a short‑lived ephemeral key, then uses a persistent invite‑bot identity to invite on‑chain members. No persistent owner/admin keys are retained; the bot is not used for banning. It also mirrors governance events and enforces moderation via signatures.
 - Frontend (Vite + React) deploys contracts, buys access, requests invites, and surfaces governance and chat.
 
-High‑level flow (deploy → join → chat):
+**High‑level flow (deploy → join → chat):**
+
 1) Deploy: Frontend deploys a TEMPL; backend creates an XMTP group bound to the contract using an ephemeral creator key (discarded after).
 2) Join: User purchases on‑chain; frontend requests invite; backend verifies and invites.
 3) Chat/Govern: Members chat on XMTP and govern with on‑chain proposals/votes.
 
 ## On‑Chain Protocol (contracts/TEMPL.sol)
-
-### Core Data Model
-- Configuration: `protocolFeeRecipient` (10% of entry fee, immutable), `accessToken` (ERC‑20 used for entry, immutable), `entryFee` (≥10, divisible by 10; updatable via governance).
-- Membership: `members[address]` with `purchased`, `timestamp`, `block`, and `rewardSnapshot`. `memberList[]` stores all members. Membership is one‑time and non‑transferable.
-- Economics: `treasuryBalance`, `memberPoolBalance`, `totalBurned`, `totalToTreasury`, `totalToMemberPool`, `totalToProtocol`, `memberRewardRemainder`, `cumulativeMemberRewards`.
-- Governance: proposals indexed by `proposalCount`. A proposal records proposer, action, parameters, votes, timing, quorum metadata, and an optional `quorumExempt` flag.
 
 ### Economic Model (per `purchaseAccess()`)
 
@@ -69,15 +54,16 @@ High‑level flow (deploy → join → chat):
     - `eligibleVoters = memberList.length`
   - After quorum:
     - Eligibility freezes at `quorumReachedAt`
-    - Only members who joined before `quorumReachedAt` may vote
-    - Late joiners revert `JoinedAfterProposal`
+    - Only members who joined before `quorumReachedAt` may vote; late joiners revert `JoinedAfterProposal`
+    - Post‑quorum window is fixed to 7 days: on first quorum, `endTime` is reset to `now + 7 days`
+    - Voting continues during this 7‑day window for eligible voters; after it, `vote()` reverts `VotingEnded`
   - Execution:
     - Majority required: `yesVotes > noVotes`
-    - Quorum‑exempt: execute after `endTime`
-    - Requires quorum: execute after `executionDelayAfterQuorum = 7 days` since `quorumReachedAt`
+    - If quorum‑exempt: execute after `endTime`
+    - Requires quorum: earliest execution at `quorumReachedAt + executionDelayAfterQuorum (7 days)`
 - Quorum exemption: `createProposalDisbandTreasury` proposed by the `priest` sets `quorumExempt = true` and respects only `endTime`.
 
-### Allowed Actions (typed; no arbitrary calls)
+### Allowed Actions
 
 - `setPausedDAO(bool)` — pause/unpause purchases.
 - `updateConfigDAO(address,uint256)` — update entry fee only; token changes are disabled (`TokenChangeDisabled`). `_token` must be `address(0)` or the current token.
