@@ -92,16 +92,12 @@ flowchart TD
 
 ## FAQ
 
-This section answers common questions about what data is stored and why certain errors appear. It clarifies that chat messages and membership live in XMTP and explains common OPFS and test pitfalls.
+This section answers common questions about what data is stored. It clarifies that chat messages and membership live in XMTP.
 
 - **Do we persist chat messages?**
   - No. Messages live in XMTP’s network + the client DB (OPFS in browser; SQLCipher DB on Node). Our backend doesn’t store chat messages.
 - **Where is the “group membership” stored?**
   - In XMTP. We only store the mapping from TEMPL contract → `groupId` and the priest address. Adding/removing members happens via the XMTP group APIs and is reflected in the XMTP databases, not our SQLite.
-- **Why did we see `NoModificationAllowedError` in E2E?**
-  - That’s OPFS rejecting a new exclusive write handle to the DB while another handle or stream is still open. It’s a browser storage-level contention, not an XMTP core or contract issue.
-- **Is this a protocol bug?**
-  - No. Integration proves join works end-to-end at the protocol level using Node SDK. The E2E failures were due to Browser SDK storage/installation patterns and test-time storage manipulation.
 
 ## Testing
 
