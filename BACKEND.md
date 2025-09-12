@@ -6,7 +6,7 @@ See the [README](./README.md#architecture) for how the backend fits into TEMPL a
 Install dependencies:
 
 ```bash
-npm --prefix backend install
+npm --prefix backend ci
 ```
 
 ## Environment variables
@@ -84,7 +84,7 @@ npm --prefix backend run lint
   - `GET /mutes` – list active mutes for a contract so the frontend can hide messages.
 - **Dependencies** – XMTP JS SDK and an on-chain provider; event watching requires a `connectContract` factory.
 - **Persistence** – group metadata persists to a SQLite database at `backend/groups.db` (or a custom path via `createApp({ dbPath })` in tests). The database is read on startup and updated when groups change; back it up to avoid losing state.
- - **On‑chain surface** – proposal allowlist and events are defined in the contracts. See [CONTRACTS.md](./CONTRACTS.md#dao-governance) for allowed actions and events mirrored into chat.
+- **On‑chain surface** – proposal allowlist and events are defined in the contracts. See [CONTRACTS.md](./CONTRACTS.md#governance) for allowed actions and events mirrored into chat.
 
 When watching governance events, the backend relays:
 - `ProposalCreated(id, proposer, endTime)` → sends `{ type: 'proposal', id, proposer, endTime }` to the group. Human‑readable metadata (title/description) is not on‑chain and should be sent by clients as a regular XMTP message alongside the id.
@@ -146,7 +146,7 @@ When `ENABLE_DEBUG_ENDPOINTS=1`, these endpoints assist tests and local debuggin
  - `POST /debug/send` – send a free‑form message to a group's conversation (for discovery warmup and diagnostics).
 
 #### Running against a local XMTP node
-See the [E2E Environments](./README.md#E2E-Environments) section of the README for full setup details. In short, setting `E2E_XMTP_LOCAL=1` starts `xmtp-local-node` and sets `XMTP_ENV=local`; otherwise Playwright runs against XMTP production with a random `BOT_PRIVATE_KEY`.
+See the [E2E Environments](./README.md#e2e-environments) section of the README for full setup details. In short, setting `E2E_XMTP_LOCAL=1` starts `xmtp-local-node` and sets `XMTP_ENV=local`; otherwise Playwright runs against XMTP production with a random `BOT_PRIVATE_KEY`.
 
 ## Security considerations
 - All state-changing endpoints require EIP‑712 typed signatures (with `chainId`, `nonce`, `issuedAt`, `expiry`). The backend verifies signatures and enforces replay protection by recording used signatures in SQLite.
