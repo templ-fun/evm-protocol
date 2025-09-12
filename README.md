@@ -39,7 +39,7 @@ Use the docs below to dive into each component:
 - [TEMPL_TECH_SPEC](./docs/TEMPL_TECH_SPEC.MD) – TEMPL protocol technical specifications
 - [CORE_FLOW_DOCS](./docs/CORE_FLOW_DOCS.MD) – core flow service diagrams
 - [CONTRACTS](./docs/CONTRACTS.md) – smart‑contract specification
-- [BACKEND](./docs/BACKEND.md) – XMTP bot and API
+- [BACKEND](./docs/BACKEND.md) – XMTP group invite bot and API
 - [FRONTEND](./docs/FRONTEND.md) – React client
 - [PERSISTENCE](./docs/PERSISTENCE.md) – data storage and XMTP DBs
 - [TEST_LOCALLY](./docs/TEST_LOCALLY.md) – fast local end‑to‑end setup
