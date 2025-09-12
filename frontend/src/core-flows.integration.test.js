@@ -219,16 +219,13 @@ describe('core flows e2e', () => {
       signer: memberSigner, // Use member who has purchased access
       templAddress,
       templArtifact,
-      title: 't',
-      description: 'd',
       callData,
       votingPeriod: 7 * 24 * 60 * 60,
       txOptions: { nonce: memberNonce++ }
     });
     // Verify proposal created
-    const [proposer, title,, yesVotes, noVotes] = await templ.getProposal(0);
+    const [proposer, yesVotes, noVotes] = await templ.getProposal(0);
     expect(proposer.toLowerCase()).toBe((await memberSigner.getAddress()).toLowerCase());
-    expect(title).toBe('t');
     // Proposer auto-votes YES at creation
     expect(yesVotes).toBe(1n);
     expect(noVotes).toBe(0n);
@@ -267,8 +264,6 @@ describe('core flows e2e', () => {
       signer: memberSigner,
       templAddress,
       templArtifact,
-      title: 'reprice',
-      description: 'set to 200',
       callData: cd2,
       votingPeriod: 7 * 24 * 60 * 60,
       txOptions: { nonce: memberNonce++ }
@@ -295,8 +290,6 @@ describe('core flows e2e', () => {
         signer: memberSigner,
         templAddress,
         templArtifact,
-        title: 'disband',
-        description: 'split',
         action: 'disbandTreasury',
         votingPeriod: 7 * 24 * 60 * 60,
         txOptions: { nonce: memberNonce++ }

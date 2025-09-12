@@ -40,8 +40,6 @@ describe("Voting Eligibility Based on Join Time", function () {
 
             // Member 1 creates proposal
             await templ.connect(member1).createProposalWithdrawTreasury(
-                "Test Proposal",
-                "Testing voting eligibility",
                 token.target,
                 member1.address,
                 ethers.parseUnits("10", 18),
@@ -82,8 +80,6 @@ describe("Voting Eligibility Based on Join Time", function () {
 
             // Create proposal (4 members total; auto-yes alone won't meet quorum)
             await templ.connect(member1).createProposalWithdrawTreasury(
-                "Early Proposal",
-                "Only pre-quorum members can vote",
                 token.target,
                 member1.address,
                 ethers.parseUnits("10", 18),
@@ -125,8 +121,6 @@ describe("Voting Eligibility Based on Join Time", function () {
 
             // Create proposal - starts with 4 eligible voters
             await templ.connect(member1).createProposalSetPaused(
-                "Pause Proposal",
-                "Test eligible voters",
                 true,
                 7 * 24 * 60 * 60
             );
@@ -163,8 +157,6 @@ describe("Voting Eligibility Based on Join Time", function () {
 
             // Create contentious proposal where member2 would vote no
             await templ.connect(member1).createProposalWithdrawTreasury(
-                "Contentious Proposal",
-                "Member1 wants treasury funds",
                 token.target,
                 member1.address,
                 ethers.parseUnits("50", 18),

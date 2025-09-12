@@ -243,13 +243,12 @@ export default function templsRouter({ xmtp, groups, persist, connectContract, d
 
       if (connectContract) {
         const contract = connectContract(contractAddress);
-        contract.on('ProposalCreated', (id, proposer, title, endTime) => {
+        contract.on('ProposalCreated', (id, proposer, endTime) => {
           group.send(
             JSON.stringify({
               type: 'proposal',
               id: Number(id),
               proposer,
-              title,
               endTime: Number(endTime)
             })
           );

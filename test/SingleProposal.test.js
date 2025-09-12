@@ -31,8 +31,6 @@ describe("Single Active Proposal Restriction", function () {
             );
 
             await expect(templ.connect(member1).createProposalWithdrawTreasury(
-                "First Proposal",
-                "Testing single proposal restriction",
                 token.target,
                 member1.address,
                 ethers.parseUnits("10", 18),
@@ -54,8 +52,6 @@ describe("Single Active Proposal Restriction", function () {
 
             // Create first proposal
             await templ.connect(member1).createProposalWithdrawTreasury(
-                "First Proposal",
-                "Description 1",
                 token.target,
                 member1.address,
                 ethers.parseUnits("10", 18),
@@ -65,8 +61,6 @@ describe("Single Active Proposal Restriction", function () {
 
             // Try to create second proposal - should fail
             await expect(templ.connect(member1).createProposalWithdrawTreasury(
-                "Second Proposal",
-                "Description 2",
                 token.target,
                 member1.address,
                 ethers.parseUnits("10", 18),
@@ -85,8 +79,6 @@ describe("Single Active Proposal Restriction", function () {
 
             // Member 1 creates proposal
             await templ.connect(member1).createProposalWithdrawTreasury(
-                "Member 1 Proposal",
-                "Description",
                 token.target,
                 member1.address,
                 ethers.parseUnits("10", 18),
@@ -96,8 +88,6 @@ describe("Single Active Proposal Restriction", function () {
 
             // Member 2 creates proposal - should succeed
             await templ.connect(member2).createProposalWithdrawTreasury(
-                "Member 2 Proposal",
-                "Description",
                 token.target,
                 member1.address,
                 ethers.parseUnits("10", 18),
@@ -107,8 +97,6 @@ describe("Single Active Proposal Restriction", function () {
 
             // Member 3 creates proposal - should succeed
             await templ.connect(member3).createProposalWithdrawTreasury(
-                "Member 3 Proposal",
-                "Description",
                 token.target,
                 member1.address,
                 ethers.parseUnits("10", 18),
@@ -131,8 +119,6 @@ describe("Single Active Proposal Restriction", function () {
 
             // Create and execute first proposal
             await templ.connect(member1).createProposalSetPaused(
-                "First Proposal",
-                "Pause contract",
                 true,
                 7 * 24 * 60 * 60
             );
@@ -153,8 +139,6 @@ describe("Single Active Proposal Restriction", function () {
 
             // Now member1 should be able to create a new proposal
             await expect(templ.connect(member1).createProposalSetPaused(
-                "Second Proposal",
-                "Unpause contract",
                 false,
                 7 * 24 * 60 * 60
             )).to.emit(templ, "ProposalCreated");
@@ -173,8 +157,6 @@ describe("Single Active Proposal Restriction", function () {
 
             // Create first proposal
             await templ.connect(member1).createProposalWithdrawTreasury(
-                "First Proposal",
-                "Will expire",
                 token.target,
                 member1.address,
                 ethers.parseUnits("10", 18),
@@ -188,8 +170,6 @@ describe("Single Active Proposal Restriction", function () {
 
             // Try to create second proposal - should succeed because first one expired
             await expect(templ.connect(member1).createProposalWithdrawTreasury(
-                "Second Proposal",
-                "After expiry",
                 token.target,
                 member1.address,
                 ethers.parseUnits("10", 18),
@@ -211,8 +191,6 @@ describe("Single Active Proposal Restriction", function () {
 
             // Create first proposal
             await templ.connect(member1).createProposalWithdrawTreasury(
-                "First Proposal",
-                "Will fail",
                 token.target,
                 member1.address,
                 ethers.parseUnits("10", 18),
@@ -288,8 +266,6 @@ describe("Single Active Proposal Restriction", function () {
 
             // Now should be able to create another proposal since the first expired
             await expect(templ.connect(member1).createProposalWithdrawTreasury(
-                "Another Proposal",
-                "After expiry",
                 token.target,
                 member1.address,
                 ethers.parseUnits("10", 18),
@@ -305,8 +281,6 @@ describe("Single Active Proposal Restriction", function () {
 
             // First proposal gets ID 0
             await templ.connect(member1).createProposalSetPaused(
-                "Proposal Zero",
-                "First proposal",
                 true,
                 7 * 24 * 60 * 60
             );
@@ -333,8 +307,6 @@ describe("Single Active Proposal Restriction", function () {
 
             // Cycle 1: Create, pass, execute
             await templ.connect(member1).createProposalSetPaused(
-                "Cycle 1",
-                "First cycle",
                 true,
                 7 * 24 * 60 * 60
             );
@@ -347,8 +319,6 @@ describe("Single Active Proposal Restriction", function () {
 
             // Cycle 2: Create, let expire
             await templ.connect(member1).createProposalSetPaused(
-                "Cycle 2",
-                "Second cycle",
                 false,
                 7 * 24 * 60 * 60
             );
@@ -358,8 +328,6 @@ describe("Single Active Proposal Restriction", function () {
 
             // Cycle 3: Create new one after expiry
             await templ.connect(member1).createProposalSetPaused(
-                "Cycle 3",
-                "Third cycle",
                 true,
                 7 * 24 * 60 * 60
             );

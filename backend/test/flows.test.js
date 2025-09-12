@@ -934,7 +934,7 @@ test('broadcasts proposal and vote events to group', async () => {
     })
     .expect(200);
 
-  emitter.emit('ProposalCreated', 1, addresses.member, 'Test', 123);
+  emitter.emit('ProposalCreated', 1, addresses.member, 123);
   emitter.emit('VoteCast', 1, addresses.member, true, 456);
 
   // Ignore warm-up messages the backend may send on group creation or join
@@ -944,7 +944,6 @@ test('broadcasts proposal and vote events to group', async () => {
       type: 'proposal',
       id: 1,
       proposer: addresses.member,
-      title: 'Test',
       endTime: 123
     },
     {

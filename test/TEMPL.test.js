@@ -134,8 +134,6 @@ describe("TEMPL Contract with DAO Governance", function () {
             const votingPeriod = 7 * 24 * 60 * 60; // 7 days
 
             await expect(templ.connect(user1).createProposalSetPaused(
-                title,
-                description,
                 false,
                 votingPeriod
             )).to.emit(templ, "ProposalCreated");
@@ -143,15 +141,11 @@ describe("TEMPL Contract with DAO Governance", function () {
             expect(await templ.proposalCount()).to.equal(1);
             
             const proposal = await templ.getProposal(0);
-            expect(proposal.title).to.equal(title);
-            expect(proposal.description).to.equal(description);
             expect(proposal.proposer).to.equal(user1.address);
         });
 
         it("Should prevent non-members from creating proposals", async function () {
             await expect(templ.connect(user2).createProposalSetPaused(
-                "Test",
-                "Description",
                 false,
                 7 * 24 * 60 * 60
             )).to.be.revertedWithCustomError(templ, "NotMember");
@@ -160,8 +154,6 @@ describe("TEMPL Contract with DAO Governance", function () {
         it("Should allow creating a proposal to withdraw treasury funds", async function () {
             await expect(
                 templ.connect(user1).createProposalWithdrawTreasury(
-                    "Treasury Withdraw",
-                    "Propose to move funds",
                     token.target,
                     treasury.address,
                     ethers.parseUnits("1", 18),
@@ -174,8 +166,6 @@ describe("TEMPL Contract with DAO Governance", function () {
         it("Should allow creating a proposal to withdraw all treasury funds", async function () {
             await expect(
                 templ.connect(user1).createProposalWithdrawAllTreasury(
-                    "Full Treasury Withdraw",
-                    "Propose to move all funds",
                     token.target,
                     treasury.address,
                     "Drain treasury",
@@ -186,8 +176,6 @@ describe("TEMPL Contract with DAO Governance", function () {
 
         it("Should enforce minimum voting period", async function () {
             await expect(templ.connect(user1).createProposalSetPaused(
-                "Test",
-                "Description",
                 false,
                 6 * 24 * 60 * 60
             )).to.be.revertedWithCustomError(templ, "VotingPeriodTooShort");
@@ -195,8 +183,6 @@ describe("TEMPL Contract with DAO Governance", function () {
 
         it("Should enforce maximum voting period", async function () {
             await expect(templ.connect(user1).createProposalSetPaused(
-                "Test",
-                "Description",
                 false,
                 31 * 24 * 60 * 60
             )).to.be.revertedWithCustomError(templ, "VotingPeriodTooLong");
@@ -204,32 +190,12 @@ describe("TEMPL Contract with DAO Governance", function () {
 
         it("Should default to standard voting period when none provided", async function () {
             await templ.connect(user1).createProposalSetPaused(
-                "Default period",
-                "Uses default",
                 false,
                 0
             );
             const proposal = await templ.proposals(0);
             const defaultPeriod = await templ.DEFAULT_VOTING_PERIOD();
             expect(proposal.endTime - proposal.createdAt).to.equal(defaultPeriod);
-        });
-
-        it("Should require non-empty title", async function () {
-            await expect(templ.connect(user1).createProposalSetPaused(
-                "",
-                "Description",
-                false,
-                7 * 24 * 60 * 60
-            )).to.be.revertedWithCustomError(templ, "TitleRequired");
-        });
-
-        it("Should require non-empty description", async function () {
-            await expect(templ.connect(user1).createProposalSetPaused(
-                "Test",
-                "",
-                false,
-                7 * 24 * 60 * 60
-            )).to.be.revertedWithCustomError(templ, "DescriptionRequired");
         });
 
         // callData not used in typed interface

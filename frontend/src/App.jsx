@@ -840,10 +840,10 @@ function App() {
           if (prev.some((x) => x.id === p.id)) return prev;
           return [...prev, { ...p, yes: 0, no: 0 }];
         });
-        setProposalsById((map) => ({ ...map, [p.id]: { id: p.id, title: p.title, yes: map[p.id]?.yes || 0, no: map[p.id]?.no || 0 } }));
+        setProposalsById((map) => ({ ...map, [p.id]: { id: p.id, title: map[p.id]?.title || `Proposal #${p.id}`, yes: map[p.id]?.yes || 0, no: map[p.id]?.no || 0 } }));
         setMessages((m) => {
           if (m.some((it) => it.kind === 'proposal' && Number(it.proposalId) === p.id)) return m;
-          return [...m, { kind: 'proposal', senderAddress: p.proposer?.toLowerCase?.() || '', proposalId: p.id, title: p.title }];
+          return [...m, { kind: 'proposal', senderAddress: p.proposer?.toLowerCase?.() || '', proposalId: p.id, title: `Proposal #${p.id}` }];
         });
       },
       onVote: (v) => {
@@ -859,9 +859,9 @@ function App() {
         for (let i = 0; i < count; i++) {
           try {
             const p = await contract.getProposal(i);
-            const yes = Number(p.yesVotes ?? p[3] ?? 0);
-            const no = Number(p.noVotes ?? p[4] ?? 0);
-            const title = String(p.title ?? p[1] ?? `Proposal #${i}`);
+            const yes = Number(p.yesVotes ?? p[1] ?? 0);
+            const no = Number(p.noVotes ?? p[2] ?? 0);
+            const title = `Proposal #${i}`;
             if (cancelled) return;
             setProposalsById((map) => ({ ...map, [i]: { ...(map[i] || { id: i }), id: i, title: (map[i]?.title || title), yes, no } }));
             setProposals((prev) => prev.map((it) => it.id === i ? { ...it, yes, no } : it));

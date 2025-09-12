@@ -44,8 +44,6 @@ contract TEMPL is ReentrancyGuard {
     struct Proposal {
         uint256 id;
         address proposer;
-        string title;
-        string description;
         Action action;
         address token;
         address recipient;
@@ -108,7 +106,6 @@ contract TEMPL is ReentrancyGuard {
     event ProposalCreated(
         uint256 indexed proposalId,
         address indexed proposer,
-        string title,
         uint256 endTime
     );
     
@@ -253,19 +250,13 @@ contract TEMPL is ReentrancyGuard {
     /**
      * @dev Initialize a new proposal with normalized timing and proposer auto‑YES.
      *      Enforces single active proposal per address and seeds quorum metadata.
-     * @param _title Human‑readable proposal title
-     * @param _description Detailed description
      * @param _votingPeriod Voting period in seconds (0 uses default)
      * @return proposalId Newly assigned proposal ID
      * @return proposal Storage reference to initialized proposal
      */
     function _createBaseProposal(
-        string memory _title,
-        string memory _description,
         uint256 _votingPeriod
     ) internal returns (uint256 proposalId, Proposal storage proposal) {
-        if (bytes(_title).length == 0) revert TemplErrors.TitleRequired();
-        if (bytes(_description).length == 0) revert TemplErrors.DescriptionRequired();
         if (hasActiveProposal[msg.sender]) {
             uint256 existingId = activeProposalId[msg.sender];
             Proposal storage existingProposal = proposals[existingId];
@@ -283,8 +274,6 @@ contract TEMPL is ReentrancyGuard {
         proposal = proposals[proposalId];
         proposal.id = proposalId;
         proposal.proposer = msg.sender;
-        proposal.title = _title;
-        proposal.description = _description;
         proposal.endTime = block.timestamp + period;
         proposal.createdAt = block.timestamp;
         proposal.executed = false;
@@ -303,24 +292,20 @@ contract TEMPL is ReentrancyGuard {
         }
         hasActiveProposal[msg.sender] = true;
         activeProposalId[msg.sender] = proposalId;
-        emit ProposalCreated(proposalId, msg.sender, _title, proposal.endTime);
+        emit ProposalCreated(proposalId, msg.sender, proposal.endTime);
     }
 
     /**
      * @notice Create a proposal to pause or unpause membership purchases.
-     * @param _title Human‑readable title
-     * @param _description Detailed description
      * @param _paused Desired paused state
      * @param _votingPeriod Voting period in seconds (0 uses default)
      * @return id Newly assigned proposal ID
      */
     function createProposalSetPaused(
-        string memory _title,
-        string memory _description,
         bool _paused,
         uint256 _votingPeriod
     ) external onlyMember returns (uint256) {
-        (uint256 id, Proposal storage p) = _createBaseProposal(_title, _description, _votingPeriod);
+        (uint256 id, Proposal storage p) = _createBaseProposal(_votingPeriod);
         p.action = Action.SetPaused;
         p.paused = _paused;
         return id;
@@ -330,15 +315,11 @@ contract TEMPL is ReentrancyGuard {
      * @notice Create a proposal to update contract configuration.
      * @dev Token changes are disabled via governance; `_token` remains unchanged.
      *      `_newEntryFee` must be 0 (no change) or a valid value (≥10 and divisible by 10).
-     * @param _title Title
-     * @param _description Description
      * @param _newEntryFee New entry fee (0 to keep current)
      * @param _votingPeriod Voting period in seconds (0 uses default)
      * @return id Newly assigned proposal ID
      */
     function createProposalUpdateConfig(
-        string memory _title,
-        string memory _description,
         uint256 _newEntryFee,
         uint256 _votingPeriod
     ) external onlyMember returns (uint256) {
@@ -346,7 +327,7 @@ contract TEMPL is ReentrancyGuard {
             if (_newEntryFee < 10) revert TemplErrors.EntryFeeTooSmall();
             if (_newEntryFee % 10 != 0) revert TemplErrors.InvalidEntryFee();
         }
-        (uint256 id, Proposal storage p) = _createBaseProposal(_title, _description, _votingPeriod);
+        (uint256 id, Proposal storage p) = _createBaseProposal(_votingPeriod);
         p.action = Action.UpdateConfig;
         p.newEntryFee = _newEntryFee;
         return id;
@@ -354,8 +335,6 @@ contract TEMPL is ReentrancyGuard {
 
     /**
      * @notice Create a proposal to withdraw a specific amount from the treasury/donations.
-     * @param _title Title
-     * @param _description Description
      * @param _token Asset to withdraw (`address(0)` for ETH)
      * @param _recipient Destination address
      * @param _amount Amount to withdraw
@@ -364,15 +343,13 @@ contract TEMPL is ReentrancyGuard {
      * @return id Newly assigned proposal ID
      */
     function createProposalWithdrawTreasury(
-        string memory _title,
-        string memory _description,
         address _token,
         address _recipient,
         uint256 _amount,
         string memory _reason,
         uint256 _votingPeriod
     ) external onlyMember returns (uint256) {
-        (uint256 id, Proposal storage p) = _createBaseProposal(_title, _description, _votingPeriod);
+        (uint256 id, Proposal storage p) = _createBaseProposal(_votingPeriod);
         p.action = Action.WithdrawTreasury;
         p.token = _token;
         p.recipient = _recipient;
@@ -383,8 +360,6 @@ contract TEMPL is ReentrancyGuard {
 
     /**
      * @notice Create a proposal to withdraw the entire available balance of an asset.
-     * @param _title Title
-     * @param _description Description
      * @param _token Asset to withdraw (`address(0)` for ETH)
      * @param _recipient Destination address
      * @param _reason Human‑readable reason
@@ -392,14 +367,12 @@ contract TEMPL is ReentrancyGuard {
      * @return id Newly assigned proposal ID
      */
     function createProposalWithdrawAllTreasury(
-        string memory _title,
-        string memory _description,
         address _token,
         address _recipient,
         string memory _reason,
         uint256 _votingPeriod
     ) external onlyMember returns (uint256) {
-        (uint256 id, Proposal storage p) = _createBaseProposal(_title, _description, _votingPeriod);
+        (uint256 id, Proposal storage p) = _createBaseProposal(_votingPeriod);
         p.action = Action.WithdrawAllTreasury;
         p.token = _token;
         p.recipient = _recipient;
@@ -412,11 +385,9 @@ contract TEMPL is ReentrancyGuard {
      * @dev If proposed by the priest, quorum is not required
      */
     function createProposalDisbandTreasury(
-        string memory _title,
-        string memory _description,
         uint256 _votingPeriod
     ) external onlyMember returns (uint256) {
-        (uint256 id, Proposal storage p) = _createBaseProposal(_title, _description, _votingPeriod);
+        (uint256 id, Proposal storage p) = _createBaseProposal(_votingPeriod);
         p.action = Action.DisbandTreasury;
         p.token = accessToken;
         if (msg.sender == priest) {
@@ -430,12 +401,10 @@ contract TEMPL is ReentrancyGuard {
      * @dev Currently only the access token is supported for disbanding into the pool
      */
     function createProposalDisbandTreasury(
-        string memory _title,
-        string memory _description,
         address _token,
         uint256 _votingPeriod
     ) external onlyMember returns (uint256) {
-        (uint256 id, Proposal storage p) = _createBaseProposal(_title, _description, _votingPeriod);
+        (uint256 id, Proposal storage p) = _createBaseProposal(_votingPeriod);
         p.action = Action.DisbandTreasury;
         p.token = _token;
         if (msg.sender == priest) {
@@ -771,8 +740,6 @@ contract TEMPL is ReentrancyGuard {
      * @notice Get comprehensive proposal information
      * @param _proposalId Proposal ID to query
      * @return proposer Address that created the proposal
-     * @return title Proposal title
-     * @return description Detailed description
      * @return yesVotes Total weighted yes votes
      * @return noVotes Total weighted no votes
      * @return endTime Current deadline/earliest execution time
@@ -781,8 +748,6 @@ contract TEMPL is ReentrancyGuard {
      */
     function getProposal(uint256 _proposalId) external view returns (
         address proposer,
-        string memory title,
-        string memory description,
         uint256 yesVotes,
         uint256 noVotes,
         uint256 endTime,
@@ -801,8 +766,6 @@ contract TEMPL is ReentrancyGuard {
 
         return (
             proposal.proposer,
-            proposal.title,
-            proposal.description,
             proposal.yesVotes,
             proposal.noVotes,
             proposal.endTime,

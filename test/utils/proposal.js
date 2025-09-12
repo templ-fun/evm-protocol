@@ -10,27 +10,27 @@ async function createProposal({ templ, signer, title, description, callData, vot
   const conn = templ.connect(signer);
   try {
     const [paused] = IF_SET_PAUSED.decodeFunctionData("setPausedDAO", callData);
-    const tx = await conn.createProposalSetPaused(title, description, paused, votingPeriod);
+    const tx = await conn.createProposalSetPaused(paused, votingPeriod);
     return await tx.wait();
   } catch {}
   try {
     const [token, recipient, amount, reason] = IF_WT.decodeFunctionData("withdrawTreasuryDAO", callData);
-    const tx = await conn.createProposalWithdrawTreasury(title, description, token, recipient, amount, reason, votingPeriod);
+    const tx = await conn.createProposalWithdrawTreasury(token, recipient, amount, reason, votingPeriod);
     return await tx.wait();
   } catch {}
   try {
     const [token, recipient, reason] = IF_WTA.decodeFunctionData("withdrawAllTreasuryDAO", callData);
-    const tx = await conn.createProposalWithdrawAllTreasury(title, description, token, recipient, reason, votingPeriod);
+    const tx = await conn.createProposalWithdrawAllTreasury(token, recipient, reason, votingPeriod);
     return await tx.wait();
   } catch {}
   try {
     const [, newFee] = IF_UC.decodeFunctionData("updateConfigDAO", callData);
-    const tx = await conn.createProposalUpdateConfig(title, description, newFee, votingPeriod);
+    const tx = await conn.createProposalUpdateConfig(newFee, votingPeriod);
     return await tx.wait();
   } catch {}
   try {
     IF_DISBAND.decodeFunctionData("disbandTreasuryDAO", callData);
-    const tx = await conn.createProposalDisbandTreasury(title, description, votingPeriod);
+    const tx = await conn.createProposalDisbandTreasury(votingPeriod);
     return await tx.wait();
   } catch {}
   throw new Error("Unsupported callData for createProposal adapter");

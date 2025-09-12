@@ -231,9 +231,9 @@ describe('templ flows', () => {
     expect(group.send).toHaveBeenCalledWith('hello');
   });
 
-  it('proposeVote calls createProposal', async () => {
+  it('proposeVote uses typed helper for setPaused', async () => {
     const contract = {
-      createProposal: vi.fn().mockResolvedValue({ wait: vi.fn() })
+      createProposalSetPaused: vi.fn().mockResolvedValue({ wait: vi.fn() })
     };
     const ethers = { Contract: vi.fn().mockReturnValue(contract) };
     await proposeVote({
@@ -241,11 +241,11 @@ describe('templ flows', () => {
       signer: {},
       templAddress: '0xtempl',
       templArtifact,
-      title: 't',
-      description: 'd',
-      callData: '0x00'
+      action: 'setPaused',
+      params: { paused: true },
+      votingPeriod: 0
     });
-    expect(contract.createProposal).toHaveBeenCalled();
+    expect(contract.createProposalSetPaused).toHaveBeenCalled();
   });
 
   it('voteOnProposal calls vote', async () => {
@@ -331,12 +331,12 @@ describe('templ flows', () => {
       onProposal,
       onVote
     });
-    contract.emit('ProposalCreated', 1, '0x', 'title', 123);
+    contract.emit('ProposalCreated', 1, '0x', 123);
     contract.emit('VoteCast', 1, '0x', true, 123);
     expect(onProposal).toHaveBeenCalledTimes(1);
     expect(onVote).toHaveBeenCalledTimes(1);
     cleanup();
-    contract.emit('ProposalCreated', 2, '0x', 'title2', 456);
+    contract.emit('ProposalCreated', 2, '0x', 456);
     contract.emit('VoteCast', 1, '0x', false, 456);
     expect(onProposal).toHaveBeenCalledTimes(1);
     expect(onVote).toHaveBeenCalledTimes(1);
