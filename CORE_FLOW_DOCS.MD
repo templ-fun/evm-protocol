@@ -172,8 +172,8 @@ sequenceDiagram
     C-->>B: VoteCast(id, voter, support,...)
     B->>X: send {type:"vote", id, voter, support, ...}
     M->>C: executeProposal(id)
-    C->>T: withdrawTreasury(amount)
-    T->>R: transfer(amount)
+    C->>R: transfer(token, amount)
+    Note over C: uses internal handler to move assets
     C-->>M: ProposalExecuted(id, success)
 ```
 
@@ -202,14 +202,16 @@ Backend resolves inboxIds from the XMTP network via `findInboxIdByIdentifier` an
 
 ## Governance Allowlist & Rules
 - Proposal actions are restricted to an allowlist enforced at creation and execution:
-  - `setPausedDAO(bool)`
-  - `updateConfigDAO(address,uint256)` — entry fee only
-  - `withdrawTreasuryDAO(address,address,uint256,string)`
-  - `changePriestDAO(address)`
-  - `disbandTreasuryDAO()`
-- Voting: 1 vote per member; no priest bonus weighting.
-- Anti‑flash: voters must have joined before `proposal.createdAt`.
-- Majority: `yesVotes > noVotes`, anyone may execute after `endTime`.
+  - `setPausedDAO(bool)` — pause/unpause purchases
+  - `updateConfigDAO(address,uint256)` — entry fee only (token change disabled)
+  - `withdrawTreasuryDAO(address,address,uint256,string)` — move a specific amount of any asset held by the contract
+  - `changePriestDAO(address)` — change the priest
+  - `disbandTreasuryDAO()` / `disbandTreasuryDAO(address)` — disband full available balance into the member pool (access token only)
+- Voting: 1 vote per member; proposer auto‑YES; votes are changeable until eligibility closes.
+- Eligibility freeze: before quorum, any member may vote; after quorum is reached, only members who joined before `quorumReachedAt` may vote (late joiners revert `JoinedAfterProposal`).
+- Execution: requires simple majority (`yesVotes > noVotes`) and either:
+  - quorum‑exempt proposals: `block.timestamp >= endTime`, or
+  - proposals requiring quorum: quorum reached and the delay `executionDelayAfterQuorum` elapsed since `quorumReachedAt`.
 
 ## Data & Storage
 - SQLite tables:

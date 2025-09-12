@@ -12,7 +12,7 @@ See the [README](./README.md#architecture) for how the frontend fits into TEMPL 
 Install dependencies:
 
 ```bash
-npm --prefix frontend install
+npm --prefix frontend ci
 ```
 
 ## Environment variables
@@ -44,12 +44,12 @@ npm --prefix frontend run test:e2e                          # end‑to‑end (Pl
 ```
 To run e2e against a local XMTP node: clone `xmtp-local-node`, run `npm run xmtp:local:up`, execute tests with `E2E_XMTP_LOCAL=1`, then `npm run xmtp:local:down`.
 
-E2E artifacts (videos, traces, screenshots) are saved under `test-results/e2e/` at the repository root.
+E2E artifacts (videos, traces, screenshots) are saved under `frontend/test-results/`.
 ## Architecture
 
 - **Wallet connection** via `ethers` and `window.ethereum`.
 - **Default configuration** – all members have 1 vote.
-- **Governance** – members create proposals and vote from the chat; `watchProposals` updates the UI when events fire. The backend mirrors on‑chain events into the group as JSON so clients see real‑time updates. The UI supports the core DAO actions: pause/unpause, move treasury (partial or full), disband treasury to the member pool, and reprice the entry fee. Proposal titles/descriptions are not stored on‑chain; they are shared only in XMTP messages next to the on‑chain proposal id.
+- **Governance** – members create proposals and vote from the chat; `watchProposals` updates the UI when events fire. The backend mirrors on‑chain events into the group as JSON so clients see real‑time updates. The UI supports the core DAO actions: pause/unpause, move a specific treasury amount to a recipient, disband the full available balance of the access token into the member pool, and reprice the entry fee. Proposal titles/descriptions are not stored on‑chain; they are shared only in XMTP messages next to the on‑chain proposal id.
 
 See backend endpoints in [BACKEND.md](./BACKEND.md#architecture) for `POST /templs`, `POST /join`, `POST/DELETE /delegateMute`, `POST /mute`, and `GET /mutes`.
 

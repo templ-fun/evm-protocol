@@ -122,7 +122,10 @@ In the frontend (with the Priest wallet selected):
    - Token address: paste the `token.target` from step 5
    - Protocol fee recipient: `0x70997970C51812dc3A010C7d01b50e0d17dc79C8` (Hardhat #1)
    - Entry fee: `100` (must be ≥10 and divisible by 10)
-   - Note: voting is 1 member = 1 vote. The proposer auto‑votes YES at creation and voters can change their vote until the deadline.
+   - Note: governance rules:
+     - One member = one vote; proposer auto‑YES; votes are changeable until eligibility closes.
+     - Before quorum, any member may vote; after quorum is reached, only members who joined before `quorumReachedAt` may vote.
+     - Execution requires a simple majority. For most proposals, execution is allowed only after quorum is reached and the post‑quorum delay elapses; priest‑proposed disband is quorum‑exempt and respects only its end time.
 4. Click `Deploy`.
 
 You’ll land in `Chat` with the group created. The header shows the contract short address.
@@ -143,7 +146,7 @@ The chat auto‑loads the last 100 messages and any past proposals. Use “Load 
 - Click `Propose vote` (priest or any member): optionally set a title (shared via XMTP only) and use the “Pause DAO” quick action (encodes `setPausedDAO(true)`). Submit and sign the tx.
 - A poll bubble appears in chat.
 - Vote via `Vote Yes/No`; each voter signs their tx.
-- If you’re the priest, an `Execute` button appears after the voting period (or advance time on Hardhat).
+- If you’re the priest, an `Execute` button appears when eligible: after quorum is reached and the post‑quorum delay elapses (for most proposals). Quorum‑exempt proposals (priest‑proposed disband) become executable after their end time.
 
 ## Troubleshooting
 

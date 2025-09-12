@@ -28,7 +28,7 @@ sequenceDiagram
     participant Contracts
 
     Frontend->>Contracts: purchaseAccess()
-    Frontend->>Backend: requestInvite()
+    Frontend->>Backend: POST /join
     Contracts-->>Backend: Purchase event
     Backend-->>Frontend: Invite & updates
 ```
@@ -45,7 +45,7 @@ Use the docs below to dive into each component:
  
 ## Prerequisites
 - Node `22.18.0` (enforced via `engines` in `package.json`).
-- After `npm install`, enable hooks with `npm run prepare` (Husky).
+- After installing (e.g., `npm ci`), enable hooks with `npm run prepare` (Husky).
   
 ## Monorepo Structure
 - `contracts/` – Hardhat + Solidity 0.8.23
@@ -60,11 +60,11 @@ Use the docs below to dive into each component:
 
 ## Quick Start
 1. **Install**
-   Install all dependencies; running `npm install` in the repo root pulls in contract packages:
+   Install all dependencies with locked versions:
    ```bash
-   npm install
-   npm --prefix backend install
-   npm --prefix frontend install
+   npm ci
+   npm --prefix backend ci
+   npm --prefix frontend ci
    ```
 
 2. **Test**
@@ -84,9 +84,9 @@ Use the docs below to dive into each component:
    The backend expects environment variables like `BOT_PRIVATE_KEY`, `RPC_URL`, and `ALLOWED_ORIGINS` in `backend/.env`. See [BACKEND.md](./BACKEND.md) and [FRONTEND.md](./FRONTEND.md) for details.
 
 ## Commands
-- Contracts: `npm run compile`, `npm test`, `npm run node`, `npm run deploy:local`, `npm run slither`
-- Backend: `npm --prefix backend start`, `npm --prefix backend test`, `npm --prefix backend run lint[:fix]`
-- Frontend: `npm --prefix frontend run dev`, `npm --prefix frontend test`, `npm --prefix frontend run test:e2e`, `npm --prefix frontend run build`, `npm --prefix frontend run preview`
+- Contracts: `npm run compile`, `npm test`, `npm run node`, `npm run deploy:local`, `npm run slither`, `npm run coverage`
+- Backend: `npm --prefix backend start`, `npm --prefix backend test`, `npm --prefix backend run coverage`, `npm --prefix backend run lint[:fix]`
+- Frontend: `npm --prefix frontend run dev`, `npm --prefix frontend test`, `npm --prefix frontend run coverage`, `npm --prefix frontend run test:e2e`, `npm --prefix frontend run build`, `npm --prefix frontend run preview`
 - Integration (end‑to‑end core flows): `npm --prefix frontend run test -- src/core-flows.integration.test.js`
 
 ## Environment Variables
@@ -106,7 +106,7 @@ Minimal local setup requires only a handful of variables:
 | `XMTP_METADATA_UPDATES` | Set to `0` to skip name/description updates on XMTP groups | `backend/.env` |
 | `BACKEND_SERVER_ID` | String identifier bound into EIP‑712 signatures (must match frontend’s `VITE_BACKEND_SERVER_ID`) | `backend/.env` |
 
-See [BACKEND.md#environment-variables](./BACKEND.md#environment-variables) and [CONTRACTS.md#configuration](./CONTRACTS.md#configuration) for complete lists.
+See [BACKEND.md#environment-variables](./BACKEND.md#environment-variables) and [CONTRACTS.md#configuration--deployment](./CONTRACTS.md#configuration--deployment) for complete lists.
 
 ## Deploying to production
 1. Create a `.env` file in the project root for deployment scripts and a `backend/.env` for the bot. Required variables are documented in [CONTRACTS.md#configuration](./CONTRACTS.md#configuration) and [BACKEND.md#environment-variables](./BACKEND.md#environment-variables).
@@ -170,7 +170,7 @@ Core flows include TEMPL creation, paid onboarding, chat, moderation, proposal d
 - Contracts
   - Proposal execution is restricted to an allowlist of safe DAO actions; arbitrary external calls are disabled.
   - Governance actions are allowlisted to: pause/unpause (`setPausedDAO`), reprice entry fee only (`updateConfigDAO` with token changes disabled), move treasury in part (`withdrawTreasuryDAO`), change the priest (`changePriestDAO`), and disband treasury into the member pool (`disbandTreasuryDAO`).
-  - Voting is one member‑one vote; proposer auto‑YES, votes are changeable until deadline; anti‑flash rule enforces join before proposal.
+  - Voting is one member‑one vote; proposer auto‑YES; votes are changeable until eligibility closes. Before quorum, any member may vote; after quorum is reached, only members who joined before `quorumReachedAt` may vote (late joiners revert).
   - Governance may move the access‑token treasury and any tokens or ETH held by the contract (including donations) via proposals. The member pool cannot be withdrawn; it is only claimable by members. Arbitrary external calls remain disabled.
 - Backend API
   - EIP‑712 typed signatures must include `{ action, contract, nonce, issuedAt, expiry, chainId, server }`.
