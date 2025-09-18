@@ -61,7 +61,7 @@ sequenceDiagram
 - `createProposalWithdrawTreasury(address token, address recipient, uint256 amount, string reason, uint256 votingPeriod)`
 - `createProposalChangePriest(address newPriest, uint256 votingPeriod)`
 - `createProposalDisbandTreasury(uint256 votingPeriod)` and overloaded
-  `createProposalDisbandTreasury(address token, uint256 votingPeriod)` (token must equal the access token at execution).
+  `createProposalDisbandTreasury(address token, uint256 votingPeriod)` (execution succeeds only when the token equals the access token; mismatches revert during execution).
 
 Note: Proposal metadata (title/description) is not stored on‑chain. Keep human‑readable text in XMTP group messages alongside the on‑chain proposal id.
 

@@ -122,7 +122,7 @@ flowchart LR
 - `setPausedDAO(bool)` — pause/unpause purchases.
 - `updateConfigDAO(address,uint256)` — update entry fee only; token changes are disabled (`TokenChangeDisabled`). `_token` must be `address(0)` or the current token.
 - `withdrawTreasuryDAO(address token, address recipient, uint256 amount, string reason)` — move a specific amount of any asset held by the contract. For the access token, only the treasury portion is withdrawable; the member pool is preserved.
-- `disbandTreasuryDAO()` / `disbandTreasuryDAO(address)` — move the full available balance of the access token into the member pool equally. Only the access token can be pooled.
+- `disbandTreasuryDAO()` / `disbandTreasuryDAO(address)` — move the full available balance of the access token into the member pool equally. Execution succeeds only when the token matches the configured access token; mismatches revert during execution even though proposal creation succeeds.
 - `changePriestDAO(address)` — change the on‑chain `priest` address.
 
 Creation helpers (`createProposalX`) initialize proposals with normalized timing, proposer auto‑YES, and optional quorum exemption for priest‑proposed disband.
