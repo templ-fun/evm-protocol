@@ -217,14 +217,7 @@ export default function templsRouter({ xmtp, groups, persist, connectContract, d
       // Log member count after creation (expected to be 1 - the server itself)
       // Skip dumping member arrays in non-debug logs
 
-      // Metadata updates are handled by the ephemeral creator when enabled; keep fallback here for test mode only
-      const META_UPDATES = process.env.XMTP_METADATA_UPDATES !== '0';
-      if (process.env.NODE_ENV === 'test' && META_UPDATES && !DISABLE_WAIT && typeof group.updateName === 'function') {
-        try { await group.updateName(`Templ ${contractAddress}`); } catch (err) { if (!String(err?.message||'').includes('succeeded')) throw err; }
-      }
-      if (process.env.NODE_ENV === 'test' && META_UPDATES && !DISABLE_WAIT && typeof group.updateDescription === 'function') {
-        try { await group.updateDescription('Private TEMPL group'); } catch (err) { if (!String(err?.message||'').includes('succeeded')) throw err; }
-      }
+      // Metadata updates are handled by the ephemeral creator when enabled
 
       // Ensure the group is fully synced before returning
       try {

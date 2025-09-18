@@ -34,10 +34,6 @@ abstract contract TemplTreasury is TemplMembership {
         _disbandTreasury(accessToken, 0);
     }
 
-    function disbandTreasuryDAO(address token) external onlyDAO {
-        _disbandTreasury(token, 0);
-    }
-
     function changePriestDAO(address newPriest) external onlyDAO {
         _changePriest(newPriest);
     }
