@@ -82,6 +82,10 @@ sequenceDiagram
 - Member rewards:
   - `getClaimablePoolAmount(address)` — accrued rewards since join/last claim.
   - `claimMemberPool()` — transfers claimable amount; reverts `NoRewardsToClaim` or `InsufficientPoolBalance` when applicable. Updates snapshot and `memberPoolBalance`.
+- External reward pools:
+  - Governance can disburse non access-token assets (ERC‑20 or ETH) by disbanding them with `disbandTreasuryDAO(token)`.
+  - The contract tracks each token in `externalRewards[token]`; members inspect via `getExternalRewardTokens()` / `getExternalRewardState(token)` and withdraw their share using `claimExternalToken(token)` (supports `address(0)` for ETH).
+  - Successful withdrawals emit `ExternalRewardClaimed(token, member, amount)` and update snapshots to prevent double-claims.
 
 ### Governance Model
 
@@ -123,7 +127,7 @@ flowchart LR
 - `setPausedDAO(bool)` — pause/unpause purchases.
 - `updateConfigDAO(address,uint256)` — update entry fee only; token changes are disabled (`TokenChangeDisabled`). `_token` must be `address(0)` or the current token.
 - `withdrawTreasuryDAO(address token, address recipient, uint256 amount, string reason)` — move a specific amount of any asset held by the contract. For the access token, only the treasury portion is withdrawable; the member pool is preserved.
-- `disbandTreasuryDAO()` — move the full available balance of the access token into the member pool with per-member integer division; any remainder rolls into `memberRewardRemainder`. Other ERC‑20s or ETH should be withdrawn via `withdrawTreasuryDAO` before disbanding.
+- `disbandTreasuryDAO(address token)` — move the full available balance of `token` into a member-distributable pool. With the access token this increases the member pool (`memberPoolBalance`) and remainder; with any other ERC‑20 or ETH the funds are tracked in an external rewards pool that members withdraw via `claimExternalToken`.
 - `changePriestDAO(address)` — change the on‑chain `priest` address.
 
 Creation helpers (`createProposalX`) initialize proposals with normalized timing, proposer auto‑YES, and optional quorum exemption for priest‑proposed disband.
@@ -134,6 +138,7 @@ Creation helpers (`createProposalX`) initialize proposals with normalized timing
 - `getConfig()` — token, entry fee, paused flag, member count, available treasury, pool.
 - `getMemberCount()` — number of members.
 - `getVoteWeight(address)` — `1` for members, `0` for non‑members.
+- External reward helpers: `getExternalRewardTokens()`, `getExternalRewardState(address)`, `getClaimableExternalToken(member, token)`, and `claimExternalToken(token)` (handles ERC‑20 or native via `address(0)`).
 - `getProposal(id)` — proposer, yes/no votes, endTime, executed flag, computed `passed`.
 - `hasVoted(id, voter)` — whether and how a voter voted (`support`).
 - `getActiveProposals()` / `getActiveProposalsPaginated(offset, limit)` — active proposal ids, with pagination support.

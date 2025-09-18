@@ -30,8 +30,8 @@ abstract contract TemplTreasury is TemplMembership {
         _setPaused(_paused);
     }
 
-    function disbandTreasuryDAO() external onlyDAO {
-        _disbandTreasury(accessToken, 0);
+    function disbandTreasuryDAO(address token) external onlyDAO {
+        _disbandTreasury(token, 0);
     }
 
     function changePriestDAO(address newPriest) external onlyDAO {
@@ -58,11 +58,19 @@ abstract contract TemplTreasury is TemplMembership {
 
             IERC20(accessToken).safeTransfer(recipient, amount);
         } else if (token == address(0)) {
-            if (amount > address(this).balance) revert TemplErrors.InsufficientTreasuryBalance();
+            ExternalRewardState storage rewards = externalRewards[address(0)];
+            uint256 current = address(this).balance;
+            uint256 reserved = rewards.poolBalance;
+            uint256 available = current > reserved ? current - reserved : 0;
+            if (amount > available) revert TemplErrors.InsufficientTreasuryBalance();
             (bool success, ) = payable(recipient).call{value: amount}("");
             if (!success) revert TemplErrors.ProposalExecutionFailed();
         } else {
-            if (amount > IERC20(token).balanceOf(address(this))) revert TemplErrors.InsufficientTreasuryBalance();
+            ExternalRewardState storage rewards = externalRewards[token];
+            uint256 current = IERC20(token).balanceOf(address(this));
+            uint256 reserved = rewards.poolBalance;
+            uint256 available = current > reserved ? current - reserved : 0;
+            if (amount > available) revert TemplErrors.InsufficientTreasuryBalance();
             IERC20(token).safeTransfer(recipient, amount);
         }
         emit TreasuryAction(proposalId, token, recipient, amount, reason);
@@ -92,24 +100,61 @@ abstract contract TemplTreasury is TemplMembership {
     }
 
     function _disbandTreasury(address token, uint256 proposalId) internal {
-        if (token != accessToken) revert TemplErrors.InvalidCallData();
-        uint256 current = IERC20(accessToken).balanceOf(address(this));
-        if (current <= memberPoolBalance) revert TemplErrors.NoTreasuryFunds();
-        uint256 amount = current - memberPoolBalance;
-
         uint256 n = memberList.length;
         if (n == 0) revert TemplErrors.NoMembers();
-        uint256 fromFees = amount <= treasuryBalance ? amount : treasuryBalance;
-        treasuryBalance -= fromFees;
 
-        memberPoolBalance += amount;
+        if (token == accessToken) {
+            uint256 current = IERC20(accessToken).balanceOf(address(this));
+            if (current <= memberPoolBalance) revert TemplErrors.NoTreasuryFunds();
+            uint256 amount = current - memberPoolBalance;
 
-        uint256 totalRewards = amount + memberRewardRemainder;
+            uint256 fromFees = amount <= treasuryBalance ? amount : treasuryBalance;
+            treasuryBalance -= fromFees;
+
+            memberPoolBalance += amount;
+
+            uint256 totalRewards = amount + memberRewardRemainder;
+            uint256 perMember = totalRewards / n;
+            uint256 remainder = totalRewards % n;
+            cumulativeMemberRewards += perMember;
+            memberRewardRemainder = remainder;
+
+            emit TreasuryDisbanded(proposalId, token, amount, perMember, remainder);
+            return;
+        }
+
+        uint256 currentBalance;
+        if (token == address(0)) {
+            currentBalance = address(this).balance;
+        } else {
+            currentBalance = IERC20(token).balanceOf(address(this));
+        }
+
+        ExternalRewardState storage rewards = externalRewards[token];
+        uint256 reserved = rewards.poolBalance;
+        if (currentBalance <= reserved) revert TemplErrors.NoTreasuryFunds();
+
+        uint256 amount = currentBalance - reserved;
+        if (amount == 0) revert TemplErrors.NoTreasuryFunds();
+
+        _registerExternalToken(token);
+
+        rewards.poolBalance += amount;
+
+        uint256 totalRewards = amount + rewards.rewardRemainder;
         uint256 perMember = totalRewards / n;
         uint256 remainder = totalRewards % n;
-        cumulativeMemberRewards += perMember;
-        memberRewardRemainder = remainder;
+        rewards.cumulativeRewards += perMember;
+        rewards.rewardRemainder = remainder;
 
-        emit TreasuryDisbanded(proposalId, amount, perMember, remainder);
+        emit TreasuryDisbanded(proposalId, token, amount, perMember, remainder);
+    }
+
+    function _registerExternalToken(address token) internal {
+        ExternalRewardState storage rewards = externalRewards[token];
+        if (!rewards.exists) {
+            rewards.exists = true;
+            externalRewardTokens.push(token);
+        }
     }
 }

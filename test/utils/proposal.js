@@ -3,7 +3,8 @@ const { ethers } = require("hardhat");
 const IF_SET_PAUSED = new ethers.Interface(["function setPausedDAO(bool)"]);
 const IF_WT = new ethers.Interface(["function withdrawTreasuryDAO(address,address,uint256,string)"]);
 const IF_UC = new ethers.Interface(["function updateConfigDAO(address,uint256)"]);
-const IF_DISBAND = new ethers.Interface(["function disbandTreasuryDAO()"]);
+const IF_DISBAND = new ethers.Interface(["function disbandTreasuryDAO(address)"]);
+const IF_DISBAND_LEGACY = new ethers.Interface(["function disbandTreasuryDAO()"]);
 
 async function createProposal({ templ, signer, title, description, callData, votingPeriod }) {
   const conn = templ.connect(signer);
@@ -23,8 +24,14 @@ async function createProposal({ templ, signer, title, description, callData, vot
     return await tx.wait();
   } catch {}
   try {
-    IF_DISBAND.decodeFunctionData("disbandTreasuryDAO", callData);
-    const tx = await conn.createProposalDisbandTreasury(votingPeriod);
+    const [token] = IF_DISBAND.decodeFunctionData("disbandTreasuryDAO", callData);
+    const tx = await conn.createProposalDisbandTreasury(token, votingPeriod);
+    return await tx.wait();
+  } catch {}
+  try {
+    IF_DISBAND_LEGACY.decodeFunctionData("disbandTreasuryDAO", callData);
+    const accessToken = await templ.accessToken();
+    const tx = await conn.createProposalDisbandTreasury(accessToken, votingPeriod);
     return await tx.wait();
   } catch {}
   throw new Error("Unsupported callData for createProposal adapter");

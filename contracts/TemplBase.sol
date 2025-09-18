@@ -134,10 +134,29 @@ abstract contract TemplBase is ReentrancyGuard {
     event PriestChanged(address indexed oldPriest, address indexed newPriest);
     event TreasuryDisbanded(
         uint256 indexed proposalId,
+        address indexed token,
         uint256 amount,
         uint256 perMember,
         uint256 remainder
     );
+
+    event ExternalRewardClaimed(
+        address indexed token,
+        address indexed member,
+        uint256 amount
+    );
+
+    struct ExternalRewardState {
+        uint256 poolBalance;
+        uint256 cumulativeRewards;
+        uint256 rewardRemainder;
+        bool exists;
+    }
+
+    mapping(address => ExternalRewardState) internal externalRewards;
+    address[] internal externalRewardTokens;
+    mapping(address => mapping(address => uint256)) internal memberExternalRewardSnapshots;
+    mapping(address => mapping(address => uint256)) internal memberExternalClaims;
 
     modifier onlyMember() {
         if (!members[msg.sender].purchased) revert TemplErrors.NotMember();

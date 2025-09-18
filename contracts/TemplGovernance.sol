@@ -50,11 +50,12 @@ abstract contract TemplGovernance is TemplTreasury {
     }
 
     function createProposalDisbandTreasury(
+        address _token,
         uint256 _votingPeriod
     ) external onlyMember returns (uint256) {
         (uint256 id, Proposal storage p) = _createBaseProposal(_votingPeriod);
         p.action = Action.DisbandTreasury;
-        p.token = accessToken;
+        p.token = _token;
         if (msg.sender == priest) {
             p.quorumExempt = true;
         }

@@ -36,6 +36,8 @@ abstract contract TemplMembership is TemplBase {
             cumulativeMemberRewards += rewardPerMember;
         }
 
+        _syncExternalRewardSnapshots(msg.sender);
+
         m.rewardSnapshot = cumulativeMemberRewards;
 
         uint256 thirtyPercent = (entryFee * 30) / 100;
@@ -74,6 +76,35 @@ abstract contract TemplMembership is TemplBase {
         return accrued > snapshot ? accrued - snapshot : 0;
     }
 
+    function getExternalRewardTokens() external view returns (address[] memory) {
+        return externalRewardTokens;
+    }
+
+    function getExternalRewardState(address token) external view returns (
+        uint256 poolBalance,
+        uint256 cumulativeRewards,
+        uint256 remainder
+    ) {
+        ExternalRewardState storage rewards = externalRewards[token];
+        return (rewards.poolBalance, rewards.cumulativeRewards, rewards.rewardRemainder);
+    }
+
+    function getClaimableExternalToken(address member, address token) public view returns (uint256) {
+        if (!members[member].purchased) {
+            return 0;
+        }
+        if (token == accessToken) {
+            return 0;
+        }
+        ExternalRewardState storage rewards = externalRewards[token];
+        if (!rewards.exists) {
+            return 0;
+        }
+        uint256 accrued = rewards.cumulativeRewards;
+        uint256 snapshot = memberExternalRewardSnapshots[member][token];
+        return accrued > snapshot ? accrued - snapshot : 0;
+    }
+
     function claimMemberPool() external onlyMember nonReentrant {
         uint256 claimable = getClaimablePoolAmount(msg.sender);
         if (claimable == 0) revert TemplErrors.NoRewardsToClaim();
@@ -87,6 +118,31 @@ abstract contract TemplMembership is TemplBase {
         IERC20(accessToken).safeTransfer(msg.sender, claimable);
 
         emit MemberPoolClaimed(msg.sender, claimable, block.timestamp);
+    }
+
+    function claimExternalToken(address token) external onlyMember nonReentrant {
+        if (token == accessToken) revert TemplErrors.InvalidCallData();
+        ExternalRewardState storage rewards = externalRewards[token];
+        if (!rewards.exists) revert TemplErrors.NoRewardsToClaim();
+
+        uint256 claimable = getClaimableExternalToken(msg.sender, token);
+        if (claimable == 0) revert TemplErrors.NoRewardsToClaim();
+
+        uint256 remaining = rewards.poolBalance;
+        if (remaining < claimable) revert TemplErrors.InsufficientPoolBalance();
+
+        memberExternalRewardSnapshots[msg.sender][token] = rewards.cumulativeRewards;
+        memberExternalClaims[msg.sender][token] += claimable;
+        rewards.poolBalance = remaining - claimable;
+
+        if (token == address(0)) {
+            (bool success, ) = payable(msg.sender).call{value: claimable}("");
+            if (!success) revert TemplErrors.ProposalExecutionFailed();
+        } else {
+            IERC20(token).safeTransfer(msg.sender, claimable);
+        }
+
+        emit ExternalRewardClaimed(token, msg.sender, claimable);
     }
 
     function hasAccess(address user) external view returns (bool) {
@@ -144,5 +200,16 @@ abstract contract TemplMembership is TemplBase {
             return 0;
         }
         return 1;
+    }
+
+    function _syncExternalRewardSnapshots(address account) internal {
+        uint256 len = externalRewardTokens.length;
+        for (uint256 i = 0; i < len; i++) {
+            address token = externalRewardTokens[i];
+            if (token == accessToken) continue;
+            ExternalRewardState storage rewards = externalRewards[token];
+            if (!rewards.exists) continue;
+            memberExternalRewardSnapshots[account][token] = rewards.cumulativeRewards;
+        }
     }
 }

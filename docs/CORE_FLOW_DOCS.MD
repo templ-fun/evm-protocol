@@ -210,7 +210,7 @@ Backend resolves inboxIds from the XMTP network via `findInboxIdByIdentifier` an
   - `updateConfigDAO(address,uint256)` — entry fee only (token change disabled)
   - `withdrawTreasuryDAO(address,address,uint256,string)` — move a specific amount of any asset held by the contract
   - `changePriestDAO(address)` — change the priest
-  - `disbandTreasuryDAO()` — disband the full available access-token balance into the member pool; withdraw any other assets first via `withdrawTreasuryDAO`
+  - `disbandTreasuryDAO(address token)` — disband the full available balance of the chosen token. Using the access token increases the member pool; other ERC‑20s or ETH become claimable via external reward pools.
 - Voting: 1 vote per member; proposer auto‑YES; votes are changeable until eligibility closes.
 - Eligibility freeze: before quorum, any member may vote; after quorum is reached, only members who joined before `quorumReachedAt` may vote (late joiners revert `JoinedAfterProposal`).
 - Execution: requires simple majority (`yesVotes > noVotes`) and either:

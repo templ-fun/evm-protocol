@@ -23,8 +23,8 @@ contract DaoCallerHarness is TEMPL {
         this.setPausedDAO(p);
     }
     /// @notice Wrapper to call disbandTreasuryDAO via contract self-call
-    function daoDisband() external {
-        this.disbandTreasuryDAO();
+    function daoDisband(address token) external {
+        this.disbandTreasuryDAO(token);
     }
     /// @notice Wrapper to call changePriestDAO via contract self-call
     function daoChangePriest(address newPriest) external {
