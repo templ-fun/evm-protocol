@@ -319,11 +319,19 @@ export async function proposeVote({
       case 'updateConfig':
         tx = await contract.createProposalUpdateConfig(p.newEntryFee || 0n, votingPeriod, txOptions); break;
       case 'disbandTreasury': {
-        // Ignore custom token overrides; the contract always targets the access token for disbanding.
-        if (p.token) {
-          try { console.warn('[disbandTreasury] token parameter ignored; disband always uses access token'); } catch {}
+        let tokenAddr;
+        const provided = String(p.token ?? '').trim();
+        if (!provided) {
+          tokenAddr = await contract.accessToken();
+        } else if (provided.toLowerCase() === 'eth') {
+          tokenAddr = ethers.ZeroAddress;
+        } else {
+          if (!ethers.isAddress(provided)) {
+            throw new Error('Invalid disband token address');
+          }
+          tokenAddr = provided;
         }
-        tx = await contract.createProposalDisbandTreasury(votingPeriod, txOptions);
+        tx = await contract.createProposalDisbandTreasury(tokenAddr, votingPeriod, txOptions);
         break;
       }
       default:
@@ -363,15 +371,17 @@ export async function proposeVote({
         const tx = await contract.createProposalUpdateConfig(newEntryFee, votingPeriod, txOptions);
         return await tx.wait();
       }
-      if (fn?.name === 'disbandTreasuryDAO' && fn.inputs.length === 0) {
-        const tx = await contract.createProposalDisbandTreasury(votingPeriod, txOptions);
-        return await tx.wait();
-      }
-      if (fn?.name === 'disbandTreasuryDAO' && fn.inputs.length === 1) {
-        // Older calldata included a token param; ignore it so execution cannot revert on mismatches.
-        void full.decodeFunctionData(fn, callData);
-        const tx = await contract.createProposalDisbandTreasury(votingPeriod, txOptions);
-        return await tx.wait();
+      if (fn?.name === 'disbandTreasuryDAO') {
+        if (fn.inputs.length === 1) {
+          const [token] = full.decodeFunctionData(fn, callData);
+          const tx = await contract.createProposalDisbandTreasury(token, votingPeriod, txOptions);
+          return await tx.wait();
+        }
+        if (fn.inputs.length === 0) {
+          const token = await contract.accessToken();
+          const tx = await contract.createProposalDisbandTreasury(token, votingPeriod, txOptions);
+          return await tx.wait();
+        }
       }
       return await fallbackCreate();
     } catch {
@@ -578,6 +588,34 @@ export async function getClaimable({ ethers, providerOrSigner, templAddress, tem
   return BigInt(amount).toString();
 }
 
+export async function getExternalRewards({
+  ethers,
+  providerOrSigner,
+  templAddress,
+  templArtifact,
+  memberAddress
+}) {
+  const contract = new ethers.Contract(templAddress, templArtifact.abi, providerOrSigner);
+  const tokens = await contract.getExternalRewardTokens();
+  const results = [];
+  for (const token of tokens) {
+    const [poolBalance, cumulativeRewards, remainder] = await contract.getExternalRewardState(token);
+    let claimable = 0n;
+    if (memberAddress) {
+      const c = await contract.getClaimableExternalToken(memberAddress, token);
+      claimable = BigInt(c ?? 0n);
+    }
+    results.push({
+      token,
+      poolBalance: BigInt(poolBalance ?? 0n).toString(),
+      cumulativeRewards: BigInt(cumulativeRewards ?? 0n).toString(),
+      remainder: BigInt(remainder ?? 0n).toString(),
+      claimable: claimable.toString()
+    });
+  }
+  return results;
+}
+
 /**
  * Claim member pool rewards for the connected wallet.
  * @param {{ethers:any, signer:any, templAddress:string, templArtifact:any, txOptions?:any}} params
@@ -585,5 +623,18 @@ export async function getClaimable({ ethers, providerOrSigner, templAddress, tem
 export async function claimMemberPool({ ethers, signer, templAddress, templArtifact, txOptions = {} }) {
   const contract = new ethers.Contract(templAddress, templArtifact.abi, signer);
   const tx = await contract.claimMemberPool(txOptions);
+  await tx.wait();
+}
+
+export async function claimExternalToken({
+  ethers,
+  signer,
+  templAddress,
+  templArtifact,
+  token,
+  txOptions = {}
+}) {
+  const contract = new ethers.Contract(templAddress, templArtifact.abi, signer);
+  const tx = await contract.claimExternalToken(token, txOptions);
   await tx.wait();
 }

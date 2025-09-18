@@ -49,7 +49,7 @@ E2E artifacts (videos, traces, screenshots) are saved under `frontend/test-resul
 
 - **Wallet connection** via `ethers` and `window.ethereum`.
 - **Default configuration** – all members have 1 vote.
-- **Governance** – members create proposals and vote from the chat; `watchProposals` updates the UI when events fire. The backend mirrors on‑chain events into the group as JSON so clients see real‑time updates. The UI supports the core DAO actions: pause/unpause, move a specific treasury amount to a recipient, disband the full available balance of the access token into the member pool, and reprice the entry fee. Proposal titles/descriptions are not stored on‑chain; they are shared only in XMTP messages next to the on‑chain proposal id.
+- **Governance** – members create proposals and vote from the chat; `watchProposals` updates the UI when events fire. The backend mirrors on‑chain events into the group as JSON so clients see real‑time updates. The UI supports the allowlisted DAO actions: pause/unpause, move a specific treasury amount to a recipient, disband the full available balance of any token (entry-fee token, donated ERC‑20, or native ETH) into member rewards, and reprice the entry fee. Proposal titles/descriptions are not stored on-chain; they are shared only in XMTP messages next to the on-chain proposal id.
 
 See backend endpoints in [BACKEND.md](./BACKEND.md#architecture) for `POST /templs`, `POST /join`, `POST/DELETE /delegateMute`, `POST /mute`, and `GET /mutes`.
 
@@ -66,6 +66,7 @@ flowchart LR
 - `VITE_XMTP_ENV` defaults to `dev` on localhost and `production` elsewhere; override for `local` nodes.
 - `VITE_E2E_DEBUG=1` exposes `window.__XMTP` helpers for diagnostics.
 - The Browser SDK sets `appVersion` for diagnostics and `src/flows.js` is typed via JSDoc.
+- The chat exposes a single `Claim` button that sweeps both member-pool rewards and any external token pools using `claimExternalToken`; external balances remain visible for transparency.
 
 ## Security considerations
 - Membership verification happens on-chain; bypassing the backend would require membership proof.

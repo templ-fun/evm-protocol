@@ -6,20 +6,28 @@ const { mintToUsers, purchaseAccess } = require("./utils/mintAndPurchase");
 describe("Disband Treasury", function () {
   const ENTRY_FEE = ethers.parseUnits("100", 18);
   const TOKEN_SUPPLY = ethers.parseUnits("10000", 18);
+  const VOTING_PERIOD = 7 * 24 * 60 * 60;
 
   let templ;
   let token;
   let accounts;
+  let owner;
   let m1, m2, m3;
 
   beforeEach(async function () {
     ({ templ, token, accounts } = await deployTempl({ entryFee: ENTRY_FEE }));
-    [ , , m1, m2, m3 ] = accounts;
+    [owner, , m1, m2, m3] = accounts;
     await mintToUsers(token, [m1, m2, m3], TOKEN_SUPPLY);
     await purchaseAccess(templ, token, [m1, m2, m3]);
   });
 
+  async function advanceTimeBeyondVoting() {
+    await ethers.provider.send("evm_increaseTime", [8 * 24 * 60 * 60]);
+    await ethers.provider.send("evm_mine");
+  }
+
   it("allocates treasury equally to all members and empties treasury", async function () {
+    const accessToken = await templ.accessToken();
     const memberCount = 3n;
     const tBefore = await templ.treasuryBalance();
     expect(tBefore).to.be.gt(0n);
@@ -28,13 +36,13 @@ describe("Disband Treasury", function () {
     const before2 = await templ.getClaimablePoolAmount(m2.address);
     const before3 = await templ.getClaimablePoolAmount(m3.address);
 
-    await templ.connect(m1).createProposalDisbandTreasury(7 * 24 * 60 * 60);
+    await templ
+      .connect(m1)
+      .createProposalDisbandTreasury(accessToken, VOTING_PERIOD);
     await templ.connect(m1).vote(0, true);
     await templ.connect(m2).vote(0, true);
 
-    await ethers.provider.send("evm_increaseTime", [8 * 24 * 60 * 60]);
-    await ethers.provider.send("evm_mine");
-
+    await advanceTimeBeyondVoting();
     await templ.executeProposal(0);
 
     // Treasury moved to pool
@@ -56,35 +64,48 @@ describe("Disband Treasury", function () {
   });
 
   it("reverts when called directly (NotDAO)", async function () {
-    await expect(templ.connect(m1).disbandTreasuryDAO())
-      .to.be.revertedWithCustomError(templ, "NotDAO");
+    await expect(
+      templ.connect(m1).disbandTreasuryDAO(token.target)
+    ).to.be.revertedWithCustomError(templ, "NotDAO");
   });
 
-  it("always records the access token for disband proposals", async function () {
+  it("records whichever token the proposal specifies", async function () {
     const accessToken = await templ.accessToken();
-    await expect(
-      templ.connect(m1).createProposalDisbandTreasury(7 * 24 * 60 * 60)
-    ).to.emit(templ, "ProposalCreated");
-
-    const proposal = await templ.proposals(0);
+    await templ
+      .connect(m1)
+      .createProposalDisbandTreasury(accessToken, VOTING_PERIOD);
+    let proposal = await templ.proposals(0);
     expect(proposal.token).to.equal(accessToken);
+
+    const OtherToken = await ethers.getContractFactory("TestToken");
+    const otherToken = await OtherToken.deploy("Other", "OTH", 18);
+    await otherToken.mint(owner.address, ENTRY_FEE);
+    await otherToken.transfer(await templ.getAddress(), ENTRY_FEE);
+
+    await templ
+      .connect(m2)
+      .createProposalDisbandTreasury(otherToken.target, VOTING_PERIOD);
+    proposal = await templ.proposals(1);
+    expect(proposal.token).to.equal(otherToken.target);
   });
 
   it("reverts when treasury is empty", async function () {
-    // First disband to empty
-    await templ.connect(m1).createProposalDisbandTreasury(7 * 24 * 60 * 60);
+    const accessToken = await templ.accessToken();
+
+    await templ
+      .connect(m1)
+      .createProposalDisbandTreasury(accessToken, VOTING_PERIOD);
     await templ.connect(m1).vote(0, true);
     await templ.connect(m2).vote(0, true);
-    await ethers.provider.send("evm_increaseTime", [8 * 24 * 60 * 60]);
-    await ethers.provider.send("evm_mine");
+    await advanceTimeBeyondVoting();
     await templ.executeProposal(0);
 
-    // propose again with empty treasury
-    await templ.connect(m1).createProposalDisbandTreasury(7 * 24 * 60 * 60);
+    await templ
+      .connect(m1)
+      .createProposalDisbandTreasury(accessToken, VOTING_PERIOD);
     await templ.connect(m1).vote(1, true);
     await templ.connect(m2).vote(1, true);
-    await ethers.provider.send("evm_increaseTime", [8 * 24 * 60 * 60]);
-    await ethers.provider.send("evm_mine");
+    await advanceTimeBeyondVoting();
     await expect(templ.executeProposal(1))
       .to.be.revertedWithCustomError(templ, "NoTreasuryFunds");
   });
@@ -93,7 +114,7 @@ describe("Disband Treasury", function () {
     const customEntryFee = ethers.parseUnits("110", 18);
     const { templ: unevenTempl, token: unevenToken, accounts: unevenAccounts } =
       await deployTempl({ entryFee: customEntryFee });
-    const [ , , u1, u2, u3, donor ] = unevenAccounts;
+    const [unevenOwner, , u1, u2, u3, donor] = unevenAccounts;
 
     await mintToUsers(unevenToken, [u1, u2, u3, donor], TOKEN_SUPPLY);
     await purchaseAccess(unevenTempl, unevenToken, [u1, u2, u3], customEntryFee);
@@ -107,7 +128,6 @@ describe("Disband Treasury", function () {
     const remainderBefore = await unevenTempl.memberRewardRemainder();
     const memberCount = await unevenTempl.getMemberCount();
 
-    // Donation introduces an amount that is not divisible by member count.
     await unevenToken
       .connect(donor)
       .transfer(templAddress, ethers.parseUnits("2", 18));
@@ -118,7 +138,9 @@ describe("Disband Treasury", function () {
     const expectedIncrease = totalRewards / memberCount;
     const expectedRemainder = totalRewards % memberCount;
 
-    await unevenTempl.connect(u1).createProposalDisbandTreasury(7 * 24 * 60 * 60);
+    await unevenTempl
+      .connect(u1)
+      .createProposalDisbandTreasury(unevenToken.target, VOTING_PERIOD);
     await unevenTempl.connect(u1).vote(0, true);
     await unevenTempl.connect(u2).vote(0, true);
     await ethers.provider.send("evm_increaseTime", [8 * 24 * 60 * 60]);
@@ -135,5 +157,65 @@ describe("Disband Treasury", function () {
 
     expect(await unevenTempl.memberRewardRemainder()).to.equal(expectedRemainder);
     expect(await unevenTempl.treasuryBalance()).to.equal(0n);
+
+    // Ensure new members start with the latest snapshot for external tokens
+    await mintToUsers(unevenToken, [unevenOwner], TOKEN_SUPPLY);
+    await purchaseAccess(unevenTempl, unevenToken, [unevenOwner], customEntryFee);
+    expect(await unevenTempl.getClaimableExternalToken(unevenOwner.address, unevenToken.target)).to.equal(0n);
+  });
+
+  it("distributes donated ERC20 tokens into external claim balances", async function () {
+    const OtherToken = await ethers.getContractFactory("TestToken");
+    const otherToken = await OtherToken.deploy("Other", "OTH", 18);
+    const donation = ethers.parseUnits("12", 18);
+    await otherToken.mint(owner.address, donation);
+    await otherToken.transfer(await templ.getAddress(), donation);
+
+    await templ
+      .connect(m1)
+      .createProposalDisbandTreasury(otherToken.target, VOTING_PERIOD);
+    await templ.connect(m1).vote(0, true);
+    await templ.connect(m2).vote(0, true);
+    await advanceTimeBeyondVoting();
+    await templ.executeProposal(0);
+
+    const tokens = await templ.getExternalRewardTokens();
+    expect(tokens).to.include(otherToken.target);
+
+    const claimable1 = await templ.getClaimableExternalToken(m1.address, otherToken.target);
+    const claimable2 = await templ.getClaimableExternalToken(m2.address, otherToken.target);
+    const claimable3 = await templ.getClaimableExternalToken(m3.address, otherToken.target);
+    expect(claimable1).to.equal(claimable2);
+    expect(claimable1).to.equal(claimable3);
+
+    const before = await otherToken.balanceOf(m1.address);
+    await templ.connect(m1).claimExternalToken(otherToken.target);
+    const after = await otherToken.balanceOf(m1.address);
+    expect(after - before).to.equal(claimable1);
+
+    expect(await templ.getClaimableExternalToken(m1.address, otherToken.target)).to.equal(0n);
+  });
+
+  it("distributes donated ETH into external claim balances", async function () {
+    const donation = ethers.parseUnits("9", 18);
+    await owner.sendTransaction({ to: await templ.getAddress(), value: donation });
+
+    await templ
+      .connect(m2)
+      .createProposalDisbandTreasury(ethers.ZeroAddress, VOTING_PERIOD);
+    await templ.connect(m1).vote(0, true);
+    await templ.connect(m2).vote(0, true);
+    await advanceTimeBeyondVoting();
+    await templ.executeProposal(0);
+
+    const claimable = await templ.getClaimableExternalToken(m2.address, ethers.ZeroAddress);
+    expect(claimable).to.be.gt(0n);
+
+    const before = await ethers.provider.getBalance(m2.address);
+    const tx = await templ.connect(m2).claimExternalToken(ethers.ZeroAddress);
+    const receipt = await tx.wait();
+    const gasUsed = receipt.gasUsed * receipt.gasPrice;
+    const after = await ethers.provider.getBalance(m2.address);
+    expect(after + gasUsed - before).to.equal(claimable);
   });
 });

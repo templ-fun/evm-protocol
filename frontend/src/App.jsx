@@ -11,11 +11,13 @@ import {
   voteOnProposal,
   executeProposal,
   claimMemberPool,
+  claimExternalToken,
   watchProposals,
   fetchActiveMutes,
   listTempls,
   getTreasuryInfo,
-  getClaimable
+  getClaimable,
+  getExternalRewards
 } from './flows.js';
 import { syncXMTP, waitForConversation } from '../../shared/xmtp.js';
 import './App.css';
@@ -64,6 +66,9 @@ function App() {
   const [treasuryInfo, setTreasuryInfo] = useState(null);
   const [claimable, setClaimable] = useState(null);
   const [claimLoading, setClaimLoading] = useState(false);
+  const [externalRewards, setExternalRewards] = useState([]);
+  const hasExternalClaim = Array.isArray(externalRewards) && externalRewards.some((reward) => reward.claimable && reward.claimable !== '0');
+  const hasClaimableRewards = (claimable && claimable !== '0') || hasExternalClaim;
   const [showInfo, setShowInfo] = useState(false);
   const [proposeOpen, setProposeOpen] = useState(false);
   const [proposeTitle, setProposeTitle] = useState('');
@@ -952,6 +957,14 @@ function App() {
           setClaimable(c);
         }
       } catch {}
+      try {
+        if (walletAddress) {
+          const rewards = await getExternalRewards({ ethers, providerOrSigner: signer, templAddress, templArtifact, memberAddress: walletAddress });
+          setExternalRewards(rewards);
+        } else {
+          setExternalRewards([]);
+        }
+      } catch {}
     })();
   }, [signer, templAddress, walletAddress, proposals, groupConnected]);
 
@@ -1107,23 +1120,72 @@ function App() {
     }
   }
 
-  async function handleClaimFees() {
+  async function handleClaimAll() {
     if (!templAddress || !signer) return;
     setClaimLoading(true);
+    let claimedSomething = false;
     try {
-      await claimMemberPool({ ethers, signer, templAddress, templArtifact });
-      // Refresh claimable and treasury info after claim
+      if (claimable && claimable !== '0') {
+        try {
+          await claimMemberPool({ ethers, signer, templAddress, templArtifact });
+          claimedSomething = true;
+        } catch (err) {
+          const msg = err?.message || String(err || '');
+          if (!/NoRewardsToClaim/i.test(msg) && !/No rewards/i.test(msg)) {
+            throw err;
+          }
+        }
+      }
+
+      let rewardsSnapshot = externalRewards || [];
+      if (walletAddress) {
+        try {
+          rewardsSnapshot = await getExternalRewards({ ethers, providerOrSigner: signer, templAddress, templArtifact, memberAddress: walletAddress });
+          setExternalRewards(rewardsSnapshot);
+        } catch {}
+      }
+
+      const tokensToClaim = rewardsSnapshot
+        .filter((reward) => reward.claimable && reward.claimable !== '0')
+        .map((reward) => reward.token);
+      for (const token of tokensToClaim) {
+        try {
+          await claimExternalToken({ ethers, signer, templAddress, templArtifact, token });
+          claimedSomething = true;
+        } catch (err) {
+          const msg = err?.message || String(err || '');
+          if (!/NoRewardsToClaim/i.test(msg) && !/No rewards/i.test(msg)) {
+            throw err;
+          }
+        }
+      }
+
       try {
         const info = await getTreasuryInfo({ ethers, providerOrSigner: signer, templAddress, templArtifact });
         setTreasuryInfo(info);
       } catch {}
-      try {
-        if (walletAddress) {
-          const c = await getClaimable({ ethers, providerOrSigner: signer, templAddress, templArtifact, memberAddress: walletAddress });
-          setClaimable(c);
+
+      if (walletAddress) {
+        try {
+          const [nextClaimable, rewards] = await Promise.all([
+            getClaimable({ ethers, providerOrSigner: signer, templAddress, templArtifact, memberAddress: walletAddress }),
+            getExternalRewards({ ethers, providerOrSigner: signer, templAddress, templArtifact, memberAddress: walletAddress })
+          ]);
+          setClaimable(nextClaimable);
+          setExternalRewards(rewards);
+        } catch {
+          try {
+            const nextClaimable = await getClaimable({ ethers, providerOrSigner: signer, templAddress, templArtifact, memberAddress: walletAddress });
+            setClaimable(nextClaimable);
+          } catch {}
+          try {
+            const rewards = await getExternalRewards({ ethers, providerOrSigner: signer, templAddress, templArtifact, memberAddress: walletAddress });
+            setExternalRewards(rewards);
+          } catch {}
         }
-      } catch {}
-      pushStatus('✅ Rewards claimed');
+      }
+
+      pushStatus(claimedSomething ? '✅ Rewards claimed' : 'ℹ️ Nothing to claim');
     } catch (err) {
       alert('Claim failed: ' + (err?.message || String(err)));
     } finally {
@@ -1296,14 +1358,15 @@ function App() {
                 <span>Treasurey: {treasuryInfo?.treasury || '0'}</span>
                 <span>· Burned: {treasuryInfo?.totalBurnedAmount || '0'}</span>
                 <span>· Claimable: <span data-testid="claimable-amount">{claimable || '0'}</span></span>
-                {(claimable && claimable !== '0') && (
-                  <button
-                    className="btn btn-primary !px-2 !py-0.5"
-                    data-testid="claim-fees-top"
-                    disabled={claimLoading}
-                    onClick={handleClaimFees}
-                  >{claimLoading ? 'Claiming…' : 'Claim'}</button>
+                {hasExternalClaim && (
+                  <span>· External tokens: {externalRewards.filter((r) => r.claimable && r.claimable !== '0').length}</span>
                 )}
+                <button
+                  className="btn btn-primary !px-2 !py-0.5"
+                  data-testid="claim-fees-top"
+                  disabled={claimLoading || !hasClaimableRewards}
+                  onClick={handleClaimAll}
+                >{claimLoading ? 'Claiming…' : 'Claim'}</button>
               </div>
             )}
 
@@ -1318,8 +1381,22 @@ function App() {
                       <div className="text-sm">Total Burned: {treasuryInfo?.totalBurnedAmount || '0'}</div>
                       <div className="text-sm flex items-center gap-2">
                         <span>Claimable (you): <span data-testid="claimable-amount-info">{claimable || '0'}</span></span>
-                        <button className="btn btn-primary" data-testid="claim-fees" disabled={claimLoading || !claimable || claimable === '0'} onClick={handleClaimFees}>{claimLoading ? 'Claiming…' : 'Claim'}</button>
                       </div>
+                      {externalRewards.length > 0 && (
+                        <div className="text-sm flex flex-col gap-1" data-testid="external-claimables">
+                          <div>External claimables:</div>
+                          {externalRewards.map((reward) => {
+                            const isEth = reward.token === ethers.ZeroAddress;
+                            const label = isEth ? 'ETH' : shorten(reward.token);
+                            return (
+                              <div key={reward.token} className="flex items-center gap-2">
+                                <span>{label}: {reward.claimable || '0'}</span>
+                                <span className="text-xs text-black/50">(pool {reward.poolBalance})</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                       <div className="flex gap-2 items-center">
                         <input className="flex-1 border border-black/20 rounded px-3 py-2" readOnly value={`${window.location.origin}/join?address=${templAddress}`} />
                         <button className="btn" onClick={() => { navigator.clipboard?.writeText(`${window.location.origin}/join?address=${templAddress}`).catch(()=>{}); pushStatus('📋 Invite link copied'); }}>Copy Invite</button>
@@ -1519,6 +1596,14 @@ function App() {
                   <div className="text-xs text-black/60">Leave blank to use entry fee token.</div>
                 </div>
               )}
+              {proposeAction === 'disband' && (
+                <div className="text-xs text-black/80 mt-1 flex flex-col gap-2">
+                  <div className="flex gap-2 items-center">
+                    <input className="w-full border border-black/20 rounded px-3 py-2" placeholder="Token address or ETH" value={proposeToken} onChange={(e) => setProposeToken(e.target.value)} />
+                  </div>
+                  <div className="text-xs text-black/60">Leave blank to disband the entry fee token. Enter ETH to target native.</div>
+                </div>
+              )}
               {proposeAction === 'changePriest' && (
                 <div className="text-xs text-black/80 mt-1 flex flex-col gap-2">
                   <div className="flex gap-2 items-center">
@@ -1580,11 +1665,28 @@ function App() {
                     } catch {}
                   } else if (proposeAction === 'disband') {
                     try {
-                      const iface = new ethers.Interface(['function disbandTreasuryDAO()']);
-                      callData = iface.encodeFunctionData('disbandTreasuryDAO', []);
+                      const templ = new ethers.Contract(templAddress, templArtifact.abi, signer);
+                      const provided = String(proposeToken || '').trim();
+                      let tokenAddr;
+                      if (!provided) {
+                        tokenAddr = await templ.accessToken();
+                      } else if (provided.toLowerCase() === 'eth') {
+                        tokenAddr = ethers.ZeroAddress;
+                      } else {
+                        if (!ethers.isAddress(provided)) throw new Error('Invalid disband token address');
+                        tokenAddr = provided;
+                      }
+                      const iface = new ethers.Interface(['function disbandTreasuryDAO(address)']);
+                      callData = iface.encodeFunctionData('disbandTreasuryDAO', [tokenAddr]);
                       if (!proposeTitle) setProposeTitle('Disband Treasury');
-                      if (!proposeDesc) setProposeDesc('Allocate treasury equally to all members as claimable rewards');
-                    } catch {}
+                      if (!proposeDesc) {
+                        const label = tokenAddr === ethers.ZeroAddress ? 'ETH' : tokenAddr;
+                        setProposeDesc(`Disband treasury holdings for ${label}`);
+                      }
+                    } catch (e) {
+                      alert(e?.message || 'Invalid disband token');
+                      return;
+                    }
                   } else if (proposeAction === 'changePriest') {
                     try {
                       const addr = String(proposeNewPriest || '').trim();

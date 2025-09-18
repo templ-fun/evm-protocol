@@ -35,6 +35,13 @@ sequenceDiagram
     TEMPL-->>ExistingMember: transfer claimable
 ```
 
+### External Rewards Pools
+- Non access-token assets (ETH or arbitrary ERC‑20s) donated to the contract can be distributed pro‑rata to members.
+- When governance executes `disbandTreasuryDAO(address token)` with `token != accessToken`, the available balance for that token is added to an external rewards pool tracked in `externalRewards[token]`.
+- Members can inspect available tokens via `getExternalRewardTokens()` and per-token state via `getExternalRewardState(token)`.
+- Individual shares are reported by `getClaimableExternalToken(member, token)` and withdrawn with `claimExternalToken(token)` (supports ETH via `address(0)`).
+- Successful external claims emit `ExternalRewardClaimed(token, member, amount)` and reduce the tracked pool balance; snapshots ensure each member only receives their share once.
+
 ## Governance
 - One member = one vote; votes are changeable until eligibility windows close.
 - One live proposal per address: creating a second while the first is active reverts `ActiveProposalExists`. The slot is cleared on execution. After expiry, attempting to create a new proposal clears the old slot before proceeding.
@@ -45,7 +52,7 @@ sequenceDiagram
   - `updateConfigDAO(address,uint256)` — update entry fee when `_entryFee > 0`. Changing token is disabled (`_token` must be `address(0)` or the current token), else `TokenChangeDisabled`.
   - `withdrawTreasuryDAO(address,address,uint256,string)` — withdraw a specific amount of any asset (access token, other ERC‑20, or ETH with `address(0)`).
   - `changePriestDAO(address)` — change the priest address via governance.
-  - `disbandTreasuryDAO()` — move the full available balance of the access token into the member pool with per-member integer division; any remainder rolls into `memberRewardRemainder` for future payouts. Other ERC‑20s or ETH should be withdrawn explicitly via `withdrawTreasuryDAO` before disbanding.
+  - `disbandTreasuryDAO(address token)` — move the full available balance of `token` into a member-distributable pool. When `token == accessToken`, funds roll into the member pool (`memberPoolBalance`) with per-member integer division and any remainder added to `memberRewardRemainder`. When targeting any other ERC‑20 or native ETH (`address(0)`), the amount is recorded in an external rewards pool so members can later claim their share with `claimExternalToken`.
 
 ### Quorum and Eligibility
 - Quorum threshold: `quorumPercent = 33` (33% yes votes of `eligibleVoters`).
@@ -61,7 +68,7 @@ sequenceDiagram
 - `createProposalUpdateConfig(uint256 newEntryFee, uint256 votingPeriod)`
 - `createProposalWithdrawTreasury(address token, address recipient, uint256 amount, string reason, uint256 votingPeriod)`
 - `createProposalChangePriest(address newPriest, uint256 votingPeriod)`
-- `createProposalDisbandTreasury(uint256 votingPeriod)`
+- `createProposalDisbandTreasury(address token, uint256 votingPeriod)` (`token` can be the access token, another ERC‑20, or `address(0)` for ETH)
 
 Note: Proposal metadata (title/description) is not stored on‑chain. Keep human‑readable text in XMTP group messages alongside the on‑chain proposal id.
 
@@ -86,11 +93,17 @@ Note: Proposal metadata (title/description) is not stored on‑chain. Keep human
   - `totalReceived` tracks only entry‑fee allocations.
 - `getConfig()` — returns `(token, fee, isPaused, purchases, treasury, pool)`.
 - `getMemberCount()` — number of members; `getVoteWeight(address)` — 1 if member else 0.
+- External reward helpers:
+  - `getExternalRewardTokens()` — list of ERC‑20/ETH reward tokens that currently have tracked pools (excludes the access token).
+  - `getExternalRewardState(address token)` — returns `(poolBalance, cumulativeRewards, remainder)` for the token’s reward distribution.
+  - `getClaimableExternalToken(address member, address token)` — accrued share for `member` of the external token pool (0 for non-members or when no rewards are pending).
 
 ## State, Events, Errors
 - Key immutables: `protocolFeeRecipient`, `accessToken`. Priest is changeable via governance.
 - Key variables: `entryFee` (≥10 and multiple of 10), `paused`, `treasuryBalance` (tracks fee‑sourced tokens only), `memberPoolBalance`, counters (`totalBurned`, `totalToTreasury`, `totalToMemberPool`, `totalToProtocol`).
 - Quorum settings: `quorumPercent = 33`, `executionDelayAfterQuorum = 7 days` (not changeable by governance).
+- External reward claims:
+  - `claimExternalToken(address token)` — transfers the caller’s accrued share of the specified external token (ERC‑20 or `address(0)` for ETH). Reverts with `NoRewardsToClaim` if nothing is available. Emitted `ExternalRewardClaimed` mirrors successful withdrawals.
 - Events:
   - `AccessPurchased(purchaser,totalAmount,burnedAmount,treasuryAmount,memberPoolAmount,protocolAmount,timestamp,blockNumber,purchaseId)`
   - `MemberPoolClaimed(member,amount,timestamp)`
@@ -100,7 +113,8 @@ Note: Proposal metadata (title/description) is not stored on‑chain. Keep human
   - `TreasuryAction(proposalId,token,recipient,amount,description)`
   - `ConfigUpdated(token,entryFee)`
   - `ContractPaused(isPaused)`
-  - `TreasuryDisbanded(proposalId,amount,perMember,remainder)`
+  - `TreasuryDisbanded(proposalId,token,amount,perMember,remainder)`
+  - `ExternalRewardClaimed(token,member,amount)`
   - `PriestChanged(oldPriest,newPriest)`
  - Custom errors (from `TemplErrors.sol`): `NotMember`, `NotDAO`, `ContractPausedError`, `AlreadyPurchased`, `InsufficientBalance`, `ActiveProposalExists`, `VotingPeriodTooShort`, `VotingPeriodTooLong`, `InvalidProposal`, `VotingEnded`, `JoinedAfterProposal`, `VotingNotEnded`, `AlreadyExecuted`, `ProposalNotPassed`, `ProposalExecutionFailed`, `InvalidRecipient`, `AmountZero`, `InsufficientTreasuryBalance`, `NoTreasuryFunds`, `EntryFeeTooSmall`, `InvalidEntryFee`, `NoRewardsToClaim`, `InsufficientPoolBalance`, `LimitOutOfRange`, `InvalidSender`, `InvalidCallData`, `TokenChangeDisabled`, `NoMembers`, `QuorumNotReached`, `ExecutionDelayActive`.
 

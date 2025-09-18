@@ -69,7 +69,7 @@ describe("WrapperCoverage (onlyDAO externals)", function () {
 
     const treasuryBefore = await templ.treasuryBalance();
     const poolBefore = await templ.memberPoolBalance();
-    await templ.daoDisband();
+    await templ.daoDisband(token.target);
     expect(await templ.treasuryBalance()).to.equal(0n);
     expect(await templ.memberPoolBalance()).to.equal(poolBefore + treasuryBefore);
   });
