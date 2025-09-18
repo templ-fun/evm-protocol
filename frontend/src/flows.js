@@ -132,6 +132,106 @@ export async function deployTempl({
 }
 
 /**
+ * Approve entry fee (if needed) and purchase templ access.
+ * @param {import('./flows.types').PurchaseAccessRequest} params
+ * @returns {Promise<boolean>}
+ */
+export async function purchaseAccess({
+  ethers,
+  signer,
+  walletAddress,
+  templAddress,
+  templArtifact,
+  tokenAddress,
+  amount,
+  txOptions = {}
+}) {
+  if (!ethers || !signer || !templAddress || !templArtifact) {
+    throw new Error('Missing required purchaseAccess parameters');
+  }
+  const contract = new ethers.Contract(templAddress, templArtifact.abi, signer);
+  let memberAddress = walletAddress;
+  if (!memberAddress && typeof signer?.getAddress === 'function') {
+    try { memberAddress = await signer.getAddress(); } catch {}
+  }
+  if (!memberAddress) {
+    throw new Error('purchaseAccess requires walletAddress or signer.getAddress()');
+  }
+  try {
+    if (typeof contract.hasAccess === 'function') {
+      const already = await contract.hasAccess(memberAddress);
+      if (already) return false;
+    }
+  } catch {}
+  let resolvedToken = tokenAddress;
+  if (typeof resolvedToken === 'string') {
+    resolvedToken = resolvedToken.trim() || undefined;
+  } else if (resolvedToken != null) {
+    resolvedToken = String(resolvedToken);
+  }
+  let resolvedAmount;
+  if (amount !== undefined && amount !== null) {
+    try {
+      resolvedAmount = BigInt(amount);
+    } catch {
+      throw new Error('purchaseAccess: invalid amount');
+    }
+  }
+  if (!resolvedToken || resolvedAmount === undefined) {
+    try {
+      if (typeof contract.getConfig === 'function') {
+        const cfg = await contract.getConfig();
+        if (!resolvedToken && cfg && typeof cfg[0] === 'string') {
+          resolvedToken = cfg[0];
+        }
+        if (resolvedAmount === undefined && cfg && cfg.length > 1) {
+          try { resolvedAmount = BigInt(cfg[1]); } catch {}
+        }
+      }
+    } catch {}
+  }
+  if (!resolvedToken) {
+    try { resolvedToken = await contract.accessToken(); } catch {}
+  }
+  if (resolvedAmount === undefined) {
+    try {
+      const fee = await contract.entryFee();
+      resolvedAmount = BigInt(fee ?? 0n);
+    } catch {}
+  }
+  if (!resolvedToken) {
+    throw new Error('purchaseAccess: missing token address');
+  }
+  if (resolvedAmount === undefined) {
+    throw new Error('purchaseAccess: missing entry fee amount');
+  }
+  const zeroAddress = (typeof ethers?.ZeroAddress === 'string'
+    ? ethers.ZeroAddress
+    : '0x0000000000000000000000000000000000000000').toLowerCase();
+  const normalizedToken = String(resolvedToken).toLowerCase();
+  if (normalizedToken !== zeroAddress) {
+    const erc20 = new ethers.Contract(
+      resolvedToken,
+      [
+        'function allowance(address owner, address spender) view returns (uint256)',
+        'function approve(address spender, uint256 value) returns (bool)'
+      ],
+      signer
+    );
+    try {
+      const current = BigInt(await erc20.allowance(memberAddress, templAddress));
+      if (current < resolvedAmount) {
+        const approval = await erc20.approve(templAddress, resolvedAmount);
+        await approval.wait();
+      }
+    } catch {}
+  }
+  const tx = await contract.purchaseAccess(txOptions);
+  await tx.wait();
+  return true;
+}
+
+/**
  * Purchase membership (if needed) and join the group via backend.
  * @param {import('./flows.types').JoinRequest} params
  * @returns {Promise<import('./flows.types').JoinResponse>}
@@ -161,46 +261,17 @@ export async function purchaseAndJoin({
       await new Promise((r) => setTimeout(r, 300));
     }
   } catch {}
-  const contract = new ethers.Contract(templAddress, templArtifact.abi, signer);
   // In e2e/debug runs we can deterministically skip purchase from the browser and rely on pre-purchase
   const skipPurchase = (() => { try { return import.meta?.env?.VITE_E2E_NO_PURCHASE === '1'; } catch { return false; } })();
-  const purchased = skipPurchase ? true : await contract.hasAccess(walletAddress);
-  if (!purchased && !skipPurchase) {
-    // Auto-approve entry fee if allowance is insufficient
-    let tokenAddress;
-    let entryFee;
-    try {
-      // Prefer a single call if available
-      if (typeof contract.getConfig === 'function') {
-        const cfg = await contract.getConfig();
-        tokenAddress = cfg[0];
-        entryFee = BigInt(cfg[1]);
-      } else {
-        tokenAddress = await contract.accessToken();
-        entryFee = BigInt(await contract.entryFee());
-      }
-    } catch {
-      // Fallback to explicit reads if getConfig unavailable
-      tokenAddress = await contract.accessToken();
-      entryFee = BigInt(await contract.entryFee());
-    }
-    const erc20 = new ethers.Contract(
-      tokenAddress,
-      [
-        'function allowance(address owner, address spender) view returns (uint256)',
-        'function approve(address spender, uint256 value) returns (bool)'
-      ],
-      signer
-    );
-    try {
-      const current = BigInt(await erc20.allowance(walletAddress, templAddress));
-      if (current < entryFee) {
-        const atx = await erc20.approve(templAddress, entryFee);
-        await atx.wait();
-      }
-    } catch {}
-    const tx = await contract.purchaseAccess(txOptions);
-    await tx.wait();
+  if (!skipPurchase) {
+    await purchaseAccess({
+      ethers,
+      signer,
+      walletAddress,
+      templAddress,
+      templArtifact,
+      txOptions
+    });
   }
   const network = await signer.provider?.getNetwork?.();
   const chainId = Number(network?.chainId || 31337);

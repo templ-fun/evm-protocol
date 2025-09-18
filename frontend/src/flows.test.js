@@ -6,6 +6,7 @@ vi.mock('../../shared/xmtp.js', () => ({
 import { waitForConversation } from '../../shared/xmtp.js';
 import {
   deployTempl,
+  purchaseAccess,
   purchaseAndJoin,
   sendMessage,
   proposeVote,
@@ -150,6 +151,63 @@ describe('templ flows', () => {
         templArtifact
       })
     ).rejects.toThrow(/Invalid \/templs response/);
+  });
+
+  it('purchaseAccess approves token and purchases membership when needed', async () => {
+    const purchaseTx = { wait: vi.fn() };
+    const approvalTx = { wait: vi.fn() };
+    const templContract = {
+      hasAccess: vi.fn().mockResolvedValue(false),
+      getConfig: vi.fn().mockResolvedValue(['0xToken', 100n]),
+      purchaseAccess: vi.fn().mockResolvedValue(purchaseTx)
+    };
+    const erc20 = {
+      allowance: vi.fn().mockResolvedValue(0n),
+      approve: vi.fn().mockResolvedValue(approvalTx)
+    };
+    const Contract = vi.fn().mockImplementation((address, abi) => {
+      if (Array.isArray(abi) && abi.some((s) => String(s).includes('allowance'))) return erc20;
+      return templContract;
+    });
+    const ethers = { Contract, ZeroAddress: '0x0000000000000000000000000000000000000000' };
+
+    const result = await purchaseAccess({
+      ethers,
+      signer,
+      walletAddress: '0xabc',
+      templAddress: '0xTempl',
+      templArtifact,
+      txOptions: { gasLimit: 123n }
+    });
+
+    expect(templContract.getConfig).toHaveBeenCalled();
+    expect(erc20.allowance).toHaveBeenCalledWith('0xabc', '0xTempl');
+    expect(erc20.approve).toHaveBeenCalledWith('0xTempl', 100n);
+    expect(approvalTx.wait).toHaveBeenCalled();
+    expect(templContract.purchaseAccess).toHaveBeenCalledWith({ gasLimit: 123n });
+    expect(purchaseTx.wait).toHaveBeenCalled();
+    expect(result).toBe(true);
+  });
+
+  it('purchaseAccess short-circuits when membership already granted', async () => {
+    const templContract = {
+      hasAccess: vi.fn().mockResolvedValue(true),
+      purchaseAccess: vi.fn(),
+      getConfig: vi.fn()
+    };
+    const ethers = { Contract: vi.fn().mockReturnValue(templContract) };
+
+    const result = await purchaseAccess({
+      ethers,
+      signer,
+      walletAddress: '0xabc',
+      templAddress: '0xTempl',
+      templArtifact
+    });
+
+    expect(result).toBe(false);
+    expect(templContract.getConfig).not.toHaveBeenCalled();
+    expect(templContract.purchaseAccess).not.toHaveBeenCalled();
   });
 
   it('purchaseAndJoin purchases access and joins group', async () => {
