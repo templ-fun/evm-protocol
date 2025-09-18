@@ -60,6 +60,37 @@ describe("Disband Treasury", function () {
       .to.be.revertedWithCustomError(templ, "NotDAO");
   });
 
+  it("allows specifying the access token explicitly", async function () {
+    const accessToken = await templ.accessToken();
+    await expect(
+      templ
+        .connect(m1)
+        ['createProposalDisbandTreasury(address,uint256)'](accessToken, 7 * 24 * 60 * 60)
+    ).to.emit(templ, "ProposalCreated");
+  });
+
+  it("allows disband proposals with non-access tokens (execution will fail later)", async function () {
+    const randomToken = ethers.Wallet.createRandom().address;
+    await expect(
+      templ
+        .connect(m1)
+        ['createProposalDisbandTreasury(address,uint256)'](randomToken, 7 * 24 * 60 * 60)
+    ).to.emit(templ, "ProposalCreated");
+
+    await expect(
+      templ
+        .connect(m2)
+        ['createProposalDisbandTreasury(address,uint256)'](ethers.ZeroAddress, 7 * 24 * 60 * 60)
+    ).to.emit(templ, "ProposalCreated");
+
+    // Proposal ID 0 (randomToken) still reverts on execution
+    await templ.connect(m1).vote(0, true);
+    await templ.connect(m2).vote(0, true);
+    await ethers.provider.send("evm_increaseTime", [8 * 24 * 60 * 60]);
+    await ethers.provider.send("evm_mine");
+    await expect(templ.executeProposal(0)).to.be.revertedWithCustomError(templ, "InvalidCallData");
+  });
+
   it("reverts when treasury is empty", async function () {
     // First disband to empty
     await templ.connect(m1).createProposalDisbandTreasury(7 * 24 * 60 * 60);
