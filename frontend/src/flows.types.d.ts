@@ -39,7 +39,19 @@ export interface JoinResponse {
 export function deployTempl(req: DeployRequest): Promise<DeployResponse>
 export function purchaseAndJoin(req: JoinRequest): Promise<JoinResponse>
 export function sendMessage(args: { group: any; content: string }): Promise<void>
-export function proposeVote(args: { ethers: any; signer: any; templAddress: Address; templArtifact: any; title: string; description: string; callData: string; votingPeriod?: number; txOptions?: any }): Promise<void>
+export interface ProposeVoteArgs {
+  ethers: any
+  signer: any
+  templAddress: Address
+  templArtifact: any
+  action?: string
+  params?: Record<string, any>
+  callData?: string
+  votingPeriod?: number
+  txOptions?: any
+}
+
+export function proposeVote(args: ProposeVoteArgs): Promise<void>
 export function voteOnProposal(args: { ethers: any; signer: any; templAddress: Address; templArtifact: any; proposalId: number; support: boolean; txOptions?: any }): Promise<void>
 export function executeProposal(args: { ethers: any; signer: any; templAddress: Address; templArtifact: any; proposalId: number; txOptions?: any }): Promise<void>
 export function watchProposals(args: { ethers: any; provider: any; templAddress: Address; templArtifact: any; onProposal: Function; onVote: Function }): () => void

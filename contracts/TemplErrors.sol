@@ -14,14 +14,6 @@ library TemplErrors {
     error AlreadyPurchased();
     /// @notice Thrown when an account lacks sufficient token balance.
     error InsufficientBalance();
-    /// @notice Thrown when a proposal is created without a title.
-    error TitleRequired();
-    /// @notice Thrown when a proposal is created without a description.
-    error DescriptionRequired();
-    /// @notice Thrown when a proposal is created without call data.
-    error CallDataRequired();
-    /// @notice Thrown when provided call data is too short.
-    error CallDataTooShort();
     /// @notice Thrown when an address already has an active proposal.
     error ActiveProposalExists();
     /// @notice Thrown when a voting period is shorter than allowed.
@@ -60,8 +52,6 @@ library TemplErrors {
     error InsufficientPoolBalance();
     /// @notice Thrown when a limit is zero or exceeds the maximum allowed.
     error LimitOutOfRange();
-    /// @notice Thrown when non-zero balances remain during a transfer.
-    error NonZeroBalances();
     /// @notice Thrown when the caller is the contract itself.
     error InvalidSender();
     /// @notice Thrown when provided call data does not match an allowed function signature.

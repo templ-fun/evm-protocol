@@ -2,8 +2,8 @@
   "_format": "hh-sol-cache-2",
   "files": {
     "/Users/worms/Documents/templ/contracts/TEMPL.sol": {
-      "lastModificationDate": 1757686570215,
-      "contentHash": "e29671783e666e07c3cfa82a496a231c",
+      "lastModificationDate": 1758147549192,
+      "contentHash": "b5a74ec9ded5560ed3311e0aef683deb",
       "sourceName": "contracts/TEMPL.sol",
       "solcConfig": {
         "version": "0.8.23",
@@ -31,9 +31,7 @@
         }
       },
       "imports": [
-        "@openzeppelin/contracts/token/ERC20/IERC20.sol",
-        "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol",
-        "@openzeppelin/contracts/utils/ReentrancyGuard.sol",
+        "./TemplGovernance.sol",
         "./TemplErrors.sol"
       ],
       "versionPragmas": [
@@ -44,8 +42,8 @@
       ]
     },
     "/Users/worms/Documents/templ/contracts/TemplErrors.sol": {
-      "lastModificationDate": 1757603609281,
-      "contentHash": "bf49002f945c5f84a2b92ae3a7cb286d",
+      "lastModificationDate": 1758164713406,
+      "contentHash": "2baf3691fb6fbf46038063b9ef93adda",
       "sourceName": "contracts/TemplErrors.sol",
       "solcConfig": {
         "version": "0.8.23",
@@ -620,7 +618,7 @@
       ]
     },
     "/Users/worms/Documents/templ/contracts/mocks/DaoCallerHarness.sol": {
-      "lastModificationDate": 1757686573901,
+      "lastModificationDate": 1757710088089,
       "contentHash": "0cf668bb4d38c65fa16d294b5f294e64",
       "sourceName": "contracts/mocks/DaoCallerHarness.sol",
       "solcConfig": {
@@ -656,6 +654,172 @@
       ],
       "artifacts": [
         "DaoCallerHarness"
+      ]
+    },
+    "/Users/worms/Documents/templ/contracts/TemplGovernance.sol": {
+      "lastModificationDate": 1758164675306,
+      "contentHash": "3acea3e105a2bd088b873cafcdbec600",
+      "sourceName": "contracts/TemplGovernance.sol",
+      "solcConfig": {
+        "version": "0.8.23",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "./TemplTreasury.sol",
+        "./TemplErrors.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.23"
+      ],
+      "artifacts": [
+        "TemplGovernance"
+      ]
+    },
+    "/Users/worms/Documents/templ/contracts/TemplTreasury.sol": {
+      "lastModificationDate": 1758164678886,
+      "contentHash": "984032ced202226f5c8be5d37f3f06e2",
+      "sourceName": "contracts/TemplTreasury.sol",
+      "solcConfig": {
+        "version": "0.8.23",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "@openzeppelin/contracts/token/ERC20/IERC20.sol",
+        "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol",
+        "./TemplMembership.sol",
+        "./TemplErrors.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.23"
+      ],
+      "artifacts": [
+        "TemplTreasury"
+      ]
+    },
+    "/Users/worms/Documents/templ/contracts/TemplMembership.sol": {
+      "lastModificationDate": 1758147588659,
+      "contentHash": "89112ddfd304b8188ea35c125b2ddd90",
+      "sourceName": "contracts/TemplMembership.sol",
+      "solcConfig": {
+        "version": "0.8.23",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "@openzeppelin/contracts/token/ERC20/IERC20.sol",
+        "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol",
+        "./TemplBase.sol",
+        "./TemplErrors.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.23"
+      ],
+      "artifacts": [
+        "TemplMembership"
+      ]
+    },
+    "/Users/worms/Documents/templ/contracts/TemplBase.sol": {
+      "lastModificationDate": 1758147483267,
+      "contentHash": "655414f4e7d989d62e107913b25c3cbf",
+      "sourceName": "contracts/TemplBase.sol",
+      "solcConfig": {
+        "version": "0.8.23",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "@openzeppelin/contracts/token/ERC20/IERC20.sol",
+        "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol",
+        "@openzeppelin/contracts/utils/ReentrancyGuard.sol",
+        "./TemplErrors.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.23"
+      ],
+      "artifacts": [
+        "TemplBase"
       ]
     }
   }

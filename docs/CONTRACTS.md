@@ -45,7 +45,7 @@ sequenceDiagram
   - `updateConfigDAO(address,uint256)` — update entry fee when `_entryFee > 0`. Changing token is disabled (`_token` must be `address(0)` or the current token), else `TokenChangeDisabled`.
   - `withdrawTreasuryDAO(address,address,uint256,string)` — withdraw a specific amount of any asset (access token, other ERC‑20, or ETH with `address(0)`).
   - `changePriestDAO(address)` — change the priest address via governance.
-  - `disbandTreasuryDAO()` / `disbandTreasuryDAO(address)` — move the full available balance of the access token into the member pool with per-member integer division; any remainder rolls into `memberRewardRemainder` for future payouts.
+  - `disbandTreasuryDAO()` — move the full available balance of the access token into the member pool with per-member integer division; any remainder rolls into `memberRewardRemainder` for future payouts. Other ERC‑20s or ETH should be withdrawn explicitly via `withdrawTreasuryDAO` before disbanding.
 
 ### Quorum and Eligibility
 - Quorum threshold: `quorumPercent = 33` (33% yes votes of `eligibleVoters`).
@@ -61,8 +61,7 @@ sequenceDiagram
 - `createProposalUpdateConfig(uint256 newEntryFee, uint256 votingPeriod)`
 - `createProposalWithdrawTreasury(address token, address recipient, uint256 amount, string reason, uint256 votingPeriod)`
 - `createProposalChangePriest(address newPriest, uint256 votingPeriod)`
-- `createProposalDisbandTreasury(uint256 votingPeriod)` and overloaded
-  `createProposalDisbandTreasury(address token, uint256 votingPeriod)` (execution succeeds only when the token equals the access token; mismatches revert during execution).
+- `createProposalDisbandTreasury(uint256 votingPeriod)`
 
 Note: Proposal metadata (title/description) is not stored on‑chain. Keep human‑readable text in XMTP group messages alongside the on‑chain proposal id.
 

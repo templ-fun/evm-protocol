@@ -318,13 +318,14 @@ export async function proposeVote({
         tx = await contract.createProposalChangePriest(p.newPriest, votingPeriod, txOptions); break;
       case 'updateConfig':
         tx = await contract.createProposalUpdateConfig(p.newEntryFee || 0n, votingPeriod, txOptions); break;
-      case 'disbandTreasury':
+      case 'disbandTreasury': {
+        // Ignore custom token overrides; the contract always targets the access token for disbanding.
         if (p.token) {
-          tx = await contract['createProposalDisbandTreasury(address,uint256)'](p.token, votingPeriod, txOptions);
-        } else {
-          tx = await contract['createProposalDisbandTreasury(uint256)'](votingPeriod, txOptions);
+          try { console.warn('[disbandTreasury] token parameter ignored; disband always uses access token'); } catch {}
         }
+        tx = await contract.createProposalDisbandTreasury(votingPeriod, txOptions);
         break;
+      }
       default:
         throw new Error('Unknown action: ' + action);
     }
@@ -367,8 +368,9 @@ export async function proposeVote({
         return await tx.wait();
       }
       if (fn?.name === 'disbandTreasuryDAO' && fn.inputs.length === 1) {
-        const [token] = full.decodeFunctionData(fn, callData);
-        const tx = await contract.createProposalDisbandTreasury(token, votingPeriod, txOptions);
+        // Older calldata included a token param; ignore it so execution cannot revert on mismatches.
+        void full.decodeFunctionData(fn, callData);
+        const tx = await contract.createProposalDisbandTreasury(votingPeriod, txOptions);
         return await tx.wait();
       }
       return await fallbackCreate();
