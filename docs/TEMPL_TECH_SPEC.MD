@@ -221,7 +221,7 @@ flowchart LR
 ## Client (Frontend)
 
 - Deploy TEMPL, purchase & join, chat, propose, vote, and execute from a React app.
-- Governance UI composes the typed proposal actions (pause/unpause, entry fee update, specific treasury transfer, disband to pool, change priest). Titles/descriptions are not on‑chain; they are shared as XMTP messages adjacent to the on‑chain proposal id.
+- Governance UI composes the typed proposal actions (pause/unpause, withdraw the entire available treasury balance of the selected asset to the connected wallet, disband to pool, entry-fee reprice, change priest). Titles/descriptions are not on‑chain; they are shared as XMTP messages adjacent to the on‑chain proposal id. Crafting a proposal for a partial treasury withdrawal still requires entering custom calldata.
 - `VITE_BACKEND_SERVER_ID` must match backend `BACKEND_SERVER_ID` to bind EIP‑712 signatures to your deployment.
 
 ## Persistence Overview

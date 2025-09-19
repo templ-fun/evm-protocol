@@ -103,9 +103,9 @@ This section answers common questions about what data is stored. It clarifies th
 
 ### Integration tests
 
-- Node-based (Vitest) using the Node SDK and an in-process backend.
-- Fresh random wallets each run avoid the dev network’s 10-installation cap.
-- Deterministic: uses on-disk SQLCipher DBs, so no OPFS handle conflicts.
+- The backend suite runs under Node’s built-in `node:test` runner and spins up an in-process `createApp` with an in-memory SQLite database (`dbPath=':memory:'`).
+- Helper wallets are deterministically seeded in `backend/test/helpers.js`, and the XMTP client surface is stubbed (no real network/SQLCipher DB access) so tests stay hermetic.
+- Because the suite never touches the on-disk XMTP stores, OPFS/SQLCipher handle conflicts are avoided entirely during integration runs.
 
 ### E2E tests
 
