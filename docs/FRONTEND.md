@@ -52,7 +52,7 @@ E2E artifacts (videos, traces, screenshots) are saved under `frontend/test-resul
 
 - **Wallet connection** via `ethers` and `window.ethereum`.
 - **Default configuration** – all members have 1 vote.
-- **Governance** – members create proposals and vote from the chat; `watchProposals` updates the UI when events fire. The backend mirrors on‑chain events into the group as JSON so clients see real‑time updates. The UI supports the allowlisted DAO actions: pause/unpause, move a specific treasury amount to a recipient, disband the full available balance of any token (entry-fee token, donated ERC‑20, or native ETH) into member rewards, and reprice the entry fee. Proposal titles/descriptions are not stored on-chain; they are shared only in XMTP messages next to the on-chain proposal id.
+- **Governance** – members create proposals and vote from the chat; `watchProposals` updates the UI when events fire. The backend mirrors on‑chain events into the group as JSON so clients see real‑time updates. The quick-action UI encodes the allowlisted DAO calls: pause/unpause, withdraw the entire available treasury balance of a chosen asset to the connected wallet (demo helper), disband the full available balance of any token (entry-fee token, donated ERC‑20, or native ETH) into member rewards, and reprice the entry fee. Proposal titles/descriptions are not stored on-chain; they are shared only in XMTP messages next to the on-chain proposal id.
 
 See backend endpoints in [BACKEND.md](./BACKEND.md#architecture) for `POST /templs`, `POST /join`, `POST/DELETE /delegateMute`, `POST /mute`, and `GET /mutes`.
 

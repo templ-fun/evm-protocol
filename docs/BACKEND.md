@@ -33,7 +33,7 @@ npm --prefix backend ci
 | `RATE_LIMIT_STORE` | Rate limit store (`memory` or `redis`) | auto (uses `redis` when `REDIS_URL` is set; else `memory`) |
 | `REDIS_URL` | Redis URL for distributed rate limiting | — |
 | `DISABLE_XMTP_WAIT` | Skip XMTP readiness checks in tests (keep `0` in prod) | `0` |
-| `XMTP_MAX_ATTEMPTS` | Limit XMTP client rotation attempts | unlimited |
+| `XMTP_MAX_ATTEMPTS` | Limit XMTP client rotation attempts | `20` (set to override) |
 | `DB_PATH` | Custom SQLite path for group metadata | `backend/groups.db` |
 | `EPHEMERAL_CREATOR` | When `1` (default and recommended), create groups with a fresh, throwaway key | `1` |
 | `CLEAR_DB` | Wipe database on startup (dev-only; leave `0` in prod) | `0` |
@@ -43,6 +43,7 @@ Startup fails without `RPC_URL`. If `BOT_PRIVATE_KEY` is not provided, the serve
 `XMTP_ENV` selects the network (`dev`, `production`, `local`).
 `ALLOWED_ORIGINS` configures CORS (default `http://localhost:5173`).
 `LOG_LEVEL` controls Pino verbosity (default `info`).
+`XMTP_MAX_ATTEMPTS` defaults to `20`, matching the retry budget passed to `createXmtpWithRotation`; raise or lower it when you need to rotate through more installation slots.
 When `REQUIRE_CONTRACT_VERIFY=1` (or `NODE_ENV=production`), the server requires a provider and will:
   - Verify contract code is deployed at `contractAddress`.
   - Ensure the typed `chainId` matches the provider’s `chainId`.

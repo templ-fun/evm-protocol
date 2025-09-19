@@ -148,7 +148,7 @@ The chat auto‑loads the last 100 messages and any past proposals. Use “Load 
 - Click `Propose vote` (priest or any member): optionally set a title (shared via XMTP only) and use the “Pause DAO” quick action (encodes `setPausedDAO(true)`). Submit and sign the tx.
 - A poll bubble appears in chat.
 - Vote via `Vote Yes/No`; each voter signs their tx.
-- If you’re the priest, an `Execute` button appears when eligible: after quorum is reached and the post‑quorum delay elapses (for most proposals). Quorum‑exempt proposals (priest‑proposed disband) become executable after their end time.
+- If you’re the priest, an `Execute` button is always visible; the contract enforces eligibility (quorum, delay, quorum-exempt priest disband timing) and reverts when the proposal cannot yet be executed.
 
 ## Troubleshooting
 
