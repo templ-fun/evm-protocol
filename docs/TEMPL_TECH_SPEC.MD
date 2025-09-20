@@ -51,15 +51,15 @@ Implementation is layered across:
 - `TemplTreasury` (treasury/config/priest handlers)
 - `TemplGovernance` (proposal lifecycle)
 - `TEMPL` (constructor wiring + payable receive)
-- `TemplFactory` (fixes protocol fee basis points + recipient and deploys templ instances)
+- `TemplFactory` (fixes protocol fee percentage + recipient and deploys templ instances). `createTempl(token, entryFee)` uses defaults (priest = caller, 30/30/30 split, quorum 33%, execution delay 7 days, burn address `0x000000000000000000000000000000000000dEaD`). `createTemplWithConfig(CreateConfig)` accepts overrides for priest, the three percentages, burn address, quorum percent, and execution delay—percentages must still sum with the immutable protocol percent to 100.
 
 ### Economic Model (per `purchaseAccess()`)
 
-- Split of `entryFee` (basis points configurable at deployment time):
-  - Burn (`burnBP`) → `0x000000000000000000000000000000000000dEaD`
-  - Treasury (`treasuryBP`) → retained by contract and tracked in `treasuryBalance`; donations also accrue to the contract balance and remain governable.
-  - Member Pool (`memberPoolBP`) → retained by contract and tracked in `memberPoolBalance`
-  - Protocol (`protocolBP`) → transferred to the factory’s immutable `protocolFeeRecipient`
+- Split of `entryFee` (percentages configurable at deployment time):
+  - Burn (`burnPercent`) → default `0x000000000000000000000000000000000000dEaD` unless overridden at deploy time
+  - Treasury (`treasuryPercent`) → retained by contract and tracked in `treasuryBalance`; donations also accrue to the contract balance and remain governable.
+  - Member Pool (`memberPoolPercent`) → retained by contract and tracked in `memberPoolBalance`
+  - Protocol (`protocolPercent`) → transferred to the factory’s immutable `protocolFeeRecipient`
 - Member rewards: When a new member joins, the contract increments `cumulativeMemberRewards` by `floor(memberPoolShare / (n-1))` for existing members (where `n` is new member count). Remainders accumulate in `memberRewardRemainder`.
 - Donations: Anyone may send ETH/ERC‑20 directly to the contract address. Governance may later withdraw donated assets; the member pool balance remains reserved for members.
 - Leftovers: Any indivisible remainder from reward splits accumulates in `memberRewardRemainder` and is folded into the next distribution so every token is eventually claimable.
@@ -87,6 +87,9 @@ sequenceDiagram
   - Governance can disburse non access-token assets (ERC‑20 or ETH) by disbanding them with `disbandTreasuryDAO(token)`.
   - The contract tracks each token in `externalRewards[token]`; members inspect via `getExternalRewardTokens()` / `getExternalRewardState(token)` and withdraw their share using `claimExternalToken(token)` (supports `address(0)` for ETH).
   - Successful withdrawals emit `ExternalRewardClaimed(token, member, amount)` and update snapshots to prevent double-claims.
+- Governance constants:
+  - `burnAddress` is set at deploy time (defaults to the canonical dead address, but `createTemplWithConfig` can override it).
+  - `quorumPercent` and `executionDelayAfterQuorum` are established during deployment via the factory and remain immutable during contract lifetime.
 
 ### Governance Model
 
@@ -126,7 +129,7 @@ flowchart LR
 ### Allowed Actions
 
 - `setPausedDAO(bool)` — pause/unpause purchases.
-- `updateConfigDAO(address,uint256,bool,uint256,uint256,uint256)` — update entry fee and optionally the burn/treasury/member pool basis points. Token changes are disabled (`TokenChangeDisabled`). `_token` must be `address(0)` or the current token. When `_updateFeeSplit` is true the provided basis points must sum with `protocolBP` to 100.
+- `updateConfigDAO(address,uint256,bool,uint256,uint256,uint256)` — update entry fee and optionally the burn/treasury/member pool percentages. Token changes are disabled (`TokenChangeDisabled`). `_token` must be `address(0)` or the current token. When `_updateFeeSplit` is true the provided percentages must sum with `protocolPercent` to 100.
 - `withdrawTreasuryDAO(address token, address recipient, uint256 amount, string reason)` — move a specific amount of any asset held by the contract. For the access token, only the treasury portion is withdrawable; the member pool is preserved.
 - `disbandTreasuryDAO(address token)` — move the full available balance of `token` into a member-distributable pool. With the access token this increases the member pool (`memberPoolBalance`) and remainder; with any other ERC‑20 or ETH the funds are tracked in an external rewards pool that members withdraw via `claimExternalToken`.
 - `changePriestDAO(address)` — change the on‑chain `priest` address.
@@ -136,7 +139,7 @@ Creation helpers (`createProposalX`) initialize proposals with normalized timing
 ### Views and Introspection
 
 - `getTreasuryInfo()` — available treasury (excludes reserved member pool), current pool, totals, protocol recipient.
-- `getConfig()` — token, entry fee, paused flag, member count, available treasury, pool, burn/treasury/member basis points, and protocol basis points.
+- `getConfig()` — token, entry fee, paused flag, member count, available treasury, pool, burn/treasury/member percentages, and protocol percentage.
 - `getMemberCount()` — number of members.
 - `getVoteWeight(address)` — `1` for members, `0` for non‑members.
 - External reward helpers: `getExternalRewardTokens()`, `getExternalRewardState(address)`, `getClaimableExternalToken(member, token)`, and `claimExternalToken(token)` (handles ERC‑20 or native via `address(0)`).

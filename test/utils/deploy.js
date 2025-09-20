@@ -3,10 +3,13 @@ const { ethers } = require("hardhat");
 
 async function deployTempl({
   entryFee = ethers.parseUnits("100", 18),
-  burnBP = 30,
-  treasuryBP = 30,
-  memberPoolBP = 30,
-  protocolBP = 10,
+  burnPercent = 30,
+  treasuryPercent = 30,
+  memberPoolPercent = 30,
+  protocolPercent = 10,
+  quorumPercent = 33,
+  executionDelay = 7 * 24 * 60 * 60,
+  burnAddress = "0x000000000000000000000000000000000000dEaD",
   protocolFeeRecipient
 } = {}) {
   async function fixture() {
@@ -26,10 +29,13 @@ async function deployTempl({
       protocolRecipient,
       await token.getAddress(),
       entryFee,
-      burnBP,
-      treasuryBP,
-      memberPoolBP,
-      protocolBP
+      burnPercent,
+      treasuryPercent,
+      memberPoolPercent,
+      protocolPercent,
+      quorumPercent,
+      executionDelay,
+      burnAddress
     );
     await templ.waitForDeployment();
     try {

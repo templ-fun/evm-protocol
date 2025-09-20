@@ -27,7 +27,7 @@ Global variables such as `RPC_URL` live in the project `.env`; see the [README's
 | `VITE_BACKEND_SERVER_ID` | String identifier that must match the backend `BACKEND_SERVER_ID` to bind EIP‑712 signatures to your deployment. | — |
 | `VITE_TEMPL_FACTORY_ADDRESS` | Optional: preloads the factory address so the creation form is read-only. Leave blank to supply it interactively. | — |
 | `VITE_TEMPL_FACTORY_PROTOCOL_RECIPIENT` | Optional: expected factory protocol recipient (display-only). Useful for demos/tests. | — |
-| `VITE_TEMPL_FACTORY_PROTOCOL_BP` | Optional: expected factory protocol basis points (display-only). | — |
+| `VITE_TEMPL_FACTORY_PROTOCOL_PERCENT` | Optional: expected factory protocol percentage (display-only). | — |
 | `VITE_E2E_NO_PURCHASE` | Skip the on-chain purchase step during E2E/dev runs when access is pre-seeded. | `0` |
 | `VITE_ENABLE_BACKEND_FALLBACK` | When `1`, enables debug fallbacks that query backend `/debug` endpoints for membership snapshots. | `0` |
 | `TEMPL_ENABLE_LOCAL_FALLBACK` | Node-unit toggle that lets tests merge localStorage templ registries with the backend list; keep `0` in production so the UI always reflects real `/templs` data. | `0` |

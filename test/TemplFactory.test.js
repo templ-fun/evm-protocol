@@ -17,52 +17,56 @@ describe("TemplFactory", function () {
         const token = await deployToken();
 
         const Factory = await ethers.getContractFactory("TemplFactory");
-        const protocolBP = 12;
-        const factory = await Factory.deploy(protocolRecipient.address, protocolBP);
+        const protocolPercent = 12;
+        const factory = await Factory.deploy(protocolRecipient.address, protocolPercent);
         await factory.waitForDeployment();
 
-        const burnBP = 28;
-        const treasuryBP = 40;
-        const memberPoolBP = 20;
+        const burnPercent = 28;
+        const treasuryPercent = 40;
+        const memberPoolPercent = 20;
+        const quorumPercent = 40;
+        const executionDelaySeconds = 5 * 24 * 60 * 60;
+        const customBurnAddress = "0x00000000000000000000000000000000000000AA";
 
-        const templAddress = await factory.createTempl.staticCall(
-            priest.address,
-            await token.getAddress(),
-            ENTRY_FEE,
-            burnBP,
-            treasuryBP,
-            memberPoolBP
-        );
-        const tx = await factory.createTempl(
-            priest.address,
-            await token.getAddress(),
-            ENTRY_FEE,
-            burnBP,
-            treasuryBP,
-            memberPoolBP
-        );
+        const config = {
+            priest: priest.address,
+            token: await token.getAddress(),
+            entryFee: ENTRY_FEE,
+            burnPercent,
+            treasuryPercent,
+            memberPoolPercent,
+            quorumPercent,
+            executionDelaySeconds,
+            burnAddress: customBurnAddress
+        };
+
+        const templAddress = await factory.createTemplWithConfig.staticCall(config);
+        const tx = await factory.createTemplWithConfig(config);
         await tx.wait();
 
         const templ = await ethers.getContractAt("TEMPL", templAddress);
 
         expect(await templ.priest()).to.equal(priest.address);
         expect(await templ.protocolFeeRecipient()).to.equal(protocolRecipient.address);
-        expect(await templ.protocolBP()).to.equal(protocolBP);
-        expect(await templ.burnBP()).to.equal(burnBP);
-        expect(await templ.treasuryBP()).to.equal(treasuryBP);
-        expect(await templ.memberPoolBP()).to.equal(memberPoolBP);
+        expect(await templ.protocolPercent()).to.equal(protocolPercent);
+        expect(await templ.burnPercent()).to.equal(burnPercent);
+        expect(await templ.treasuryPercent()).to.equal(treasuryPercent);
+        expect(await templ.memberPoolPercent()).to.equal(memberPoolPercent);
+        expect(await templ.quorumPercent()).to.equal(quorumPercent);
+        expect(await templ.executionDelayAfterQuorum()).to.equal(executionDelaySeconds);
+        expect(await templ.burnAddress()).to.equal(customBurnAddress);
 
         await mintToUsers(token, [member], ENTRY_FEE * 10n);
         await purchaseAccess(templ, token, [member]);
 
-        const burnAmount = (ENTRY_FEE * BigInt(burnBP)) / 100n;
-        const memberPoolAmount = (ENTRY_FEE * BigInt(memberPoolBP)) / 100n;
-        const protocolAmount = (ENTRY_FEE * BigInt(protocolBP)) / 100n;
+        const burnAmount = (ENTRY_FEE * BigInt(burnPercent)) / 100n;
+        const memberPoolAmount = (ENTRY_FEE * BigInt(memberPoolPercent)) / 100n;
+        const protocolAmount = (ENTRY_FEE * BigInt(protocolPercent)) / 100n;
 
         expect(await templ.totalBurned()).to.equal(burnAmount);
         expect(await templ.totalToMemberPool()).to.equal(memberPoolAmount);
         expect(await templ.totalToProtocol()).to.equal(protocolAmount);
-        expect(await templ.totalToTreasury()).to.be.gte((ENTRY_FEE * BigInt(treasuryBP)) / 100n);
+        expect(await templ.totalToTreasury()).to.be.gte((ENTRY_FEE * BigInt(treasuryPercent)) / 100n);
     });
 
     it("reverts when fee split does not sum to 100", async function () {
@@ -73,14 +77,40 @@ describe("TemplFactory", function () {
         await factory.waitForDeployment();
 
         await expect(
-            factory.createTempl(
-                protocolRecipient.address,
-                await token.getAddress(),
-                ENTRY_FEE,
-                40,
-                40,
-                10
-            )
-        ).to.be.revertedWithCustomError(factory, "InvalidFeeSplit");
+            factory.createTemplWithConfig({
+                priest: protocolRecipient.address,
+                token: await token.getAddress(),
+                entryFee: ENTRY_FEE,
+                burnPercent: 40,
+                treasuryPercent: 40,
+                memberPoolPercent: 10,
+                quorumPercent: 33,
+                executionDelaySeconds: 7 * 24 * 60 * 60,
+                burnAddress: ethers.ZeroAddress
+            })
+        ).to.be.revertedWithCustomError(factory, "InvalidPercentageSplit");
+    });
+
+    it("defaults splits, priest, quorum and delay when using simple create", async function () {
+        const [deployer, , protocolRecipient] = await ethers.getSigners();
+        const token = await deployToken("Defaults", "DEF");
+        const Factory = await ethers.getContractFactory("TemplFactory");
+        const factory = await Factory.deploy(protocolRecipient.address, 10);
+        await factory.waitForDeployment();
+
+        const templAddress = await factory.createTempl.staticCall(await token.getAddress(), ENTRY_FEE);
+        const tx = await factory.createTempl(await token.getAddress(), ENTRY_FEE);
+        await tx.wait();
+
+        const templ = await ethers.getContractAt("TEMPL", templAddress);
+
+        expect(await templ.priest()).to.equal(deployer.address);
+        expect(await templ.burnPercent()).to.equal(30);
+        expect(await templ.treasuryPercent()).to.equal(30);
+        expect(await templ.memberPoolPercent()).to.equal(30);
+        expect(await templ.protocolPercent()).to.equal(10);
+        expect(await templ.quorumPercent()).to.equal(33);
+        expect(await templ.executionDelayAfterQuorum()).to.equal(7 * 24 * 60 * 60);
+        expect(await templ.burnAddress()).to.equal("0x000000000000000000000000000000000000dEaD");
     });
 });

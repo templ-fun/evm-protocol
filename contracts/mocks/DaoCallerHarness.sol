@@ -11,7 +11,8 @@ contract DaoCallerHarness is TEMPL {
         address protocolFeeRecipient,
         address token,
         uint256 entryFee
-    ) TEMPL(priest, protocolFeeRecipient, token, entryFee, 30, 30, 30, 10)
+    )
+        TEMPL(priest, protocolFeeRecipient, token, entryFee, 30, 30, 30, 10, 33, 7 days, 0x000000000000000000000000000000000000dEaD)
     {}
     /// @notice Wrapper to call withdrawTreasuryDAO via contract self-call
     function daoWithdraw(address token, address recipient, uint256 amount, string calldata reason) external {
@@ -23,11 +24,11 @@ contract DaoCallerHarness is TEMPL {
         address token,
         uint256 fee,
         bool updateSplit,
-        uint256 burnBP,
-        uint256 treasuryBP,
-        uint256 memberPoolBP
+        uint256 burnPercent,
+        uint256 treasuryPercent,
+        uint256 memberPoolPercent
     ) external {
-        this.updateConfigDAO(token, fee, updateSplit, burnBP, treasuryBP, memberPoolBP);
+        this.updateConfigDAO(token, fee, updateSplit, burnPercent, treasuryPercent, memberPoolPercent);
     }
     /// @notice Wrapper to call setPausedDAO via contract self-call
     function daoPause(bool p) external {

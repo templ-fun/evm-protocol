@@ -96,14 +96,14 @@ function App() {
   const [tokenAddress, setTokenAddress] = useState('');
   const [factoryAddress, setFactoryAddress] = useState(() => FACTORY_CONFIG.address || '');
   const [protocolFeeRecipient, setProtocolFeeRecipient] = useState(() => FACTORY_CONFIG.protocolFeeRecipient || '');
-  const [protocolBP, setProtocolBP] = useState(() => {
-    const bp = FACTORY_CONFIG.protocolBP;
-    return Number.isFinite(bp) ? bp : 10;
+  const [protocolPercent, setProtocolPercent] = useState(() => {
+    const percent = FACTORY_CONFIG.protocolPercent;
+    return Number.isFinite(percent) ? percent : 10;
   });
   const [entryFee, setEntryFee] = useState('');
-  const [burnBP, setBurnBP] = useState('30');
-  const [treasuryBP, setTreasuryBP] = useState('30');
-  const [memberPoolBP, setMemberPoolBP] = useState('30');
+  const [burnPercent, setBurnPercent] = useState('30');
+  const [treasuryPercent, setTreasuryPercent] = useState('30');
+  const [memberPoolPercent, setMemberPoolPercent] = useState('30');
   // Governance: all members have 1 vote
 
   // joining form
@@ -129,11 +129,11 @@ function App() {
     } catch {}
   }, []);
 
-  const burnBpNum = Number.isFinite(Number(burnBP)) ? Number(burnBP) : 0;
-  const treasuryBpNum = Number.isFinite(Number(treasuryBP)) ? Number(treasuryBP) : 0;
-  const memberBpNum = Number.isFinite(Number(memberPoolBP)) ? Number(memberPoolBP) : 0;
-  const protocolBpNum = Number.isFinite(Number(protocolBP)) ? Number(protocolBP) : null;
-  const splitTotal = burnBpNum + treasuryBpNum + memberBpNum + (protocolBpNum ?? 0);
+  const burnPercentNum = Number.isFinite(Number(burnPercent)) ? Number(burnPercent) : 0;
+  const treasuryPercentNum = Number.isFinite(Number(treasuryPercent)) ? Number(treasuryPercent) : 0;
+  const memberPoolPercentNum = Number.isFinite(Number(memberPoolPercent)) ? Number(memberPoolPercent) : 0;
+  const protocolPercentNum = Number.isFinite(Number(protocolPercent)) ? Number(protocolPercent) : null;
+  const splitTotal = burnPercentNum + treasuryPercentNum + memberPoolPercentNum + (protocolPercentNum ?? 0);
 
   // Minimal debug logger: prints only in dev or when explicitly enabled for e2e
   const dlog = (...args) => {
@@ -449,22 +449,22 @@ function App() {
         const factoryContract = new ethers.Contract(factoryAddress, templFactoryArtifact.abi, reader);
         const [recipient, bpRaw] = await Promise.all([
           factoryContract.protocolFeeRecipient(),
-          factoryContract.protocolBP()
+          factoryContract.protocolPercent()
         ]);
         if (cancelled) return;
         if (recipient && recipient !== protocolFeeRecipient) {
           setProtocolFeeRecipient(recipient);
         }
         const bpNum = Number(bpRaw);
-        if (!Number.isNaN(bpNum) && bpNum !== protocolBP) {
-          setProtocolBP(bpNum);
+        if (!Number.isNaN(bpNum) && bpNum !== protocolPercent) {
+          setProtocolPercent(bpNum);
         }
       } catch (err) {
         dlog('[app] load factory config failed', err?.message || err);
       }
     })();
     return () => { cancelled = true; };
-  }, [factoryAddress, signer, protocolFeeRecipient, protocolBP]);
+  }, [factoryAddress, signer, protocolFeeRecipient, protocolPercent]);
 
   const handleDeploy = useCallback(async () => {
     dlog('[app] handleDeploy clicked', { signer: !!signer, xmtp: !!xmtp });
@@ -474,10 +474,10 @@ function App() {
         xmtp: !!xmtp,
         tokenAddress,
         entryFee,
-        burnBP,
-        treasuryBP,
-        memberPoolBP,
-        protocolBP,
+        burnPercent,
+        treasuryPercent,
+        memberPoolPercent,
+        protocolPercent,
         factoryAddress
       });
     } catch {}
@@ -499,19 +499,19 @@ function App() {
       alert('Invalid entry fee');
       return;
     }
-    const splits = [burnBP, treasuryBP, memberPoolBP];
+    const splits = [burnPercent, treasuryPercent, memberPoolPercent];
     if (!splits.every((n) => /^\d+$/.test(n))) {
-      alert('Basis points must be numeric');
+      alert('Percentages must be numeric');
       return;
     }
-    const burn = Number(burnBP);
-    const treas = Number(treasuryBP);
-    const member = Number(memberPoolBP);
+    const burn = Number(burnPercent);
+    const treas = Number(treasuryPercent);
+    const member = Number(memberPoolPercent);
     if ([burn, treas, member].some((v) => v < 0)) {
-      alert('Basis points cannot be negative');
+      alert('Percentages cannot be negative');
       return;
     }
-    const protocolShare = Number.isFinite(protocolBP) ? protocolBP : null;
+    const protocolShare = Number.isFinite(protocolPercent) ? protocolPercent : null;
     if (protocolShare !== null) {
       const totalSplit = burn + treas + member + protocolShare;
       if (totalSplit !== 100) {
@@ -523,10 +523,10 @@ function App() {
       dlog('[app] deploying templ with factory', {
         tokenAddress,
         entryFee,
-        burnBP,
-        treasuryBP,
-        memberPoolBP,
-        protocolBP,
+        burnPercent,
+        treasuryPercent,
+        memberPoolPercent,
+        protocolPercent,
         factoryAddress
       });
       const result = await deployTempl({
@@ -536,9 +536,9 @@ function App() {
         walletAddress,
         tokenAddress,
         entryFee,
-        burnBP,
-        treasuryBP,
-        memberPoolBP,
+        burnPercent,
+        treasuryPercent,
+        memberPoolPercent,
         factoryAddress: trimmedFactory,
         factoryArtifact: templFactoryArtifact,
         templArtifact
@@ -569,7 +569,7 @@ function App() {
       console.error('[app] deploy failed', err);
       alert(err.message);
     }
-  }, [signer, xmtp, tokenAddress, entryFee, burnBP, treasuryBP, memberPoolBP, protocolBP, factoryAddress, walletAddress, updateTemplAddress, pushStatus, navigate]);
+  }, [signer, xmtp, tokenAddress, entryFee, burnPercent, treasuryPercent, memberPoolPercent, protocolPercent, factoryAddress, walletAddress, updateTemplAddress, pushStatus, navigate]);
 
   // In e2e debug mode, auto-trigger deploy once inputs are valid to deflake clicks
   useEffect(() => {
@@ -581,8 +581,8 @@ function App() {
     if (autoDeployTriggeredRef.current) return;
     if (!signer) return;
     try {
-      const splitsValid = [burnBP, treasuryBP, memberPoolBP].every((n) => /^\d+$/.test(n));
-      const sumValid = !Number.isFinite(protocolBP) ? true : (Number(burnBP) + Number(treasuryBP) + Number(memberPoolBP) + Number(protocolBP)) === 100;
+      const splitsValid = [burnPercent, treasuryPercent, memberPoolPercent].every((n) => /^\d+$/.test(n));
+      const sumValid = !Number.isFinite(protocolPercent) ? true : (Number(burnPercent) + Number(treasuryPercent) + Number(memberPoolPercent) + Number(protocolPercent)) === 100;
       const trimmedFactory = factoryAddress.trim();
       if (trimmedFactory && ethers.isAddress(trimmedFactory) && ethers.isAddress(tokenAddress) && /^\d+$/.test(entryFee) && splitsValid && sumValid) {
         autoDeployTriggeredRef.current = true;
@@ -590,7 +590,7 @@ function App() {
         handleDeploy();
       }
     } catch {}
-  }, [path, signer, factoryAddress, tokenAddress, entryFee, burnBP, treasuryBP, memberPoolBP, protocolBP, handleDeploy]);
+  }, [path, signer, factoryAddress, tokenAddress, entryFee, burnPercent, treasuryPercent, memberPoolPercent, protocolPercent, handleDeploy]);
 
   const handlePurchaseAndJoin = useCallback(async () => {
     dlog('[app] handlePurchaseAndJoin invoked', {
@@ -1572,8 +1572,8 @@ function App() {
               <input className="w-full border border-black/20 rounded px-3 py-2 bg-black/5" value={protocolFeeRecipient || 'fetching…'} readOnly />
             </div>
                 <div>
-                  <label className="block text-sm font-medium text-black/70 mb-1">Protocol basis points</label>
-                  <input className="w-full border border-black/20 rounded px-3 py-2 bg-black/5" value={protocolBpNum ?? 'fetching…'} readOnly />
+                <label className="block text-sm font-medium text-black/70 mb-1">Protocol percent</label>
+                  <input className="w-full border border-black/20 rounded px-3 py-2 bg-black/5" value={protocolPercentNum ?? 'fetching…'} readOnly />
                 </div>
               </div>
               <div>
@@ -1581,15 +1581,15 @@ function App() {
                 <input className="w-full border border-black/20 rounded px-3 py-2" placeholder="Entry fee" value={entryFee} onChange={(e) => setEntryFee(e.target.value)} />
               </div>
               <div>
-                <label className="block text-sm font-medium text-black/70 mb-1">Fee split (basis points)</label>
+                <label className="block text-sm font-medium text-black/70 mb-1">Fee split (%)</label>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  <input className="border border-black/20 rounded px-3 py-2" placeholder="Burn" value={burnBP} onChange={(e) => setBurnBP(e.target.value)} />
-                  <input className="border border-black/20 rounded px-3 py-2" placeholder="Treasury" value={treasuryBP} onChange={(e) => setTreasuryBP(e.target.value)} />
-                  <input className="border border-black/20 rounded px-3 py-2" placeholder="Member pool" value={memberPoolBP} onChange={(e) => setMemberPoolBP(e.target.value)} />
+                  <input className="border border-black/20 rounded px-3 py-2" placeholder="Burn" value={burnPercent} onChange={(e) => setBurnPercent(e.target.value)} />
+                  <input className="border border-black/20 rounded px-3 py-2" placeholder="Treasury" value={treasuryPercent} onChange={(e) => setTreasuryPercent(e.target.value)} />
+                  <input className="border border-black/20 rounded px-3 py-2" placeholder="Member pool" value={memberPoolPercent} onChange={(e) => setMemberPoolPercent(e.target.value)} />
                 </div>
-                {Number.isFinite(protocolBpNum) && (
+                {Number.isFinite(protocolPercentNum) && (
                   <div className={`text-xs mt-1 ${splitTotal === 100 ? 'text-black/60' : 'text-red-600'}`}>
-                    Fee split total: {splitTotal}/100 (includes protocol {protocolBpNum})
+                    Fee split total: {splitTotal}/100 (includes protocol {protocolPercentNum})
                   </div>
                 )}
               </div>

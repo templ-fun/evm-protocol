@@ -229,18 +229,24 @@ test.describe('TEMPL E2E - All 7 Core Flows', () => {
     const treasuryValue = await page.locator('input[placeholder="Treasury"]').inputValue();
     const memberValue = await page.locator('input[placeholder="Member pool"]').inputValue();
     const entryFeeWei = BigInt(entryFeeValue || '0');
-    const burnBpNum = Number(burnValue || '0');
-    const treasuryBpNum = Number(treasuryValue || '0');
-    const memberBpNum = Number(memberValue || '0');
+    const burnPercentNum = Number(burnValue || '0');
+    const treasuryPercentNum = Number(treasuryValue || '0');
+    const memberPercentNum = Number(memberValue || '0');
 
-    const predictedTempl = await templFactory.createTempl.staticCall(
-      testAddress,
-      tokenAddress,
-      entryFeeWei,
-      burnBpNum,
-      treasuryBpNum,
-      memberBpNum
-    );
+    const defaultsRequested = burnPercentNum === 30 && treasuryPercentNum === 30 && memberPercentNum === 30;
+    let predictedTempl;
+    if (defaultsRequested) {
+      predictedTempl = await templFactory.createTempl.staticCall(tokenAddress, entryFeeWei);
+    } else {
+      predictedTempl = await templFactory.createTemplWithConfig.staticCall({
+        priest: testAddress,
+        token: tokenAddress,
+        entryFee: entryFeeWei,
+        burnPercent: burnPercentNum,
+        treasuryPercent: treasuryPercentNum,
+        memberPoolPercent: memberPercentNum
+      });
+    }
     templAddress = ethers.getAddress(predictedTempl);
 
     const prevTxHash = lastSentTxHash;

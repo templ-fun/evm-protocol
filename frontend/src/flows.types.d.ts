@@ -8,9 +8,12 @@ export interface DeployRequest {
   walletAddress: Address
   tokenAddress: Address
   entryFee: number | string | bigint
-  burnBP: number | string | bigint
-  treasuryBP: number | string | bigint
-  memberPoolBP: number | string | bigint
+  burnPercent: number | string | bigint
+  treasuryPercent: number | string | bigint
+  memberPoolPercent: number | string | bigint
+  quorumPercent?: number | string | bigint
+  executionDelaySeconds?: number | string | bigint
+  burnAddress?: Address
   factoryAddress: Address
   factoryArtifact: { abi: any }
   templArtifact: { abi: any; bytecode?: string }

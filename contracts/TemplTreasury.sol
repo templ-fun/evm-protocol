@@ -12,17 +12,23 @@ abstract contract TemplTreasury is TemplMembership {
     constructor(
         address _protocolFeeRecipient,
         address _accessToken,
-        uint256 _burnBP,
-        uint256 _treasuryBP,
-        uint256 _memberPoolBP,
-        uint256 _protocolBP
+        uint256 _burnPercent,
+        uint256 _treasuryPercent,
+        uint256 _memberPoolPercent,
+        uint256 _protocolPercent,
+        uint256 _quorumPercent,
+        uint256 _executionDelay,
+        address _burnAddress
     ) TemplMembership(
         _protocolFeeRecipient,
         _accessToken,
-        _burnBP,
-        _treasuryBP,
-        _memberPoolBP,
-        _protocolBP
+        _burnPercent,
+        _treasuryPercent,
+        _memberPoolPercent,
+        _protocolPercent,
+        _quorumPercent,
+        _executionDelay,
+        _burnAddress
     ) {}
 
     function withdrawTreasuryDAO(
@@ -38,11 +44,11 @@ abstract contract TemplTreasury is TemplMembership {
         address _token,
         uint256 _entryFee,
         bool _updateFeeSplit,
-        uint256 _burnBP,
-        uint256 _treasuryBP,
-        uint256 _memberPoolBP
+        uint256 _burnPercent,
+        uint256 _treasuryPercent,
+        uint256 _memberPoolPercent
     ) external onlyDAO {
-        _updateConfig(_token, _entryFee, _updateFeeSplit, _burnBP, _treasuryBP, _memberPoolBP);
+        _updateConfig(_token, _entryFee, _updateFeeSplit, _burnPercent, _treasuryPercent, _memberPoolPercent);
     }
 
     function setPausedDAO(bool _paused) external onlyDAO {
@@ -107,9 +113,9 @@ abstract contract TemplTreasury is TemplMembership {
         address _token,
         uint256 _entryFee,
         bool _updateFeeSplit,
-        uint256 _burnBP,
-        uint256 _treasuryBP,
-        uint256 _memberPoolBP
+        uint256 _burnPercent,
+        uint256 _treasuryPercent,
+        uint256 _memberPoolPercent
     ) internal {
         if (_token != address(0) && _token != accessToken) revert TemplErrors.TokenChangeDisabled();
         if (_entryFee > 0) {
@@ -118,9 +124,9 @@ abstract contract TemplTreasury is TemplMembership {
             entryFee = _entryFee;
         }
         if (_updateFeeSplit) {
-            _setFeeSplit(_burnBP, _treasuryBP, _memberPoolBP);
+            _setPercentSplit(_burnPercent, _treasuryPercent, _memberPoolPercent);
         }
-        emit ConfigUpdated(accessToken, entryFee, burnBP, treasuryBP, memberPoolBP, protocolBP);
+        emit ConfigUpdated(accessToken, entryFee, burnPercent, treasuryPercent, memberPoolPercent, protocolPercent);
     }
 
     function _setPaused(bool _paused) internal {

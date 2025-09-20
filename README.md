@@ -16,7 +16,7 @@ DAO‑governed token‑gated private groups with onchain treasury management and
 ## Architecture
 
 A TEMPL combines three pieces:
-- **Smart contracts** on Base gate membership with `purchaseAccess`; a `TemplFactory` fixes the protocol share (recipient + basis points) while allowing per-templ burn/treasury/member splits.
+- **Smart contracts** on Base gate membership with `purchaseAccess`; a `TemplFactory` fixes the protocol share (recipient + percentage) while allowing per-templ burn/treasury/member splits.
 - **Backend bot** creates the XMTP group with an ephemeral key and only invites paid wallets thereafter (no persistent owner/admin keys retained).
 - **React frontend** deploys contracts, verifies purchases and hosts chat.
 The frontend buys access and requests an invite; the backend can mirror contract events in chat.
@@ -101,8 +101,13 @@ Minimal local setup requires only a handful of variables:
 | `FACTORY_ADDRESS` | Optional; reuse an existing `TemplFactory` instead of deploying a new one | `.env` |
 | `PRIEST_ADDRESS` | Address that will hold the priest role for the templ created by `scripts/deploy.js` | `.env` |
 | `PROTOCOL_FEE_RECIPIENT` | Address receiving the factory’s protocol share | `.env` |
-| `BURN_BP` / `TREASURY_BP` / `MEMBER_POOL_BP` | Basis points allocated to burn, treasury, and member pool (default 30/30/30) | `.env` |
-| `PROTOCOL_BP` | Basis points forwarded to the protocol recipient (default 10) | `.env` |
+| `BURN_PERCENT` / `TREASURY_PERCENT` / `MEMBER_POOL_PERCENT` | Percentages allocated to burn, treasury, and member pool (default 30/30/30) | `.env` |
+| `PROTOCOL_PERCENT` | Percentage forwarded to the protocol recipient (default 10) | `.env` |
+| `QUORUM_PERCENT` (optional) | Override quorum percentage for governance (default 33) | `.env` |
+| `EXECUTION_DELAY_SECONDS` (optional) | Override execution delay after quorum (default 7 days) | `.env` |
+| `BURN_ADDRESS` (optional) | Override burn destination address (default `0x000000000000000000000000000000000000dEaD`) | `.env` |
+
+`createTempl(token, entryFee)` on the factory uses the defaults above (priest = caller, 30/30/30 split, quorum 33%, 7 day execution delay, canonical dead burn address). Providing `BURN_PERCENT`/`TREASURY_PERCENT`/`MEMBER_POOL_PERCENT` (and the optional overrides) lets `scripts/deploy.js` call `createTemplWithConfig` with custom values.
 | `TOKEN_ADDRESS` | ERC‑20 address required for templ creation | `.env` |
 | `ENTRY_FEE` | Entry fee (wei) charged to join the templ | `.env` |
 | `BOT_PRIVATE_KEY` | XMTP invite-bot wallet key (auto-generated if omitted) | `backend/.env` |
@@ -120,7 +125,7 @@ See [BACKEND.md#environment-variables](./docs/BACKEND.md#environment-variables) 
 ## Deploying to production
 1. Create a `.env` file in the project root for deployment scripts and a `backend/.env` for the bot. Required variables are documented in [CONTRACTS.md#configuration](./docs/CONTRACTS.md#configuration) and [BACKEND.md#environment-variables](./docs/BACKEND.md#environment-variables).
 2. Run the full test suite and Slither analysis.
-3. Deploy with `scripts/deploy.js`. The script deploys `TemplFactory` when a `FACTORY_ADDRESS` isn’t provided, then creates a templ instance with the configured basis points. Record the templ contract address and the XMTP group ID returned by the backend.
+3. Deploy with `scripts/deploy.js`. The script deploys `TemplFactory` when a `FACTORY_ADDRESS` isn’t provided, then creates a templ instance with the configured percentages. Record the templ contract address and the XMTP group ID returned by the backend.
 4. Host the backend bot and set `ALLOWED_ORIGINS` to the permitted frontend URL(s). In production, contract address is verified on‑chain and the `priest` address must match the deployed contract.
 5. Build the frontend (`npm --prefix frontend run build`) and serve the static files.
 

@@ -8,17 +8,23 @@ abstract contract TemplGovernance is TemplTreasury {
     constructor(
         address _protocolFeeRecipient,
         address _accessToken,
-        uint256 _burnBP,
-        uint256 _treasuryBP,
-        uint256 _memberPoolBP,
-        uint256 _protocolBP
+        uint256 _burnPercent,
+        uint256 _treasuryPercent,
+        uint256 _memberPoolPercent,
+        uint256 _protocolPercent,
+        uint256 _quorumPercent,
+        uint256 _executionDelay,
+        address _burnAddress
     ) TemplTreasury(
         _protocolFeeRecipient,
         _accessToken,
-        _burnBP,
-        _treasuryBP,
-        _memberPoolBP,
-        _protocolBP
+        _burnPercent,
+        _treasuryPercent,
+        _memberPoolPercent,
+        _protocolPercent,
+        _quorumPercent,
+        _executionDelay,
+        _burnAddress
     ) {}
 
     function createProposalSetPaused(
@@ -33,9 +39,9 @@ abstract contract TemplGovernance is TemplTreasury {
 
     function createProposalUpdateConfig(
         uint256 _newEntryFee,
-        uint256 _newBurnBP,
-        uint256 _newTreasuryBP,
-        uint256 _newMemberPoolBP,
+        uint256 _newBurnPercent,
+        uint256 _newTreasuryPercent,
+        uint256 _newMemberPoolPercent,
         bool _updateFeeSplit,
         uint256 _votingPeriod
     ) external onlyMember returns (uint256) {
@@ -44,14 +50,14 @@ abstract contract TemplGovernance is TemplTreasury {
             if (_newEntryFee % 10 != 0) revert TemplErrors.InvalidEntryFee();
         }
         if (_updateFeeSplit) {
-            _validateFeeSplit(_newBurnBP, _newTreasuryBP, _newMemberPoolBP, protocolBP);
+            _validatePercentSplit(_newBurnPercent, _newTreasuryPercent, _newMemberPoolPercent, protocolPercent);
         }
         (uint256 id, Proposal storage p) = _createBaseProposal(_votingPeriod);
         p.action = Action.UpdateConfig;
         p.newEntryFee = _newEntryFee;
-        p.newBurnBP = _newBurnBP;
-        p.newTreasuryBP = _newTreasuryBP;
-        p.newMemberPoolBP = _newMemberPoolBP;
+        p.newBurnPercent = _newBurnPercent;
+        p.newTreasuryPercent = _newTreasuryPercent;
+        p.newMemberPoolPercent = _newMemberPoolPercent;
         p.updateFeeSplit = _updateFeeSplit;
         return id;
     }
@@ -173,9 +179,9 @@ abstract contract TemplGovernance is TemplTreasury {
                 proposal.token,
                 proposal.newEntryFee,
                 proposal.updateFeeSplit,
-                proposal.newBurnBP,
-                proposal.newTreasuryBP,
-                proposal.newMemberPoolBP
+                proposal.newBurnPercent,
+                proposal.newTreasuryPercent,
+                proposal.newMemberPoolPercent
             );
         } else if (proposal.action == Action.WithdrawTreasury) {
             _withdrawTreasury(proposal.token, proposal.recipient, proposal.amount, proposal.reason, _proposalId);

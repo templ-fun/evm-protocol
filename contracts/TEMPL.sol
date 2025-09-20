@@ -10,17 +10,23 @@ contract TEMPL is TemplGovernance {
         address _protocolFeeRecipient,
         address _token,
         uint256 _entryFee,
-        uint256 _burnBP,
-        uint256 _treasuryBP,
-        uint256 _memberPoolBP,
-        uint256 _protocolBP
+        uint256 _burnPercent,
+        uint256 _treasuryPercent,
+        uint256 _memberPoolPercent,
+        uint256 _protocolPercent,
+        uint256 _quorumPercent,
+        uint256 _executionDelay,
+        address _burnAddress
     ) TemplGovernance(
         _protocolFeeRecipient,
         _token,
-        _burnBP,
-        _treasuryBP,
-        _memberPoolBP,
-        _protocolBP
+        _burnPercent,
+        _treasuryPercent,
+        _memberPoolPercent,
+        _protocolPercent,
+        _quorumPercent,
+        _executionDelay,
+        _burnAddress
     ) {
         if (_priest == address(0)) revert TemplErrors.InvalidRecipient();
         if (_entryFee == 0) {

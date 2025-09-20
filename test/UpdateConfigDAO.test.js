@@ -73,7 +73,7 @@ describe("updateConfigDAO", function () {
                 true,
                 7 * 24 * 60 * 60
             )
-        ).to.be.revertedWithCustomError(templ, "InvalidFeeSplit");
+        ).to.be.revertedWithCustomError(templ, "InvalidPercentageSplit");
     });
 
     it("updates fee split when governance approves", async function () {
@@ -94,10 +94,10 @@ describe("updateConfigDAO", function () {
         await ethers.provider.send("evm_mine");
         await templ.executeProposal(0);
 
-        expect(await templ.burnBP()).to.equal(NEW_BURN);
-        expect(await templ.treasuryBP()).to.equal(NEW_TREASURY);
-        expect(await templ.memberPoolBP()).to.equal(NEW_MEMBER);
-        expect(await templ.protocolBP()).to.equal(10);
+        expect(await templ.burnPercent()).to.equal(NEW_BURN);
+        expect(await templ.treasuryPercent()).to.equal(NEW_TREASURY);
+        expect(await templ.memberPoolPercent()).to.equal(NEW_MEMBER);
+        expect(await templ.protocolPercent()).to.equal(10);
 
         const beforeBurned = await templ.totalBurned();
         const beforeTreasury = await templ.totalToTreasury();

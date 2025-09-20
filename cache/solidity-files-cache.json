@@ -2,8 +2,8 @@
   "_format": "hh-sol-cache-2",
   "files": {
     "/Users/worms/Documents/templ/contracts/TEMPL.sol": {
-      "lastModificationDate": 1758318097928,
-      "contentHash": "c00a2c714362e38828c993fd31368fe0",
+      "lastModificationDate": 1758337984114,
+      "contentHash": "f1f10e8d5bf57bf216f19928c95b2290",
       "sourceName": "contracts/TEMPL.sol",
       "solcConfig": {
         "version": "0.8.23",
@@ -42,8 +42,8 @@
       ]
     },
     "/Users/worms/Documents/templ/contracts/TemplErrors.sol": {
-      "lastModificationDate": 1758317466185,
-      "contentHash": "e4bc55e7d9278b82791ad56ddebc4c41",
+      "lastModificationDate": 1758337939602,
+      "contentHash": "c8fc0db49564820c4645540606f22571",
       "sourceName": "contracts/TemplErrors.sol",
       "solcConfig": {
         "version": "0.8.23",
@@ -618,8 +618,8 @@
       ]
     },
     "/Users/worms/Documents/templ/contracts/mocks/DaoCallerHarness.sol": {
-      "lastModificationDate": 1758318251014,
-      "contentHash": "0037b83375907e5660e310a663a7b103",
+      "lastModificationDate": 1758337998065,
+      "contentHash": "42c9fc6b16efd060d00d10dcc6e15c94",
       "sourceName": "contracts/mocks/DaoCallerHarness.sol",
       "solcConfig": {
         "version": "0.8.23",
@@ -657,8 +657,8 @@
       ]
     },
     "/Users/worms/Documents/templ/contracts/TemplGovernance.sol": {
-      "lastModificationDate": 1758318089912,
-      "contentHash": "f52a935b3f0ad9af61b23d003500ba03",
+      "lastModificationDate": 1758337912244,
+      "contentHash": "e7b0136e7d98a577ff15cdb1d250b8d7",
       "sourceName": "contracts/TemplGovernance.sol",
       "solcConfig": {
         "version": "0.8.23",
@@ -697,8 +697,8 @@
       ]
     },
     "/Users/worms/Documents/templ/contracts/TemplTreasury.sol": {
-      "lastModificationDate": 1758318056233,
-      "contentHash": "0223474154910c865627f6ad8bd21825",
+      "lastModificationDate": 1758337903413,
+      "contentHash": "a02b1f606037c69983f387f826ef1179",
       "sourceName": "contracts/TemplTreasury.sol",
       "solcConfig": {
         "version": "0.8.23",
@@ -739,8 +739,8 @@
       ]
     },
     "/Users/worms/Documents/templ/contracts/TemplMembership.sol": {
-      "lastModificationDate": 1758318580776,
-      "contentHash": "88ddc6cf876fcbac1605b785160d2664",
+      "lastModificationDate": 1758338043919,
+      "contentHash": "24db3e8b24f9416fe0466f0fa2198896",
       "sourceName": "contracts/TemplMembership.sol",
       "solcConfig": {
         "version": "0.8.23",
@@ -781,8 +781,8 @@
       ]
     },
     "/Users/worms/Documents/templ/contracts/TemplBase.sol": {
-      "lastModificationDate": 1758318069159,
-      "contentHash": "00321f4e228db9d42f56415f25f361d9",
+      "lastModificationDate": 1758337919713,
+      "contentHash": "82213d86e82a9bb309f2499644a465f5",
       "sourceName": "contracts/TemplBase.sol",
       "solcConfig": {
         "version": "0.8.23",
@@ -823,8 +823,8 @@
       ]
     },
     "/Users/worms/Documents/templ/contracts/TemplFactory.sol": {
-      "lastModificationDate": 1758318115830,
-      "contentHash": "2303059002df79fc85254bbb41b95918",
+      "lastModificationDate": 1758337976659,
+      "contentHash": "6905aceedf522ccef06165274eedcde9",
       "sourceName": "contracts/TemplFactory.sol",
       "solcConfig": {
         "version": "0.8.23",
