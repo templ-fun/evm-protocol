@@ -12,13 +12,15 @@ DAO-governed, token-gated private groups with on-chain treasury management and X
 - Shared helpers keep EIP-712 signatures, XMTP polling, and test utilities consistent across the stack.
 
 ```mermaid
-graph TD
-  Users[DAO members\n& deployers] -->|Deploy & govern| Contracts[TEMPL Contracts]
-  Users -->|Join & chat| Frontend[React Frontend]
-  Frontend -->|Invite request| Backend[Express/XMTP Bot]
-  Contracts -->|Events| Backend
-  Backend -->|Invites & updates| XMTP[XMTP Network]
-  Backend -->|Mirrors events| Frontend
+sequenceDiagram
+    participant Frontend
+    participant Backend
+    participant Contracts
+
+    Frontend->>Contracts: deployTempl() / purchaseAccess()
+    Frontend->>Backend: POST /templs & /join
+    Contracts-->>Backend: AccessPurchased / Proposal events
+    Backend-->>Frontend: Invite & governance updates
 ```
 
 ## Read in this Order

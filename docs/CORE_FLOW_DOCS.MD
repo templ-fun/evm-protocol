@@ -112,14 +112,15 @@ sequenceDiagram
 Members create typed proposals on-chain; the backend mirrors on-chain proposal events into the XMTP group. Proposal titles/descriptions live only in XMTP messages, not on-chain.
 ```mermaid
 flowchart LR
-    M[Member] -->|createProposalSetPaused / UpdateConfig / Withdraw / Disband / ChangePriest| C[Contract]
-    C -->|ProposalCreated(id,proposer,endTime)| B[Backend]
-    B -->|send {type:"proposal", id, proposer, endTime}| X[XMTP]
+    M[Member] -->|submit proposal| C[Contract]
+    C -->|emit ProposalCreated| B[Backend]
+    B -->|send proposal summary| X[XMTP]
 ```
 
 Notes
 - The backend adds members by inboxId only and linearizes invites by waiting for inbox readiness on XMTP before adding.
 - After group creation/join, the backend syncs and records network stats. A small warm message may be sent.
+- `ProposalCreated` includes the proposal id, proposer address, and end time; the backend mirrors these fields in the XMTP summary payload.
 
 ## 6. Voting
 Members vote on proposals and the backend broadcasts vote events.
