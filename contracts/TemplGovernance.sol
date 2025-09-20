@@ -30,7 +30,7 @@ abstract contract TemplGovernance is TemplTreasury {
     function createProposalSetPaused(
         bool _paused,
         uint256 _votingPeriod
-    ) external onlyMember returns (uint256) {
+    ) external returns (uint256) {
         (uint256 id, Proposal storage p) = _createBaseProposal(_votingPeriod);
         p.action = Action.SetPaused;
         p.paused = _paused;
@@ -44,7 +44,7 @@ abstract contract TemplGovernance is TemplTreasury {
         uint256 _newMemberPoolPercent,
         bool _updateFeeSplit,
         uint256 _votingPeriod
-    ) external onlyMember returns (uint256) {
+    ) external returns (uint256) {
         if (_newEntryFee > 0) {
             if (_newEntryFee < 10) revert TemplErrors.EntryFeeTooSmall();
             if (_newEntryFee % 10 != 0) revert TemplErrors.InvalidEntryFee();
@@ -68,7 +68,7 @@ abstract contract TemplGovernance is TemplTreasury {
         uint256 _amount,
         string memory _reason,
         uint256 _votingPeriod
-    ) external onlyMember returns (uint256) {
+    ) external returns (uint256) {
         (uint256 id, Proposal storage p) = _createBaseProposal(_votingPeriod);
         p.action = Action.WithdrawTreasury;
         p.token = _token;
@@ -81,7 +81,7 @@ abstract contract TemplGovernance is TemplTreasury {
     function createProposalDisbandTreasury(
         address _token,
         uint256 _votingPeriod
-    ) external onlyMember returns (uint256) {
+    ) external returns (uint256) {
         (uint256 id, Proposal storage p) = _createBaseProposal(_votingPeriod);
         p.action = Action.DisbandTreasury;
         p.token = _token;
@@ -94,7 +94,7 @@ abstract contract TemplGovernance is TemplTreasury {
     function createProposalChangePriest(
         address _newPriest,
         uint256 _votingPeriod
-    ) external onlyMember returns (uint256) {
+    ) external returns (uint256) {
         if (_newPriest == address(0)) revert TemplErrors.InvalidRecipient();
         (uint256 id, Proposal storage p) = _createBaseProposal(_votingPeriod);
         p.action = Action.ChangePriest;
@@ -190,7 +190,6 @@ abstract contract TemplGovernance is TemplTreasury {
         } else if (proposal.action == Action.ChangePriest) {
             _changePriest(proposal.recipient);
         } else {
-            // solcover ignore next line
             revert TemplErrors.InvalidCallData();
         }
 
@@ -297,6 +296,7 @@ abstract contract TemplGovernance is TemplTreasury {
     function _createBaseProposal(
         uint256 _votingPeriod
     ) internal returns (uint256 proposalId, Proposal storage proposal) {
+        if (!members[msg.sender].purchased) revert TemplErrors.NotMember();
         if (hasActiveProposal[msg.sender]) {
             uint256 existingId = activeProposalId[msg.sender];
             Proposal storage existingProposal = proposals[existingId];
