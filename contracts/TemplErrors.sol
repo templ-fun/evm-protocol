@@ -46,8 +46,8 @@ library TemplErrors {
     error EntryFeeTooSmall();
     /// @notice Thrown when the entry fee is not a multiple of ten.
     error InvalidEntryFee();
-    /// @notice Thrown when fee basis points do not sum correctly or exceed limits.
-    error InvalidFeeSplit();
+    /// @notice Thrown when fee percentages do not sum correctly or exceed limits.
+    error InvalidPercentageSplit();
     /// @notice Thrown when there are no rewards available to claim.
     error NoRewardsToClaim();
     /// @notice Thrown when the member pool lacks sufficient funds.
@@ -66,4 +66,8 @@ library TemplErrors {
     error QuorumNotReached();
     /// @notice Thrown when execution delay after quorum has not elapsed.
     error ExecutionDelayActive();
+    /// @notice Thrown when a provided percentage value is invalid.
+    error InvalidPercentage();
+    /// @notice Thrown when the execution delay is invalid.
+    error InvalidExecutionDelay();
 }

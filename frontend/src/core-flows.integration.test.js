@@ -10,7 +10,10 @@ import templFactoryArtifact from './contracts/TemplFactory.json';
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 
 function createStubEthers(state) {
-  const normalize = (addr) => addr ? addr.toLowerCase() : ZERO_ADDRESS;
+  const normalize = (addr) => (addr ? addr.toLowerCase() : ZERO_ADDRESS);
+  const DEFAULT_BURN_ADDRESS = '0x000000000000000000000000000000000000dead';
+  const DEFAULT_QUORUM_PERCENT = 33;
+  const DEFAULT_EXECUTION_DELAY = 7 * 24 * 60 * 60;
 
   class StubContract {
     constructor(address, abi, signer) {
@@ -28,38 +31,114 @@ function createStubEthers(state) {
       }
     }
 
+    _nextTemplAddress() {
+      return normalize(`0xTempl${state.createdTempls.length + 1}`);
+    }
+
+    async _normalizeConfig(input) {
+      const priest = normalize(input.priest ?? (await this.signer.getAddress()));
+      const token = normalize(input.token);
+      if (token === ZERO_ADDRESS) throw new Error('token required');
+      if (input.entryFee === undefined) throw new Error('entry fee required');
+      const entryFee = typeof input.entryFee === 'bigint' ? input.entryFee : BigInt(input.entryFee);
+      const burnPercent = Number(input.burnPercent ?? 30);
+      const treasuryPercent = Number(input.treasuryPercent ?? 30);
+      const memberPoolPercent = Number(input.memberPoolPercent ?? 30);
+      const quorumPercent = Number(input.quorumPercent ?? DEFAULT_QUORUM_PERCENT);
+      const executionDelaySeconds = Number(input.executionDelaySeconds ?? DEFAULT_EXECUTION_DELAY);
+      const burnAddress = input.burnAddress ? normalize(input.burnAddress) : DEFAULT_BURN_ADDRESS;
+      return {
+        priest,
+        token,
+        entryFee,
+        burnPercent,
+        treasuryPercent,
+        memberPoolPercent,
+        quorumPercent,
+        executionDelaySeconds,
+        burnAddress
+      };
+    }
+
+    _recordTempl(config, address) {
+      const addr = (address ?? config.address ?? this._nextTemplAddress()).toLowerCase();
+      state.createdTempls.push({
+        priest: config.priest,
+        token: config.token,
+        entryFee: config.entryFee,
+        burnPercent: config.burnPercent,
+        treasuryPercent: config.treasuryPercent,
+        memberPoolPercent: config.memberPoolPercent,
+        quorumPercent: config.quorumPercent,
+        executionDelaySeconds: config.executionDelaySeconds,
+        burnAddress: config.burnAddress
+      });
+      state.templs[addr] = {
+        accessToken: config.token,
+        entryFee: config.entryFee,
+        burnPercent: config.burnPercent,
+        treasuryPercent: config.treasuryPercent,
+        memberPoolPercent: config.memberPoolPercent,
+        protocolPercent: state.protocolPercent,
+        quorumPercent: config.quorumPercent,
+        executionDelaySeconds: config.executionDelaySeconds,
+        burnAddress: config.burnAddress,
+        members: new Set()
+      };
+      state.pendingTempl = null;
+      return addr;
+    }
+
     async protocolFeeRecipient() {
       if (this.kind !== 'factory') throw new Error('not factory');
       return state.protocolFeeRecipient;
     }
 
-    async protocolBP() {
+    async protocolPercent() {
       if (this.kind !== 'factory') throw new Error('not factory');
-      return BigInt(state.protocolBP);
+      return BigInt(state.protocolPercent);
+    }
+
+    async protocolBP() {
+      return this.protocolPercent();
     }
 
     get createTempl() {
       if (this.kind !== 'factory') return undefined;
-      const fn = async (priest, token, entryFee, burnBP, treasuryBP, memberPoolBP) => {
-        state.createdTempls.push({ priest: normalize(priest), token: normalize(token), entryFee: BigInt(entryFee), burnBP: Number(burnBP), treasuryBP: Number(treasuryBP), memberPoolBP: Number(memberPoolBP) });
-        const addr = normalize(`0xTempl${state.createdTempls.length}`);
-        state.templs[addr] = {
-          accessToken: normalize(token),
-          entryFee: BigInt(entryFee),
-          burnBP: Number(burnBP),
-          treasuryBP: Number(treasuryBP),
-          memberPoolBP: Number(memberPoolBP),
-          protocolBP: state.protocolBP,
-          members: new Set()
-        };
+      const fn = async (token, entryFee, overrides = {}) => {
+        const config = await this._normalizeConfig({ token, entryFee, ...overrides });
+        const pending = state.pendingTempl && state.pendingTempl.address ? state.pendingTempl : null;
+        const finalConfig = pending ?? { ...config, address: this._nextTemplAddress() };
+        this._recordTempl(finalConfig, finalConfig.address);
         return {
           wait: async () => ({ transactionHash: `0xtx-${state.createdTempls.length}` })
         };
       };
-      fn.staticCall = async (priest, token, entryFee, burnBP, treasuryBP, memberPoolBP) => {
-        const addr = normalize(`0xTempl${state.createdTempls.length + 1}`);
-        state.pendingTempl = { priest: normalize(priest), token: normalize(token), entryFee: BigInt(entryFee), burnBP: Number(burnBP), treasuryBP: Number(treasuryBP), memberPoolBP: Number(memberPoolBP), address: addr };
-        return addr;
+      fn.staticCall = async (token, entryFee, overrides = {}) => {
+        const config = await this._normalizeConfig({ token, entryFee, ...overrides });
+        const address = this._nextTemplAddress();
+        state.pendingTempl = { ...config, address };
+        return address;
+      };
+      return fn;
+    }
+
+    get createTemplWithConfig() {
+      if (this.kind !== 'factory') return undefined;
+      const fn = async (configArg, overrides = {}) => {
+        const config = await this._normalizeConfig({ ...configArg, ...overrides });
+        const pending = state.pendingTempl && state.pendingTempl.address ? state.pendingTempl : null;
+        const finalConfig = pending ?? { ...config, address: this._nextTemplAddress() };
+        this._recordTempl(finalConfig, finalConfig.address);
+        return {
+          wait: async () => ({ transactionHash: `0xtx-${state.createdTempls.length}` })
+        };
+      };
+      fn.staticCall = async (configArg) => {
+        const config = await this._normalizeConfig(configArg);
+        const address = this._nextTemplAddress();
+        state.pendingTempl = { ...config, address };
+        return address;
       };
       return fn;
     }
@@ -89,10 +168,10 @@ function createStubEthers(state) {
         BigInt(templ.members.size),
         0n,
         0n,
-        templ.burnBP,
-        templ.treasuryBP,
-        templ.memberPoolBP,
-        templ.protocolBP
+        templ.burnPercent,
+        templ.treasuryPercent,
+        templ.memberPoolPercent,
+        templ.protocolPercent
       ];
     }
 
@@ -103,7 +182,6 @@ function createStubEthers(state) {
       return { wait: async () => ({}) };
     }
 
-    // Minimal ERC20 interface for approvals
     async allowance(owner, spender) {
       const token = state.tokens[this.address];
       const key = `${normalize(owner)}:${normalize(spender)}`;
@@ -232,7 +310,7 @@ describe('core flows e2e (stubbed)', () => {
     const state = {
       factoryAddress: '0xFaC70ry00000000000000000000000000000001',
       protocolFeeRecipient: '0xProt0000000000000000000000000000000001',
-      protocolBP: 10,
+      protocolPercent: 10,
       createdTempls: [],
       templs: {},
       tokens: {
@@ -274,9 +352,9 @@ describe('core flows e2e (stubbed)', () => {
       walletAddress: await signer.getAddress(),
       tokenAddress: '0xT0ken0000000000000000000000000000000001',
       entryFee: '1000',
-      burnBP: '20',
-      treasuryBP: '45',
-      memberPoolBP: '25',
+      burnPercent: '20',
+      treasuryPercent: '45',
+      memberPoolPercent: '25',
       factoryAddress: state.factoryAddress,
       factoryArtifact: templFactoryArtifact,
       templArtifact,
@@ -287,9 +365,9 @@ describe('core flows e2e (stubbed)', () => {
     expect(result.groupId).toBe('group-1');
     expect(state.createdTempls).toHaveLength(1);
     expect(state.createdTempls[0]).toMatchObject({
-      burnBP: 20,
-      treasuryBP: 45,
-      memberPoolBP: 25
+      burnPercent: 20,
+      treasuryPercent: 45,
+      memberPoolPercent: 25
     });
 
     const memberSigner = createSigner('0xMember00000000000000000000000000000001');

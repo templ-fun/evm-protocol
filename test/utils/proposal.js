@@ -21,13 +21,13 @@ async function createProposal({ templ, signer, title, description, callData, vot
     return await tx.wait();
   } catch {}
   try {
-    const [, newFee, updateSplit, burnBP, treasuryBP, memberPoolBP] =
+    const [, newFee, updateSplit, burnPercent, treasuryPercent, memberPoolPercent] =
       IF_UC.decodeFunctionData("updateConfigDAO", callData);
     const tx = await conn.createProposalUpdateConfig(
       newFee,
-      burnBP,
-      treasuryBP,
-      memberPoolBP,
+      burnPercent,
+      treasuryPercent,
+      memberPoolPercent,
       updateSplit,
       votingPeriod
     );

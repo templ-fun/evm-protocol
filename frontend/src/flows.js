@@ -82,9 +82,12 @@ export async function deployTempl({
   walletAddress,
   tokenAddress,
   entryFee,
-  burnBP,
-  treasuryBP,
-  memberPoolBP,
+  burnPercent,
+  treasuryPercent,
+  memberPoolPercent,
+  quorumPercent,
+  executionDelaySeconds,
+  burnAddress,
   factoryAddress,
   factoryArtifact,
   templArtifact,
@@ -99,11 +102,11 @@ export async function deployTempl({
   }
   const factory = new ethers.Contract(factoryAddress, factoryArtifact.abi, signer);
   let protocolFeeRecipient;
-  let protocolBpRaw;
+  let protocolPercentRaw;
   try {
-    [protocolFeeRecipient, protocolBpRaw] = await Promise.all([
+    [protocolFeeRecipient, protocolPercentRaw] = await Promise.all([
       factory.protocolFeeRecipient(),
-      factory.protocolBP()
+      factory.protocolPercent?.() ?? factory.protocolBP()
     ]);
   } catch (err) {
     throw new Error(err?.message || 'Unable to read factory configuration');
@@ -111,10 +114,10 @@ export async function deployTempl({
   if (!protocolFeeRecipient || protocolFeeRecipient === ethers.ZeroAddress) {
     throw new Error('Factory protocol fee recipient not configured');
   }
-  const burn = BigInt(burnBP ?? 0);
-  const treasury = BigInt(treasuryBP ?? 0);
-  const member = BigInt(memberPoolBP ?? 0);
-  const protocol = BigInt(protocolBpRaw ?? 0n);
+  const burn = BigInt(burnPercent ?? 30);
+  const treasury = BigInt(treasuryPercent ?? 30);
+  const member = BigInt(memberPoolPercent ?? 30);
+  const protocol = BigInt(protocolPercentRaw ?? 0n);
   const totalSplit = burn + treasury + member + protocol;
   if (totalSplit !== 100n) {
     throw new Error(`Fee split must equal 100, received ${totalSplit}`);
@@ -126,25 +129,45 @@ export async function deployTempl({
     throw new Error('Invalid entry fee');
   }
   const normalizedToken = String(tokenAddress);
-  const templAddress = await factory.createTempl.staticCall(
-    walletAddress,
-    normalizedToken,
-    normalizedEntryFee,
-    burn,
-    treasury,
-    member
-  );
-  const tx = await factory.createTempl(
-    walletAddress,
-    normalizedToken,
-    normalizedEntryFee,
-    burn,
-    treasury,
-    member,
-    txOptions
-  );
-  await tx.wait();
-  const contractAddress = templAddress;
+  const config = {
+    priest: walletAddress,
+    token: normalizedToken,
+    entryFee: normalizedEntryFee,
+    burnPercent: Number(burn),
+    treasuryPercent: Number(treasury),
+    memberPoolPercent: Number(member),
+    burnAddress: burnAddress && ethers.isAddress?.(burnAddress)
+      ? burnAddress
+      : (ethers.ZeroAddress ?? '0x0000000000000000000000000000000000000000')
+  };
+  if (quorumPercent !== undefined && quorumPercent !== null) {
+    config.quorumPercent = Number(quorumPercent);
+  }
+  if (executionDelaySeconds !== undefined && executionDelaySeconds !== null) {
+    config.executionDelaySeconds = Number(executionDelaySeconds);
+  }
+
+  const zeroAddress = ethers.ZeroAddress ?? '0x0000000000000000000000000000000000000000';
+  const defaultsRequested =
+    Number(burn) === 30 &&
+    Number(treasury) === 30 &&
+    Number(member) === 30 &&
+    config.priest === walletAddress &&
+    config.burnAddress === zeroAddress &&
+    config.quorumPercent === undefined &&
+    config.executionDelaySeconds === undefined;
+
+  let contractAddress;
+  if (defaultsRequested) {
+    contractAddress = await factory.createTempl.staticCall(normalizedToken, normalizedEntryFee);
+    const tx = await factory.createTempl(normalizedToken, normalizedEntryFee, txOptions);
+    await tx.wait();
+  } else {
+    const templAddress = await factory.createTemplWithConfig.staticCall(config);
+    const tx = await factory.createTemplWithConfig(config, txOptions);
+    await tx.wait();
+    contractAddress = templAddress;
+  }
   // Record immediately for tests to discover, even before backend registration
   addToTestRegistry(contractAddress);
   const network = await signer.provider?.getNetwork?.();
@@ -657,9 +680,9 @@ export async function proposeVote({
         const rawFee = p.newEntryFee ?? 0;
         let feeBigInt = 0n;
         try { feeBigInt = rawFee ? BigInt(rawFee) : 0n; } catch {}
-        const newBurn = p.newBurnBP ?? 0;
-        const newTreasury = p.newTreasuryBP ?? 0;
-        const newMember = p.newMemberPoolBP ?? 0;
+        const newBurn = p.newBurnPercent ?? 0;
+        const newTreasury = p.newTreasuryPercent ?? 0;
+        const newMember = p.newMemberPoolPercent ?? 0;
         const updateSplit = p.updateFeeSplit !== undefined
           ? !!p.updateFeeSplit
           : (newBurn !== 0 || newTreasury !== 0 || newMember !== 0);
@@ -723,12 +746,12 @@ export async function proposeVote({
         return await waitForProposal(tx);
       }
       if (fn?.name === 'updateConfigDAO' && fn.inputs.length === 6) {
-        const [, newEntryFee, updateSplit, burnBP, treasuryBP, memberPoolBP] = full.decodeFunctionData(fn, callData);
+        const [, newEntryFee, updateSplit, burnPercentValue, treasuryPercentValue, memberPoolPercentValue] = full.decodeFunctionData(fn, callData);
         const tx = await contract.createProposalUpdateConfig(
           newEntryFee,
-          burnBP,
-          treasuryBP,
-          memberPoolBP,
+          burnPercentValue,
+          treasuryPercentValue,
+          memberPoolPercentValue,
           updateSplit,
           votingPeriod,
           txOptions

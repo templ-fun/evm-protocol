@@ -27,17 +27,17 @@ function readEnv(key, fallback = '') {
 export const FACTORY_CONFIG = (() => {
   const address = readEnv('VITE_TEMPL_FACTORY_ADDRESS', readEnv('TEMPL_FACTORY_ADDRESS', '')).trim();
   const protocolRecipient = readEnv('VITE_TEMPL_FACTORY_PROTOCOL_RECIPIENT', readEnv('TEMPL_FACTORY_PROTOCOL_RECIPIENT', '')).trim();
-  const protocolBpRaw = readEnv('VITE_TEMPL_FACTORY_PROTOCOL_BP', readEnv('TEMPL_FACTORY_PROTOCOL_BP', ''));
-  let protocolBP = undefined;
-  if (protocolBpRaw !== '') {
-    const parsed = Number(protocolBpRaw);
+  const protocolPercentRaw = readEnv('VITE_TEMPL_FACTORY_PROTOCOL_PERCENT', readEnv('TEMPL_FACTORY_PROTOCOL_BP', ''));
+  let protocolPercent = undefined;
+  if (protocolPercentRaw !== '') {
+    const parsed = Number(protocolPercentRaw);
     if (Number.isFinite(parsed)) {
-      protocolBP = parsed;
+      protocolPercent = parsed;
     }
   }
   return {
     address,
     protocolFeeRecipient: protocolRecipient,
-    protocolBP
+    protocolPercent
   };
 })();

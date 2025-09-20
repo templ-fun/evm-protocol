@@ -266,7 +266,10 @@ describe("Member Pool Distribution - Exhaustive Tests", function () {
                 30,
                 30,
                 30,
-                10
+                10,
+                33,
+                7 * 24 * 60 * 60,
+                "0x000000000000000000000000000000000000dEaD"
             );
             await oddTempl.waitForDeployment();
 

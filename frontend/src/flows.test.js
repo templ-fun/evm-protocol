@@ -55,7 +55,7 @@ describe('templ flows', () => {
     createTempl.staticCall = vi.fn().mockResolvedValue('0xDeAd');
     const factoryContract = {
       protocolFeeRecipient: vi.fn().mockResolvedValue('0xfee'),
-      protocolBP: vi.fn().mockResolvedValue(10n),
+      protocolPercent: vi.fn().mockResolvedValue(10n),
       createTempl
     };
     const ethers = {
@@ -74,31 +74,16 @@ describe('templ flows', () => {
       walletAddress: '0xabc',
       tokenAddress: '0xdef',
       entryFee: '1',
-      burnBP: '30',
-      treasuryBP: '30',
-      memberPoolBP: '30',
+      burnPercent: '30',
+      treasuryPercent: '30',
+      memberPoolPercent: '30',
       factoryAddress: '0xFactory',
       factoryArtifact: { abi: [] },
       templArtifact
     });
 
-    expect(createTempl.staticCall).toHaveBeenCalledWith(
-      '0xabc',
-      '0xdef',
-      BigInt(1),
-      30n,
-      30n,
-      30n
-    );
-    expect(createTempl).toHaveBeenCalledWith(
-      '0xabc',
-      '0xdef',
-      BigInt(1),
-      30n,
-      30n,
-      30n,
-      {}
-    );
+    expect(createTempl.staticCall).toHaveBeenCalledWith('0xdef', BigInt(1));
+    expect(createTempl).toHaveBeenCalledWith('0xdef', BigInt(1), {});
     expect(signer.signTypedData).toHaveBeenCalled();
     expect(globalThis.fetch).toHaveBeenCalledWith(
       `${BACKEND_URL}/templs`,
@@ -126,7 +111,7 @@ describe('templ flows', () => {
     createTempl.staticCall = vi.fn().mockResolvedValue('0xDeAd');
     const factoryContract = {
       protocolFeeRecipient: vi.fn().mockResolvedValue('0xfee'),
-      protocolBP: vi.fn().mockResolvedValue(10n),
+      protocolPercent: vi.fn().mockResolvedValue(10n),
       createTempl
     };
     const ethers = {
@@ -145,9 +130,9 @@ describe('templ flows', () => {
         walletAddress: '0xabc',
         tokenAddress: '0xdef',
         entryFee: '1',
-        burnBP: '30',
-        treasuryBP: '30',
-        memberPoolBP: '30',
+        burnPercent: '30',
+        treasuryPercent: '30',
+        memberPoolPercent: '30',
         factoryAddress: '0xFactory',
         factoryArtifact: { abi: [] },
         templArtifact
@@ -161,7 +146,7 @@ describe('templ flows', () => {
     createTempl.staticCall = vi.fn().mockResolvedValue('0xDeAd');
     const factoryContract = {
       protocolFeeRecipient: vi.fn().mockResolvedValue('0xfee'),
-      protocolBP: vi.fn().mockResolvedValue(10n),
+      protocolPercent: vi.fn().mockResolvedValue(10n),
       createTempl
     };
     const ethers = {
@@ -176,9 +161,9 @@ describe('templ flows', () => {
         walletAddress: '0xabc',
         tokenAddress: '0xdef',
         entryFee: '1',
-        burnBP: '30',
-        treasuryBP: '30',
-        memberPoolBP: '30',
+        burnPercent: '30',
+        treasuryPercent: '30',
+        memberPoolPercent: '30',
         factoryAddress: '0xFactory',
         factoryArtifact: { abi: [] },
         templArtifact

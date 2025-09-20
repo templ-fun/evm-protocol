@@ -10,13 +10,15 @@ abstract contract TemplBase is ReentrancyGuard {
     using SafeERC20 for IERC20;
     using TemplErrors for *;
 
-    uint256 internal constant TOTAL_BPS = 100;
-    address internal constant DEAD_ADDRESS = 0x000000000000000000000000000000000000dEaD;
+    uint256 internal constant TOTAL_PERCENT = 100;
+    uint256 internal constant DEFAULT_QUORUM_PERCENT = 33;
+    uint256 internal constant DEFAULT_EXECUTION_DELAY = 7 days;
+    address internal constant DEFAULT_BURN_ADDRESS = 0x000000000000000000000000000000000000dEaD;
 
-    uint256 public burnBP;
-    uint256 public treasuryBP;
-    uint256 public memberPoolBP;
-    uint256 public immutable protocolBP;
+    uint256 public burnPercent;
+    uint256 public treasuryPercent;
+    uint256 public memberPoolPercent;
+    uint256 public immutable protocolPercent;
 
     address public priest;
     address public immutable protocolFeeRecipient;
@@ -26,8 +28,9 @@ abstract contract TemplBase is ReentrancyGuard {
     uint256 public memberPoolBalance;
     bool public paused;
 
-    uint256 public quorumPercent = 33;
-    uint256 public executionDelayAfterQuorum = 7 days;
+    uint256 public quorumPercent;
+    uint256 public executionDelayAfterQuorum;
+    address public immutable burnAddress;
 
     struct Member {
         bool purchased;
@@ -52,9 +55,9 @@ abstract contract TemplBase is ReentrancyGuard {
         string reason;
         bool paused;
         uint256 newEntryFee;
-        uint256 newBurnBP;
-        uint256 newTreasuryBP;
-        uint256 newMemberPoolBP;
+        uint256 newBurnPercent;
+        uint256 newTreasuryPercent;
+        uint256 newMemberPoolPercent;
         uint256 yesVotes;
         uint256 noVotes;
         uint256 endTime;
@@ -135,10 +138,10 @@ abstract contract TemplBase is ReentrancyGuard {
     event ConfigUpdated(
         address indexed token,
         uint256 entryFee,
-        uint256 burnBasisPoints,
-        uint256 treasuryBasisPoints,
-        uint256 memberPoolBasisPoints,
-        uint256 protocolBasisPoints
+        uint256 burnPercent,
+        uint256 treasuryPercent,
+        uint256 memberPoolPercent,
+        uint256 protocolPercent
     );
 
     event ContractPaused(bool isPaused);
@@ -192,45 +195,54 @@ abstract contract TemplBase is ReentrancyGuard {
     constructor(
         address _protocolFeeRecipient,
         address _accessToken,
-        uint256 _burnBP,
-        uint256 _treasuryBP,
-        uint256 _memberPoolBP,
-        uint256 _protocolBP
+        uint256 _burnPercent,
+        uint256 _treasuryPercent,
+        uint256 _memberPoolPercent,
+        uint256 _protocolPercent,
+        uint256 _quorumPercent,
+        uint256 _executionDelay,
+        address _burnAddress
     ) {
         if (_protocolFeeRecipient == address(0) || _accessToken == address(0)) {
             revert TemplErrors.InvalidRecipient();
         }
         protocolFeeRecipient = _protocolFeeRecipient;
         accessToken = _accessToken;
-        protocolBP = _protocolBP;
-        _setFeeSplit(_burnBP, _treasuryBP, _memberPoolBP);
+        protocolPercent = _protocolPercent;
+        _setPercentSplit(_burnPercent, _treasuryPercent, _memberPoolPercent);
+        quorumPercent = _quorumPercent == 0 ? DEFAULT_QUORUM_PERCENT : _quorumPercent;
+        if (quorumPercent > TOTAL_PERCENT) revert TemplErrors.InvalidPercentage();
+        executionDelayAfterQuorum = _executionDelay == 0 ? DEFAULT_EXECUTION_DELAY : _executionDelay;
+        if (executionDelayAfterQuorum == 0) revert TemplErrors.InvalidExecutionDelay();
+        burnAddress = _burnAddress == address(0) ? DEFAULT_BURN_ADDRESS : _burnAddress;
+        if (burnAddress == address(0)) revert TemplErrors.InvalidRecipient();
     }
 
-    function _setFeeSplit(
-        uint256 _burnBP,
-        uint256 _treasuryBP,
-        uint256 _memberPoolBP
+    function _setPercentSplit(
+        uint256 _burnPercent,
+        uint256 _treasuryPercent,
+        uint256 _memberPoolPercent
     ) internal {
-        _validateFeeSplit(_burnBP, _treasuryBP, _memberPoolBP, protocolBP);
-        burnBP = _burnBP;
-        treasuryBP = _treasuryBP;
-        memberPoolBP = _memberPoolBP;
+        _validatePercentSplit(_burnPercent, _treasuryPercent, _memberPoolPercent, protocolPercent);
+        burnPercent = _burnPercent;
+        treasuryPercent = _treasuryPercent;
+        memberPoolPercent = _memberPoolPercent;
     }
 
-    function _validateFeeSplit(
-        uint256 _burnBP,
-        uint256 _treasuryBP,
-        uint256 _memberPoolBP,
-        uint256 _protocolBP
+    function _validatePercentSplit(
+        uint256 _burnPercent,
+        uint256 _treasuryPercent,
+        uint256 _memberPoolPercent,
+        uint256 _protocolPercent
     ) internal pure {
         if (
-            _burnBP > TOTAL_BPS ||
-            _treasuryBP > TOTAL_BPS ||
-            _memberPoolBP > TOTAL_BPS ||
-            _protocolBP > TOTAL_BPS
-        ) revert TemplErrors.InvalidFeeSplit();
-        if (_burnBP + _treasuryBP + _memberPoolBP + _protocolBP != TOTAL_BPS) {
-            revert TemplErrors.InvalidFeeSplit();
+            _burnPercent > TOTAL_PERCENT ||
+            _treasuryPercent > TOTAL_PERCENT ||
+            _memberPoolPercent > TOTAL_PERCENT ||
+            _protocolPercent > TOTAL_PERCENT
+        ) revert TemplErrors.InvalidPercentageSplit();
+        if (_burnPercent + _treasuryPercent + _memberPoolPercent + _protocolPercent != TOTAL_PERCENT) {
+            revert TemplErrors.InvalidPercentageSplit();
         }
     }
 }

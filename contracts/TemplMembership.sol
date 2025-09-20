@@ -12,23 +12,38 @@ abstract contract TemplMembership is TemplBase {
     constructor(
         address _protocolFeeRecipient,
         address _accessToken,
-        uint256 _burnBP,
-        uint256 _treasuryBP,
-        uint256 _memberPoolBP,
-        uint256 _protocolBP
-    ) TemplBase(_protocolFeeRecipient, _accessToken, _burnBP, _treasuryBP, _memberPoolBP, _protocolBP) {}
+        uint256 _burnPercent,
+        uint256 _treasuryPercent,
+        uint256 _memberPoolPercent,
+        uint256 _protocolPercent,
+        uint256 _quorumPercent,
+        uint256 _executionDelay,
+        address _burnAddress
+    )
+        TemplBase(
+            _protocolFeeRecipient,
+            _accessToken,
+            _burnPercent,
+            _treasuryPercent,
+            _memberPoolPercent,
+            _protocolPercent,
+            _quorumPercent,
+            _executionDelay,
+            _burnAddress
+        )
+    {}
 
     function purchaseAccess() external whenNotPaused notSelf nonReentrant {
         Member storage m = members[msg.sender];
         if (m.purchased) revert TemplErrors.AlreadyPurchased();
 
-        uint256 burnAmount = (entryFee * burnBP) / TOTAL_BPS;
-        uint256 treasuryAmount = (entryFee * treasuryBP) / TOTAL_BPS;
-        uint256 memberPoolAmount = (entryFee * memberPoolBP) / TOTAL_BPS;
-        uint256 protocolAmount = (entryFee * protocolBP) / TOTAL_BPS;
+        uint256 burnAmount = (entryFee * burnPercent) / TOTAL_PERCENT;
+        uint256 treasuryAmount = (entryFee * treasuryPercent) / TOTAL_PERCENT;
+        uint256 memberPoolAmount = (entryFee * memberPoolPercent) / TOTAL_PERCENT;
+        uint256 protocolAmount = (entryFee * protocolPercent) / TOTAL_PERCENT;
 
         uint256 distributed = burnAmount + treasuryAmount + memberPoolAmount + protocolAmount;
-        if (distributed > entryFee) revert TemplErrors.InvalidFeeSplit();
+        if (distributed > entryFee) revert TemplErrors.InvalidPercentageSplit();
         if (distributed < entryFee) {
             uint256 remainder = entryFee - distributed;
             treasuryAmount += remainder;
@@ -64,7 +79,7 @@ abstract contract TemplMembership is TemplBase {
         totalToProtocol += protocolAmount;
 
         IERC20 token = IERC20(accessToken);
-        token.safeTransferFrom(msg.sender, DEAD_ADDRESS, burnAmount);
+        token.safeTransferFrom(msg.sender, burnAddress, burnAmount);
         token.safeTransferFrom(msg.sender, address(this), toContract);
         token.safeTransferFrom(msg.sender, protocolFeeRecipient, protocolAmount);
 
@@ -200,10 +215,10 @@ abstract contract TemplMembership is TemplBase {
         uint256 purchases,
         uint256 treasury,
         uint256 pool,
-        uint256 burnBasisPoints,
-        uint256 treasuryBasisPoints,
-        uint256 memberPoolBasisPoints,
-        uint256 protocolBasisPoints
+        uint256 burnPercentOut,
+        uint256 treasuryPercentOut,
+        uint256 memberPoolPercentOut,
+        uint256 protocolPercentOut
     ) {
         uint256 current = IERC20(accessToken).balanceOf(address(this));
         uint256 available = current > memberPoolBalance ? current - memberPoolBalance : 0;
@@ -214,10 +229,10 @@ abstract contract TemplMembership is TemplBase {
             totalPurchases,
             available,
             memberPoolBalance,
-            burnBP,
-            treasuryBP,
-            memberPoolBP,
-            protocolBP
+            burnPercent,
+            treasuryPercent,
+            memberPoolPercent,
+            protocolPercent
         );
     }
 
