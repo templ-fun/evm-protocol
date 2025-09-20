@@ -18,14 +18,16 @@ if (process.env.SKIP_MOCKS === "true") {
   );
 }
 
+const usingCoverage = process.env.SOLIDITY_COVERAGE === "true";
+
 /** @type import("hardhat/config").HardhatUserConfig */
 const config = {
   solidity: {
     version: "0.8.23",
     settings: {
-      viaIR: true,
+      viaIR: usingCoverage ? false : true,
       optimizer: {
-        enabled: true,
+        enabled: usingCoverage ? false : true,
         runs: 200
       }
     }
