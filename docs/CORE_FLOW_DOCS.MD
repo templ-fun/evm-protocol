@@ -1,10 +1,10 @@
-# Core Ritual Diagrams
+# Core Flow Diagrams
 
-These diagrams show the choreography between contracts, backend, frontend, and XMTP that turns a token into a living cult. Read this after the protocol spec so you can visualize every rite from deployment to execution.
+These diagrams illustrate how contracts, backend, frontend, and XMTP coordinate. Read this after the protocol spec to visualize each deployment and membership sequence end to end.
 
-## How to use this map
+## How to use this document
 - Skim the flow index to jump to a scenario (deploy, join, moderation, governance).
-- Each section opens with a flowchart and is followed by sequence details whenever extra context helps.
+- Each section opens with a flowchart and includes sequence details when extra context helps.
 - Keep [docs/CONTRACTS.md](./CONTRACTS.md) nearby for function definitions referenced in callouts.
 
 ## Flow overview
@@ -25,8 +25,8 @@ These diagrams show the choreography between contracts, backend, frontend, and X
 
 Legend: F=Frontend, B=Backend, C=Contract, X=XMTP, D=SQLite, M=Member, P=Priest.
 
-## 1. Birth of a Templ
-The backend raises the XMTP group the moment a Templ is deployed via the factory. It wields a short-lived creator key for the summon, then hands control to the invite-bot identity that keeps the gates.
+## 1. Templ creation
+The backend creates the XMTP group as soon as a templ is deployed via the factory. It uses a short-lived creator key, then hands control to the invite-bot identity that manages invites.
 ```mermaid
 flowchart LR
     F[Frontend] -->|factory.createTempl| C[Contract]
@@ -37,8 +37,8 @@ flowchart LR
 
 - Frontend calls `TemplFactory.createTempl(...)` to obtain the new templ address, then posts `{contract}`; backend verifies the contract and on-chain priest in production, resolves the priest inbox from the network, creates the group (including the priest), and stores the `groupId`.
 
-## 2. Tribute to join
-Members sign a join message, and the backend verifies the on-chain purchase before inviting them. See [CONTRACTS.md#economic-model](./CONTRACTS.md#economic-model) for how the tribute splits.
+## 2. Pay-to-join
+Members sign a join message, and the backend verifies the on-chain purchase before inviting them. See [CONTRACTS.md#entry-fee-economics](./CONTRACTS.md#entry-fee-economics) for how the fee splits.
 ```mermaid
 flowchart LR
     F[Frontend] -->|purchaseAccess| C[Contract]
@@ -66,18 +66,18 @@ sequenceDiagram
     F->>X: sync and discover conversation
 ```
 
-## 3. Messaging the cult
-Members send messages directly to the XMTP group once they cross the threshold.
+## 3. Messaging
+Members send messages directly to the XMTP group after joining.
 ```mermaid
 flowchart LR
     M[Member] -->|send message| X[XMTP]
 ```
 
 Discovery
-- After joining, browser clients sync conversations and preferences until the sanctuary materializes.
+- After joining, browser clients sync conversations and preferences until the group appears.
 
-## 4. Moderation rituals
-The backend enforces escalating mutes and allows delegated moderation so the cult stays orderly.
+## 4. Moderation
+The backend enforces escalating mutes and allows delegated moderation to keep the group healthy.
 ```mermaid
 flowchart LR
     P[Priest] -->|POST /delegateMute| B[Backend]
@@ -107,8 +107,8 @@ sequenceDiagram
     B-->>P: 200 { mutedUntil }
 ```
 
-## 5. Proposal sparks
-Members create typed proposals on-chain; the backend mirrors proposal events into the XMTP group. Titles and descriptions live in XMTP messages, not on-chain.
+## 5. Proposal creation
+Members create typed proposals on-chain, and the backend mirrors proposal events into the XMTP group. Titles and descriptions live in XMTP messages, not on-chain.
 ```mermaid
 flowchart LR
     M[Member] -->|submit proposal| C[Contract]
@@ -121,8 +121,8 @@ Notes
 - After group creation/join, the backend syncs and records network stats. A small warm message may be sent.
 - `ProposalCreated` includes the proposal id, proposer address, and end time; the backend mirrors these fields in the XMTP summary payload.
 
-## 6. Voting signals
-Members vote on proposals and the backend broadcasts vote events to the congregation.
+## 6. Voting
+Members vote on proposals and the backend broadcasts vote events to the group.
 ```mermaid
 flowchart LR
     M[Member] -->|vote| C[Contract]
@@ -130,7 +130,7 @@ flowchart LR
     B -->|send vote JSON| X[XMTP]
 ```
 
-## 7. Executing decrees
+## 7. Proposal execution
 Execution is limited to an allowlisted set of contract functions.
 ```mermaid
 flowchart LR

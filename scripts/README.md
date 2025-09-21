@@ -1,10 +1,10 @@
 # Scripts
 
-> Entry points for cult maintenance: deploy a templ, spin up wallets, or mirror CI locally.
+> Entry points for recurring developer tasks: deploy a templ, spin up wallets, or mirror CI locally.
 
 Run each script from the repo root unless noted. All commands assume dependencies are installed (`npm ci`, package-specific installs) and any required environment variables are present.
 
-## Why this playbook matters
+## Why this document matters
 - Deploy templs consistently across environments with `deploy.js`.
 - Generate deterministic wallets and ERC-20 balances for local testing.
 - Reproduce the full CI pipeline locally before opening a PR.

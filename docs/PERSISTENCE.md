@@ -2,12 +2,12 @@
 
 Understand what lives on-chain, inside SQLite, and within XMTP client databases so you can reason about backup, security, and local development. Read this right after the shared utilities to connect helpers with stored data.
 
-## Why this map matters
+## Why this document matters
 - Identify every storage location touched by the stack and what data resides there.
 - Learn how the backend manages replay protection, moderation state, and bot keys in SQLite.
 - See how XMTP Node/Browser databases behave so you can avoid OPFS/SQLCipher pitfalls.
 
-This document outlines where Templ persists state, the storage technologies in play, and how cult memory flows through the system.
+This document outlines where Templ persists state, the storage technologies in play, and how data flows through the system.
 
 | Storage          | Location                                            | Encryption                   | Usage                                            |
 | ---------------- | --------------------------------------------------- | ---------------------------- | ------------------------------------------------ |
@@ -29,7 +29,7 @@ graph LR
 
 ## Backend DB (SQLite)
 
-Where the invite-bot keeps its receipts:
+Where the invite-bot persists state:
 
 - Default file: `backend/groups.db` (override with `DB_PATH`).
 - Purpose: maps on-chain templ contracts to XMTP `groupId`, and stores moderation state.
@@ -52,7 +52,7 @@ Where the invite-bot keeps its receipts:
 
 ## XMTP Node DB
 
-Server-side memory palace for the invite-bot:
+Server-side store for the invite-bot:
 
 - File: `xmtp-<env>-<inboxId>.db3` in the server working directory.
 - Encryption: SQLCipher; key supplied by `dbEncryptionKey`.
@@ -71,13 +71,13 @@ Server-side memory palace for the invite-bot:
 
 ## XMTP Browser DB
 
-Where browsers stash their cult credentials:
+Where browsers store XMTP credentials:
 
 - Storage: OPFS (`xmtp-<env>-<inboxId>.db3` per origin). Not host-visible; not encrypted.
 - OPFS uses exclusive “synchronous access handles.” Multiple handles or rapid client churn can trigger `NoModificationAllowedError: createSyncAccessHandle`.
 - Guidance: run a single client per page, avoid frequent teardown, and reuse a stable installation where possible.
 
-## Data flows & endpoints
+## Data flows and endpoints
 
 ```mermaid
 flowchart TD
@@ -103,7 +103,7 @@ flowchart TD
   - Priest or delegate EIP-712 signature (`action: 'mute'`) records escalating `count` and `until` in `mutes`.
 - Identity and membership live in XMTP; SQLite stores group mapping and moderation state but not membership or messages.
 
-## FAQ (storage myths)
+## FAQ
 
 This section answers common questions about what data is stored. It clarifies that chat messages and membership live in XMTP.
 

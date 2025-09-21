@@ -1,13 +1,13 @@
 # Shared Utilities
 
-> Shared JavaScript spells that keep the backend, frontend, and contract tests aligned on signing formats and XMTP orchestration.
+> Shared JavaScript helpers that keep the backend, frontend, and contract tests aligned on signing formats and XMTP orchestration.
 
 ## Why this toolkit matters
 - Understand which utilities are safe to reuse across packages without bundler tweaks.
 - See how EIP-712 builders and XMTP polling helpers stay in sync with backend validation.
 - Learn the minimal testing surface that guards the shared layer.
 
-The `shared/` directory centralises logic that would otherwise be duplicated across packages so every surface speaks the same cult dialect. Modules are authored as ESM-compatible plain JS so they can be imported from Node, bundled for the browser, or exercised in tests without transpilation.
+The `shared/` directory centralises logic that would otherwise be duplicated across packages. Modules are authored as ESM-compatible plain JS so they can be imported from Node, bundled for the browser, or exercised in tests without transpilation.
 
 ## At a glance
 - EIP-712 builders keep typed signatures uniform for `/templs`, `/join`, `/delegateMute`, and `/mute`.
@@ -15,7 +15,7 @@ The `shared/` directory centralises logic that would otherwise be duplicated acr
 - Tests run under either Vitest or Node’s built-in runner to ensure the helpers stay deterministic.
 
 ## Modules
-Below are the core spells the stack shares:
+Below are the core utilities shared across the stack:
 ### signing.js
 - Builds the typed-data payloads the backend expects for join, create, and moderation endpoints.
 - Normalises the `server` field so signatures bind to `BACKEND_SERVER_ID`/`VITE_BACKEND_SERVER_ID`, falling back to `templ-dev` when unset.

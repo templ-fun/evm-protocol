@@ -1,32 +1,32 @@
-# Templ Protocol - Cult Mechanics
+# Templ Protocol Technical Specifications
 
-## Why this grimoire exists
-- Track the economic guarantees every Templ inherits from the factory before you remix the splits.
-- Understand the full membership and reward lifecycle so you know how tributes circulate among believers.
-- Map the governance guardrails that keep treasuries safe while Priests and members steer proposals.
+## Why this document exists
+- Understand the economic guarantees every templ instance inherits from the factory.
+- Follow the full membership and reward lifecycle before diving into implementation details.
+- Map the governance guardrails that keep treasuries safe while priests and members steer proposals.
 
 ## How to use this guide
-1. **Abstract & system overview** - build a mental model for the entire ritual stack.
-2. **On-chain rituals** - storage layout, fee math, membership lifecycle, and governance rules.
-3. **Off-chain rites** - the signatures, bots, and XMTP hooks that keep cult gates locked.
-4. **Safety notes** - invariants auditors lean on when they bless deployments.
+1. **Abstract and system overview** - quick mental model for the whole stack.
+2. **On-chain mechanics** - storage layout, fee math, membership lifecycle, governance rules.
+3. **Off-chain integration** - signatures, bots, and XMTP hooks that secure access.
+4. **Safety notes** - invariants auditors rely on.
 
 ## Abstract
 
-Templ is the DAO-governed cult engine that fuses:
+Templ is a DAO-governed access system that combines:
 
-- On-chain membership with a one-time ERC-20 tribute (non-transferable, forever binding).
-- Automatic tribute splits on every new member (burn/treasury/member-pool chosen per Templ; the protocol tithe is factory-fixed).
-- One-member-one-vote governance over an allowlisted menu of safe actions.
-- Views and typed signatures so the backend can police who gets into the XMTP sanctuary.
+- On-chain membership with a one-time ERC-20 entry fee (non-transferable, forever binding).
+- Automatic fee splits on every new member (burn/treasury/member-pool chosen per templ; protocol share is factory-fixed).
+- One-member-one-vote governance over an allowlisted set of actions.
+- Views and typed signatures so the backend can enforce XMTP group access.
 
-## System overview (the cult stack)
+## System overview
 
-Three layers work in concert to turn coins into cults:
+Three layers work together to keep access consistent with on-chain state:
 
-- **Smart contracts** (Solidity 0.8.23) gate membership and guard the treasury + member pool.
-- **Backend** (Node/Express) conjures the XMTP group with an ephemeral creator key, then promotes a persistent invite-bot identity that only admits on-chain members. No admin key is kept around and the bot never bans. It also mirrors governance events and enforces moderation signatures.
-- **Frontend** (Vite + React) deploys Templs, shepherds purchases, requests invites, and surfaces governance plus chat.
+- **Smart contracts** (Solidity 0.8.23) gate membership and guard the treasury and member pool.
+- **Backend** (Node/Express) creates the XMTP group with an ephemeral creator key, then hands off to a persistent invite-bot identity that only admits on-chain members. It also mirrors governance events and enforces moderation signatures.
+- **Frontend** (Vite + React) deploys templs, guides purchases, requests invites, and surfaces governance and chat.
 
 ### High-level flow (deploy → join → chat)
 
@@ -56,9 +56,9 @@ sequenceDiagram
     F->>C: propose/vote/execute
 ```
 
-## On-chain rituals (`contracts/TEMPL.sol`)
+## On-chain mechanics (`contracts/TEMPL.sol`)
 
-Everything on-chain is modular so each cult instance inherits the same safeguards:
+Everything on-chain is modular so each templ instance inherits the same safeguards:
 - `TemplBase` (storage, immutables, modifiers)
 - `TemplMembership` (purchase + claims)
 - `TemplTreasury` (treasury/config/priest handlers)
@@ -66,9 +66,9 @@ Everything on-chain is modular so each cult instance inherits the same safeguard
 - `TEMPL` (constructor wiring + payable receive)
 - `TemplFactory` (fixes protocol fee percentage + recipient and deploys templ instances). `createTempl(token, entryFee)` uses defaults (priest = caller, 30/30/30 split, quorum 33%, execution delay 7 days, burn address `0x000000000000000000000000000000000000dEaD`). `createTemplWithConfig(CreateConfig)` accepts overrides for priest, the three percentages, burn address, quorum percent, and execution delay - percentages must still sum with the immutable protocol percent to 100.
 
-### Economic model (per `purchaseAccess()` tribute)
+### Economic model (per `purchaseAccess()`)
 
-Each purchase runs the same ritual math:
+Each purchase applies the same split:
 
 - Split of `entryFee` (percentages configurable at deployment time):
   - Burn (`burnPercent`) → default `0x000000000000000000000000000000000000dEaD` unless overridden at deploy time
@@ -92,7 +92,7 @@ sequenceDiagram
 
 ### Membership lifecycle
 
-How initiates enter, prove they belong, and harvest rewards:
+How members enter, prove access, and claim rewards:
 
 - `purchaseAccess()` - one-time, guarded by `whenNotPaused` and `notSelf` (DAO cannot purchase). Transfers tokens using SafeERC20 and emits `AccessPurchased` with counters.
 - `hasAccess(address)` - returns membership boolean.
@@ -110,7 +110,7 @@ How initiates enter, prove they belong, and harvest rewards:
 
 ### Governance model
 
-The cult keeps decision-making egalitarian and predictable:
+Governance stays one-member-one-vote with predictable timelines:
 
 - Voting power: one member = one vote. Proposer auto-YES. Votes can be changed until eligibility windows close.
 - Proposal bounds: exactly one live proposal per address. A new proposal clears a previous one when it is expired or executed; otherwise creation reverts `ActiveProposalExists`.
@@ -147,17 +147,17 @@ flowchart LR
 
 ### Allowed actions (typed proposals only)
 
-- `setPausedDAO(bool)` - pause/unpause purchases.
-- `updateConfigDAO(address,uint256,bool,uint256,uint256,uint256)` - update entry fee and optionally the burn/treasury/member pool percentages. Token changes are disabled (`TokenChangeDisabled`). `_token` must be `address(0)` or the current token. When `_updateFeeSplit` is true the provided percentages must sum with `protocolPercent` to 100.
-- `withdrawTreasuryDAO(address token, address recipient, uint256 amount, string reason)` - move a specific amount of any asset held by the contract. For the access token, only the treasury portion is withdrawable; the member pool is preserved.
-- `disbandTreasuryDAO(address token)` - move the full available balance of `token` into a member-distributable pool. With the access token this increases the member pool (`memberPoolBalance`) and remainder; with any other ERC-20 or ETH the funds are tracked in an external rewards pool that members withdraw via `claimExternalToken`.
-- `changePriestDAO(address)` - change the on-chain `priest` address.
+- `setPausedDAO(bool)` — pause or unpause purchases.
+- `updateConfigDAO(address,uint256,bool,uint256,uint256,uint256)` — update entry fee and optionally the burn/treasury/member pool percentages. Token changes are disabled (`TokenChangeDisabled`). `_token` must be `address(0)` or the current token. When `_updateFeeSplit` is true the provided percentages must sum with `protocolPercent` to 100.
+- `withdrawTreasuryDAO(address token, address recipient, uint256 amount, string reason)` — move a specific amount of any asset held by the contract. For the access token, only the treasury portion is withdrawable; the member pool is preserved.
+- `disbandTreasuryDAO(address token)` — move the full available balance of `token` into a member-distributable pool. With the access token this increases the member pool (`memberPoolBalance`) and remainder; with any other ERC-20 or ETH the funds are tracked in an external rewards pool that members withdraw via `claimExternalToken`.
+- `changePriestDAO(address)` — change the on-chain `priest` address.
 
 Creation helpers (`createProposalX`) initialize proposals with normalized timing, proposer auto-YES, and optional quorum exemption for priest-proposed disband.
 
 ### Views and introspection
 
-These helpers expose the cult’s current state without mutating anything:
+These helpers expose the templ state without mutating anything:
 
 - `getTreasuryInfo()` - available treasury (excludes reserved member pool), current pool, totals, protocol recipient.
 - `getConfig()` - token, entry fee, paused flag, member count, available treasury, pool, burn/treasury/member percentages, and protocol percentage.
@@ -178,7 +178,7 @@ These helpers expose the cult’s current state without mutating anything:
 - No arbitrary external calls; proposal execution is internal and typed.
 - Member pool is preserved: withdrawals of access token are limited to the available treasury (excludes pool). Disband operations increase the pool for equitable member distribution.
 
-## Off-chain rituals (Backend API + XMTP)
+## Off-chain integration (Backend API + XMTP)
 
 ### Responsibilities
 
@@ -189,7 +189,7 @@ These helpers expose the cult’s current state without mutating anything:
 
 ### Group creation and invites
 
-Two signed calls power the gatekeeping ritual:
+Two signed calls power the access flow:
 
 - `POST /templs` - create/register a group for a deployed contract.
   - Production checks: verify contract code, `chainId`, and that `priestAddress` equals on-chain `priest()` (when `REQUIRE_CONTRACT_VERIFY=1`).
@@ -218,7 +218,7 @@ sequenceDiagram
 
 ### Moderation endpoints
 
-Mute rituals stay limited and auditable:
+Mute actions stay limited and auditable:
 
 - `POST /delegateMute` - grant mute rights (priest EIP-712 `{ action:'delegateMute', ... }`).
 - `DELETE /delegateMute` - revoke mute rights (same typed signature).
@@ -247,13 +247,13 @@ flowchart LR
   - Contains (server): invite-bot identity and installation keys, stable `inboxId`, conversation/group identifiers and metadata (name/description), and sync cursors (e.g., last-seen sequence) the SDK needs to resume.
   - Excludes: chat message bodies or attachments, per-member message history, and any application payloads. Our backend does not store chat content.
 
-## Frontend rituals (client responsibilities)
+## Frontend responsibilities
 
 - Deploy Templ, purchase & join, chat, propose, vote, and execute from a React app.
 - Governance UI composes the typed proposal actions (pause/unpause, withdraw the entire available treasury balance of the selected asset to the connected wallet, disband to pool, entry-fee reprice, change priest). Titles/descriptions are not on-chain; they are shared as XMTP messages adjacent to the on-chain proposal id. Crafting a proposal for a partial treasury withdrawal still requires entering custom calldata.
 - `VITE_BACKEND_SERVER_ID` must match backend `BACKEND_SERVER_ID` to bind EIP-712 signatures to your deployment.
 
-## Persistence (where the lore lives)
+## Persistence overview
 
 - On-chain: membership, treasury/pool balances, governance proposals, votes, and events.
 - Backend SQLite: contract→group mapping, priest, moderation, replay-protection signatures, bot key (when generated).
@@ -272,4 +272,4 @@ flowchart LR
 - **XMTP Group** - Off-chain chat space created via an ephemeral key; the backend’s bot identity has invite-only powers to add on-chain members. No persistent owner/admin keys are retained.
 
 ## Next
-Move to [CORE_FLOW_DOCS.MD](./CORE_FLOW_DOCS.MD) for step-by-step diagrams of the rituals outlined here.
+Move to [CORE_FLOW_DOCS.MD](./CORE_FLOW_DOCS.MD) for step-by-step diagrams of the flows outlined here.

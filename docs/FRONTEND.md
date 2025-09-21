@@ -1,8 +1,8 @@
 # Templ Frontend
 
-This is the pilgrim interface-the Vite + React app that deploys templs, signs tributes, and mirrors governance. Pair it with the backend manual so you know which endpoints power each button.
+Documentation for the Vite + React app that deploys templs, handles purchases, and mirrors governance. Pair it with the backend manual so you know which endpoints power each flow.
 
-## Why this playbook matters
+## Why this document matters
 - Set up environment variables for local dev, staging, and production builds.
 - Understand developer workflows: hot reload, unit tests, Playwright e2e, and XMTP local mode.
 - Learn which flows the UI implements (deploy, join, chat, moderate) and how it uses shared helpers.
@@ -22,7 +22,7 @@ npm --prefix frontend ci
 
 ## Environment variables
 
-These toggles shape the cult experience in the browser. Remember: in Vite builds only `VITE_*` variables reach the client. For backend/tests, see the [README's environment variables](../README.md#environment-variables).
+These variables configure the browser build. Remember: in Vite builds only `VITE_*` variables reach the client. For backend/tests, see the [README's environment variables](../README.md#environment-variables).
 
 | Name | Description | Default |
 | --- | --- | --- |
@@ -45,9 +45,9 @@ Start a hot-reloading dev server:
 npm --prefix frontend run dev
 ```
 
-## Tests & lint
+## Tests and lint
 
-Keep rituals stable with these commands:
+Key commands:
 
 ```bash
 npm --prefix frontend test
@@ -60,7 +60,7 @@ To run e2e against a local XMTP node: clone `xmtp-local-node`, run `npm run xmtp
 E2E artifacts (videos, traces, screenshots) are saved under `frontend/test-results/`.
 ## Architecture
 
-How the frontend guides initiates through the experience:
+Frontend responsibilities:
 
 - **Wallet connection** via `ethers` and `window.ethereum`.
 - **Default configuration** - all members have one vote.
@@ -77,7 +77,7 @@ flowchart LR
     C --> D[Moderate\ndelegateMute/muteMember]
 ```
 
-## Notes & tips
+## Notes and tips
 - `VITE_XMTP_ENV` defaults to `dev` on localhost and `production` elsewhere; override for `local` nodes.
 - `VITE_E2E_DEBUG=1` exposes `window.__XMTP` helpers for diagnostics.
 - When debug helpers are enabled, the join flow automatically re-registers the contract with `/templs` if a 404 is encountered and retries the join; production runs continue to rely solely on the primary invite path.
