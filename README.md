@@ -9,6 +9,12 @@ Templ.fun is the sacred ground where coin holders rally, reward each other, and 
 
 Visit [templ.fun](https://templ.fun) for the live demo.
 
+**System snapshot**
+- Smart contracts on Base gate membership, manage treasuries, and enforce typed governance with ERC-20 entry fees.
+- An Express backend runs the XMTP invite-bot, mirroring governance events and policing access with EIP-712 signatures.
+- A Vite + React client deploys templs, guides purchases, embeds chat, and streams proposal state in real time.
+- Shared utilities keep signing, XMTP polling, and test helpers consistent across packages.
+
 ## Mission
 - Converge the energy of people holding the same asset so their coordinated actions amplify price.
 - Turn any token into a capital-coordinated cult that grows demand and shrinks supply.
@@ -33,7 +39,7 @@ By default each tribute is split the moment a new believer walks through the gat
 | Burn | 30% | Permanent sacrifice to make the token scarcer. |
 | Treasury | 30% | Adds to the cult’s war chest - governed on-chain by members. |
 | Member rewards | 30% | Redistributed to existing members so they evangelize the Templ. |
-| Protocol tithe | 10% | Feeds the Templ Protocol engine and TEMPL stakers. |
+| Protocol tithe | 10% | Routes to the templ.fun protocol treasury to power future upgrades. |
 
 ### Example: PEPE Palace
 Spin up a “PEPE Palace” with a 2,000,000 PEPE entry fee (~$20). When a new initiate pays the tribute:
@@ -41,7 +47,7 @@ Spin up a “PEPE Palace” with a 2,000,000 PEPE entry fee (~$20). When a new i
 - 600,000 PEPE is sent to the burn address.
 - 600,000 PEPE fills the PEPE Palace treasury, ready for member proposals.
 - 600,000 PEPE is split across existing members - each recruit enriches the faithful.
-- 200,000 PEPE flows to the protocol tithe that keeps templ.fun running and rewards TEMPL stakers.
+- 200,000 PEPE flows to the protocol tithe that keeps templ.fun running and funds future upgrades.
 
 Templs feel like DAOs born *after* a token is liquid. People co-own a narrative, harvest upside, and coordinate spend from day one.
 
