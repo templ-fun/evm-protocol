@@ -2,8 +2,8 @@
 
 Bring the entire stack up on your machine so you can deploy a templ, join as members, and exercise governance without touching production services.
 
-## Why this ritual matters
-- Spin up Hardhat, the backend bot, and the frontend with minimal ceremony.
+## Why this guide matters
+- Spin up Hardhat, the backend bot, and the frontend with minimal setup.
 - Preload MetaMask with deterministic wallets so you can test priest/member roles quickly.
 - Optionally run against a local XMTP node when you need hermetic e2e tests.
 
@@ -156,7 +156,7 @@ The chat auto-loads the last 100 messages and any past proposals. Use “Load pr
 - Vote via `Vote Yes/No`; each voter signs their tx.
 - If you’re the priest, an `Execute` button is always visible; the contract enforces eligibility (quorum, delay, quorum-exempt priest disband timing) and reverts when the proposal cannot yet be executed.
 
-## Troubleshooting (when the ritual misbehaves)
+## Troubleshooting
 
 - Backend CORS: update `ALLOWED_ORIGINS` in `backend/.env` if your frontend origin differs.
 - Ports in use: stop stray `:8545`, `:3001`, or `:5173` processes before restarting.

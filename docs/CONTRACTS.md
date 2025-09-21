@@ -1,18 +1,18 @@
 # Templ Contracts
 
-This is the on-chain grimoire. Every module here keeps tributes flowing, treasuries guarded, and governance honest. Pair it with the flow diagrams to connect function names with the rituals they power.
+This document details the on-chain modules that handle membership, fee splits, and governance. Pair it with the flow diagrams to connect function names with runtime behavior.
 
-## What this grimoire covers
+## What this document covers
 - Module layout and how responsibilities split across `TemplBase`, `TemplMembership`, `TemplTreasury`, `TemplGovernance`, `TEMPL`, and `TemplFactory`.
 - Tribute economics for entry fees, reward remainders, and external reward pools.
 - Governance constraints: proposal lifecycle, quorum, execution, and allowed actions.
 - Deployment hooks and invariants auditors bless.
 
 ## Overview
-Solidity 0.8.23. Core contract lives in `contracts/TEMPL.sol` with shared errors in `contracts/TemplErrors.sol`. See `README.md#architecture` for the big-picture cult stack; this document reflects the exact on-chain behavior and interfaces.
+Solidity 0.8.23. Core contract lives in `contracts/TEMPL.sol` with shared errors in `contracts/TemplErrors.sol`. See `README.md#architecture` for the high-level system view; this document reflects the exact on-chain behavior and interfaces.
 
 ### Module layout
-Each module carries a specific ritual duty:
+Each module handles a focused responsibility:
 
 - `TemplBase`: shared storage layout, immutables, counters, events, and modifiers. All other modules inherit it, so audits can focus on a single storage contract.
 - `TemplMembership`: membership lifecycle (`purchaseAccess`, claims, view helpers) and accounting for the member pool.
@@ -21,8 +21,8 @@ Each module carries a specific ritual duty:
 - `TEMPL`: thin concrete contract wiring the constructor requirements (`priest`, `protocolFeeRecipient`, `token`, `entryFee`, fee splits) and exposing the payable `receive` hook.
 - `TemplFactory`: immutable protocol recipient/percentage plus helpers that deploy templ instances with per-templ burn/treasury/member splits.
 
-## Tribute economics
-Entry fees are the lifeblood of a Templ. The factory locks the overall math, and each deployment chooses how the non-protocol slices split:
+## Entry-fee economics
+Entry fees follow a fixed protocol share; each deployment chooses how the remaining percentages split:
 
 - **Burn (`burnPercent`)** - transferred to the templ’s configured burn address (defaults to `0x000000000000000000000000000000000000dEaD`).
 - **Treasury (`treasuryPercent`)** - retained on the contract and counted in `treasuryBalance`. Additional donations accrue to the contract balance and remain governable via `withdrawTreasuryDAO` / `disbandTreasuryDAO`.
@@ -55,7 +55,7 @@ sequenceDiagram
 - Individual shares are reported by `getClaimableExternalToken(member, token)` and withdrawn with `claimExternalToken(token)` (supports ETH via `address(0)`).
 - Successful external claims emit `ExternalRewardClaimed(token, member, amount)` and reduce the tracked pool balance; snapshots ensure each member only receives their share once.
 
-## Governance rituals
+## Governance mechanics
 - One member = one vote; ballots can be changed until eligibility windows close.
 - One live proposal per address: creating a second while the first is active reverts `ActiveProposalExists`. The slot is cleared on execution, and expired proposals are cleared when a new one is created.
 - Voting period bounds: 7-30 days (`0` defaults to 7 days). Each factory deployment sets defaults that priests can override at deploy time.

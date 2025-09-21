@@ -1,23 +1,23 @@
 # Templ Backend
 
-Field manual for the Express invite-bot that turns on-chain state into XMTP gatekeeping. Read this after the contract deep-dive so every signature and endpoint lands with context.
+Reference manual for the Express service that mirrors on-chain state into XMTP invites. Read this after the contract deep dive so every signature and endpoint has context.
 
-## Why this field manual matters
-- Configure the service for local dev, staging, and production with the right env flags.
-- Understand the endpoints that the frontend and scripts call (`/templs`, `/join`, moderation routes, debug helpers).
+## Why this document matters
+- Configure the service for local development, staging, and production with the right environment flags.
+- Understand the endpoints that the frontend and scripts call (`/templs`, `/join`, moderation routes, debug helpers`).
 - Learn how the backend protects itself (EIP-712 signatures, replay protection, XMTP identity rotation) and how to respond when XMTP misbehaves.
 
-For a cult stack refresher, revisit [README.md#architecture](../README.md#architecture) and the diagrams in [CORE_FLOW_DOCS.MD](./CORE_FLOW_DOCS.MD).
+For a system refresher, revisit [README.md#architecture](../README.md#architecture) and the diagrams in [CORE_FLOW_DOCS.MD](./CORE_FLOW_DOCS.MD).
 
 ## Setup
-Summon dependencies:
+Install dependencies:
 
 ```bash
 npm --prefix backend ci
 ```
 
 ## Environment variables
-These toggles tune how the invite-bot behaves across dev, staging, and production:
+These flags tune how the invite-bot behaves across dev, staging, and production:
 
 | Variable | Purpose | Default |
 | --- | --- | --- |
@@ -35,7 +35,7 @@ These toggles tune how the invite-bot behaves across dev, staging, and productio
 
 ### Optional variables
 
-Extra switches for advanced rituals:
+Optional switches:
 
 | Variable | Purpose | Default |
 | --- | --- | --- |
@@ -59,7 +59,7 @@ When `REQUIRE_CONTRACT_VERIFY=1` (or `NODE_ENV=production`), the server requires
   - Ensure the typed `chainId` matches the provider’s `chainId`.
   - Check that `priestAddress` equals `await contract.priest()` on-chain when creating groups.
 
-### Rate limiting (protecting the gates)
+### Rate limiting
 
 The API rate-limits requests.
 - In development and tests, it uses the in-memory store.
@@ -68,7 +68,7 @@ The API rate-limits requests.
 - If Redis is unavailable or misconfigured, it safely falls back to memory and logs a warning. Avoid memory in production as it is not resilient or horizontally scalable.
 
 ## Development
-Start the invite-bot:
+Start the server:
 
 ```bash
 npm --prefix backend start
@@ -77,7 +77,7 @@ npm --prefix backend start
 ### Logging
 Logging uses [Pino](https://github.com/pinojs/pino) (JSON to `stdout`; `LOG_LEVEL` controls verbosity and defaults to `info`). Pipe through `pino-pretty` in dev or redirect to a file in production.
 
-## Tests & lint
+## Tests and lint
 
 ```bash
 npm --prefix backend test
@@ -85,15 +85,15 @@ npm --prefix backend run lint
 ```
 
 ## Architecture
-The backend is the high priest that enforces who crosses the chat threshold:
+The backend enforces who gains access to chat:
 - **Ownership** - Groups are created by an ephemeral wallet (fresh key per group) and then managed by a single persistent invite-bot identity. The ephemeral creator key is not persisted ("burned") after creation. The invite-bot is only used to invite members; it is not intended to hold admin powers like banning.
 - **Endpoints**
   - `POST /templs` - create a group for a deployed contract; if a `connectContract` factory is supplied the backend also watches governance events.
   - `POST /join` - verify `hasAccess` on-chain and invite the wallet.
-    - `POST /delegateMute` - priest assigns mute rights to a member.
-    - `DELETE /delegateMute` - revoke a delegate's mute rights.
-    - `POST /mute` - priest or delegate records an escalating mute for a member.
-    - `GET /mutes` - list active mutes for a contract so the frontend can hide messages.
+  - `POST /delegateMute` - priest assigns mute rights to a member.
+  - `DELETE /delegateMute` - revoke a delegate's mute rights.
+  - `POST /mute` - priest or delegate records an escalating mute for a member.
+  - `GET /mutes` - list active mutes for a contract so the frontend can hide messages.
 - **Dependencies** - XMTP JS SDK and an on-chain provider; event watching requires a `connectContract` factory.
 - **Persistence** - group metadata persists to a SQLite database at `backend/groups.db` (or a custom path via `createApp({ dbPath })` in tests). The database is read on startup and updated when groups change; back it up to avoid losing state.
 - **On-chain surface** - proposal allowlist and events are defined in the contracts. See [CONTRACTS.md](./CONTRACTS.md#governance) for allowed actions and events mirrored into chat.
