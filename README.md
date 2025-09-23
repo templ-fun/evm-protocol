@@ -132,7 +132,38 @@ npm --prefix backend start
 npm --prefix frontend run dev
 ```
 
-The backend expects `backend/.env` with `RPC_URL`, `BOT_PRIVATE_KEY`, `ALLOWED_ORIGINS`, and `BACKEND_SERVER_ID`. The frontend reads matching `VITE_*` variables; see the deep dives below for full matrices.
+The backend expects `backend/.env` with `RPC_URL`, `BOT_PRIVATE_KEY`, `ALLOWED_ORIGINS`, and `BACKEND_SERVER_ID`. The frontend reads matching `VITE_*` variables; see [Environment Variables](#environment-variables) below and the deep dives for full matrices.
+
+## Environment Variables
+
+Templ relies on coordinated `.env` files in `backend/` and `frontend/`. Start from the shared knobs below and then consult [docs/BACKEND.md](./docs/BACKEND.md#environment-variables) and [docs/FRONTEND.md](./docs/FRONTEND.md#environment-variables) for package-specific matrices.
+
+| Variable | Location | Purpose |
+| --- | --- | --- |
+| `BACKEND_SERVER_ID` | `backend/.env` | Identifier baked into EIP-712 signatures so the backend can prove which bot issued an invite. Must match the frontend value below. |
+| `VITE_BACKEND_SERVER_ID` | `frontend/.env` | Mirrors `BACKEND_SERVER_ID`; the UI signs the same payload the backend expects. |
+| `RPC_URL` | `backend/.env` | Provider URL for reading/writing contract state. Required for all local and hosted deployments. |
+| `BOT_PRIVATE_KEY` | `backend/.env` | XMTP invite-bot key. Supply your own for stable identities or let the backend generate and persist one locally. |
+| `BACKEND_DB_ENC_KEY` | `backend/.env` | 32-byte hex key that encrypts the XMTP node database. Mandatory in production. |
+| `ALLOWED_ORIGINS` | `backend/.env` | CORS whitelist so the frontend can call the API. Defaults to `http://localhost:5173` during local dev. |
+| `XMTP_ENV` / `VITE_XMTP_ENV` | `backend/.env` / `frontend/.env` | Choose the XMTP network (`local`, `dev`, or `production`). Keep the pair in sync so invites land in the expected environment. |
+| `E2E_XMTP_LOCAL` | `frontend/.env` (or Playwright command env) | When `1`, points tests at the bundled `xmtp-local-node`. Leave `0` to hit XMTP production. |
+
+A minimal local setup looks like:
+
+```dotenv
+# backend/.env
+RPC_URL=http://localhost:8545
+BOT_PRIVATE_KEY=<private key for tests>
+BACKEND_SERVER_ID=templ-local
+ALLOWED_ORIGINS=http://localhost:5173
+
+# frontend/.env
+VITE_BACKEND_SERVER_ID=templ-local
+VITE_XMTP_ENV=dev
+```
+
+Customize the remaining variables as you scale to staging or production environments.
 
 ## Repository Layout
 
