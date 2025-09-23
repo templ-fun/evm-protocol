@@ -11,14 +11,23 @@ import { ethers } from 'ethers';
  */
 export function verifyTypedSignature({ database, addressField, buildTyped, errorMessage = 'Bad signature' }) {
   // Strict verification path; no header-based bypass in any environment.
-  let insertSig = null;
-  let hasSig = null;
+  if (!database || typeof database.prepare !== 'function') {
+    throw new Error('verifyTypedSignature requires a database with prepare() for replay protection');
+  }
+
+  let insertSig;
+  let hasSig;
   try {
-    if (database?.prepare) {
-      insertSig = database.prepare('INSERT OR IGNORE INTO signatures (sig, usedAt) VALUES (?, ?)');
-      hasSig = database.prepare('SELECT 1 FROM signatures WHERE sig = ?');
-    }
-  } catch { /* ignore - fallback to no-op replay checks */ }
+    insertSig = database.prepare('INSERT OR IGNORE INTO signatures (sig, usedAt) VALUES (?, ?)');
+    hasSig = database.prepare('SELECT 1 FROM signatures WHERE sig = ?');
+  } catch (err) {
+    const suffix = err && typeof err === 'object' && 'message' in err && err.message ? `: ${err.message}` : '';
+    const wrappedError = new Error(
+      `verifyTypedSignature failed to prepare replay statements${suffix}`
+    );
+    wrappedError.cause = err;
+    throw wrappedError;
+  }
   return function (req, res, next) {
     try {
       const address = String(req.body?.[addressField] || '').toLowerCase();
