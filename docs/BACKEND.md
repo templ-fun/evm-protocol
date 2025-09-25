@@ -3,8 +3,8 @@
 The backend is a Node 22 / Express server that acts as the “web2” side of templ:
 
 * verifies EIP-712 signatures for templ creation and membership checks,
-* persists templ metadata (contract address, priest address, optional Telegram chat id),
-* confirms membership by asking the contract’s `hasAccess` function, and
+* persists templ metadata needed for Telegram delivery (contract address, priest address, optional Telegram chat id, latest home link),
+* confirms membership by asking the contract’s `hasAccess` function (no local member lists are stored), and
 * streams contract events into Telegram groups when configured.
 
 The service no longer depends on XMTP. All messaging happens through Telegram bots.
@@ -43,6 +43,8 @@ The backend stores templ metadata and replay protection state inside SQLite:
 - `groups(contract TEXT PRIMARY KEY, groupId TEXT, priest TEXT, homeLink TEXT)` – `groupId` stores the Telegram chat id and `homeLink` mirrors the on-chain templ home link.
 - `signatures` – tracks used EIP-712 signatures for replay protection.
 - `pending_bindings(contract TEXT PRIMARY KEY, bindCode TEXT, createdAt INTEGER)` – queues one-time Telegram binding codes until the bot confirms a group.
+
+Membership rolls and treasury data always come from on-chain reads; the backend only caches proposal metadata and balances in memory so Telegram notifications can include contextual text without re-querying for every event.
 
 The in-memory cache mirrors SQLite entries and powers fast lookups during join flows and contract event handlers.
 
@@ -124,7 +126,7 @@ The server uses `ethers.Contract` to subscribe to templ events. Watchers are reg
 
 - Listener errors are caught and logged (but do not crash the process).
 - Proposal metadata is cached in-memory when events fire so follow-up notifications can include the title even if the on-chain read fails.
-- Quorum checks run after every vote (and on startup) to emit a one-time "quorum reached" message.
+- Quorum checks run after every proposal creation and vote to emit a one-time "quorum reached" message once the threshold is crossed.
 - Background jobs monitor proposal deadlines, fire daily treasury/member-pool digests, and poll Telegram for binding codes until each templ is linked to a chat.
 - Priest and home-link updates are persisted so restarts retain the latest metadata.
 
@@ -143,5 +145,4 @@ Coverage uses `c8`; run `npm --prefix backend run coverage` for LCOV reports.
 2. Set `BACKEND_SERVER_ID` and ensure the frontend uses the same value.
 3. Configure `APP_BASE_URL` so Telegram links point to your deployed frontend.
 4. Provide `TELEGRAM_BOT_TOKEN` and confirm the bot is present in each group you care about. (Leaving it unset disables notifications.)
-5. Keep `ENABLE_DEBUG_ENDPOINTS` off in production; expose them only in controlled environments.
-6. Consider supplying `REDIS_URL` if you run multiple backend replicas and need distributed rate limiting.
+5. Consider supplying `REDIS_URL` if you run multiple backend replicas and need distributed rate limiting.

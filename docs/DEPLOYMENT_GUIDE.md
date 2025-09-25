@@ -36,7 +36,15 @@ You can deploy from the CLI or via the frontend. The CLI is convenient for scrip
    ```bash
    npm run node
    ```
-3. Deploy a templ with custom parameters:
+3. Export the deployment parameters required by `scripts/deploy.js`:
+   ```bash
+   export TOKEN_ADDRESS=0x...       # required: ERC-20 token gating access
+   export ENTRY_FEE=1000000000000   # required: must be >= 10 and divisible by 10
+   export PROTOCOL_FEE_RECIPIENT=0x...  # required: protocol treasury address
+   export PROTOCOL_PERCENT=10            # optional override (defaults to 10)
+   export PRIEST_ADDRESS=0x...           # optional (defaults to deployer)
+   ```
+4. Deploy a templ with custom parameters:
    ```bash
    npx hardhat run scripts/deploy.js --network localhost
    ```
