@@ -94,6 +94,8 @@ abstract contract TemplMembership is TemplBase {
             block.number,
             totalPurchases - 1
         );
+
+        _autoPauseIfLimitReached();
     }
 
     function getClaimablePoolAmount(address member) public view returns (uint256) {

@@ -238,7 +238,7 @@ describe("Membership coverage extras", function () {
     await templ.executeProposal(1);
 
     // Corrupt external reward pool to trigger InsufficientPoolBalance during claim
-    const mappingSlot = ethers.toBeHex(25, 32);
+    const mappingSlot = ethers.toBeHex(26, 32);
     const baseKey = ethers.keccak256(
       ethers.concat([ethers.zeroPadValue(otherToken.target, 32), mappingSlot])
     );

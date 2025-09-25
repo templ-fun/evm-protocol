@@ -50,7 +50,8 @@ describe("TEMPL Contract with DAO Governance", function () {
                     33,
                     7 * 24 * 60 * 60,
                     "0x000000000000000000000000000000000000dEaD",
-                    false
+                    false,
+                    0
                 )
             ).to.be.revertedWithCustomError(TEMPL, "InvalidEntryFee");
         });
@@ -70,7 +71,8 @@ describe("TEMPL Contract with DAO Governance", function () {
                     33,
                     7 * 24 * 60 * 60,
                     "0x000000000000000000000000000000000000dEaD",
-                    false
+                    false,
+                    0
                 )
             ).to.be.revertedWithCustomError(TEMPL, "InvalidRecipient");
         });
@@ -90,7 +92,8 @@ describe("TEMPL Contract with DAO Governance", function () {
                     33,
                     7 * 24 * 60 * 60,
                     "0x000000000000000000000000000000000000dEaD",
-                    false
+                    false,
+                    0
                 )
             ).to.be.revertedWithCustomError(TEMPL, "InvalidRecipient");
         });
@@ -109,7 +112,8 @@ describe("TEMPL Contract with DAO Governance", function () {
                 0,
                 0,
                 ethers.ZeroAddress,
-                false
+                false,
+                0
             );
             await templZero.waitForDeployment();
 
@@ -133,7 +137,8 @@ describe("TEMPL Contract with DAO Governance", function () {
                     120,
                     7 * 24 * 60 * 60,
                     "0x000000000000000000000000000000000000dEaD",
-                    false
+                    false,
+                    0
                 )
             ).to.be.revertedWithCustomError(TEMPL, "InvalidPercentage");
         });
@@ -153,7 +158,8 @@ describe("TEMPL Contract with DAO Governance", function () {
                     33,
                     7 * 24 * 60 * 60,
                     "0x000000000000000000000000000000000000dEaD",
-                    false
+                    false,
+                    0
                 )
             ).to.be.revertedWithCustomError(TEMPL, "InvalidPercentageSplit");
         });
@@ -173,7 +179,8 @@ describe("TEMPL Contract with DAO Governance", function () {
                     33,
                     7 * 24 * 60 * 60,
                     "0x000000000000000000000000000000000000dEaD",
-                    false
+                    false,
+                    0
                 )
             ).to.be.revertedWithCustomError(TEMPL, "InvalidRecipient");
         });
@@ -193,7 +200,8 @@ describe("TEMPL Contract with DAO Governance", function () {
                     33,
                     7 * 24 * 60 * 60,
                     "0x000000000000000000000000000000000000dEaD",
-                    false
+                    false,
+                    0
                 )
             ).to.be.revertedWithCustomError(TEMPL, "AmountZero");
         });
@@ -950,7 +958,8 @@ describe("TEMPL Contract with DAO Governance", function () {
                 33,
                 7 * 24 * 60 * 60,
                 "0x000000000000000000000000000000000000dEaD",
-                false
+                false,
+                0
             ]);
 
             await token.connect(user1).approve(await minTempl.getAddress(), 10);
@@ -974,7 +983,8 @@ describe("TEMPL Contract with DAO Governance", function () {
                 33,
                 7 * 24 * 60 * 60,
                 "0x000000000000000000000000000000000000dEaD",
-                false
+                false,
+                0
             )).to.be.revertedWithCustomError(factory, "EntryFeeTooSmall");
         });
 

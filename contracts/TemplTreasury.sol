@@ -57,6 +57,10 @@ abstract contract TemplTreasury is TemplMembership {
         _setPaused(_paused);
     }
 
+    function setMaxMembersDAO(uint256 _maxMembers) external onlyDAO {
+        _setMaxMembers(_maxMembers);
+    }
+
     function disbandTreasuryDAO(address token) external onlyDAO {
         _disbandTreasury(token, 0);
     }
@@ -137,6 +141,10 @@ abstract contract TemplTreasury is TemplMembership {
     }
 
     function _setPaused(bool _paused) internal {
+        if (!_paused && MAX_MEMBERS > 0 && memberList.length >= MAX_MEMBERS) {
+            MAX_MEMBERS = 0;
+            emit MaxMembersUpdated(0);
+        }
         paused = _paused;
         emit ContractPaused(_paused);
     }
@@ -148,20 +156,20 @@ abstract contract TemplTreasury is TemplMembership {
         if (token == accessToken) {
             uint256 current = IERC20(accessToken).balanceOf(address(this));
             if (current <= memberPoolBalance) revert TemplErrors.NoTreasuryFunds();
-            uint256 amount = current - memberPoolBalance;
+            uint256 accessTokenAmount = current - memberPoolBalance;
 
-            uint256 fromFees = amount <= treasuryBalance ? amount : treasuryBalance;
+            uint256 fromFees = accessTokenAmount <= treasuryBalance ? accessTokenAmount : treasuryBalance;
             treasuryBalance -= fromFees;
 
-            memberPoolBalance += amount;
+            memberPoolBalance += accessTokenAmount;
 
-            uint256 totalRewards = amount + memberRewardRemainder;
-            uint256 perMember = totalRewards / n;
-            uint256 remainder = totalRewards % n;
-            cumulativeMemberRewards += perMember;
-            memberRewardRemainder = remainder;
+            uint256 poolTotalRewards = accessTokenAmount + memberRewardRemainder;
+            uint256 poolPerMember = poolTotalRewards / n;
+            uint256 poolRemainder = poolTotalRewards % n;
+            cumulativeMemberRewards += poolPerMember;
+            memberRewardRemainder = poolRemainder;
 
-            emit TreasuryDisbanded(proposalId, token, amount, perMember, remainder);
+            emit TreasuryDisbanded(proposalId, token, accessTokenAmount, poolPerMember, poolRemainder);
             return;
         }
 

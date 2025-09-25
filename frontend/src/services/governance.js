@@ -79,6 +79,14 @@ export async function proposeVote({
         );
         break;
       }
+      case 'setMaxMembers': {
+        const rawLimit = p.newMaxMembers ?? p.maxMembers ?? p.limit ?? p.value ?? 0;
+        let limitBigInt = 0n;
+        try { limitBigInt = BigInt(rawLimit); } catch { throw new Error('Invalid max member limit'); }
+        if (limitBigInt < 0n) throw new Error('Max member limit must be non-negative');
+        tx = await contract.createProposalSetMaxMembers(limitBigInt, votingPeriod, txOptions);
+        break;
+      }
       case 'disbandTreasury': {
         let tokenAddr;
         const provided = String(p.token ?? '').trim();
@@ -139,6 +147,11 @@ export async function proposeVote({
           votingPeriod,
           txOptions
         );
+        return await waitForProposal(tx);
+      }
+      if (fn?.name === 'setMaxMembersDAO' && fn.inputs.length === 1) {
+        const [limit] = full.decodeFunctionData(fn, callData);
+        const tx = await contract.createProposalSetMaxMembers(limit, votingPeriod, txOptions);
         return await waitForProposal(tx);
       }
       if (fn?.name === 'setDictatorshipDAO' && fn.inputs.length === 1) {

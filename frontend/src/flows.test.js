@@ -171,6 +171,49 @@ describe('templ flows', () => {
     ).rejects.toThrow(/Invalid \/templs response/);
   });
 
+  it('deployTempl forwards maxMembers when provided', async () => {
+    const wait = vi.fn().mockResolvedValue({});
+    const createTempl = vi.fn();
+    const createTemplWithConfig = vi.fn().mockResolvedValue({ wait });
+    createTemplWithConfig.staticCall = vi.fn().mockResolvedValue('0xDeAf');
+    const factoryContract = {
+      protocolFeeRecipient: vi.fn().mockResolvedValue('0xfee'),
+      protocolPercent: vi.fn().mockResolvedValue(10n),
+      createTempl,
+      createTemplWithConfig
+    };
+    const ethers = {
+      Contract: vi.fn().mockReturnValue(factoryContract)
+    };
+    mockFetchSuccess({ groupId: 'group-1' });
+    waitForConversation.mockResolvedValueOnce({ id: 'group-1', consentState: 'allowed' });
+
+    await deployTempl({
+      ethers,
+      xmtp,
+      signer,
+      walletAddress: '0xabc',
+      tokenAddress: '0xdef',
+      entryFee: '1',
+      burnPercent: '35',
+      treasuryPercent: '25',
+      memberPoolPercent: '30',
+      quorumPercent: '40',
+      executionDelaySeconds: '600',
+      burnAddress: '0xburn',
+      priestIsDictator: true,
+      factoryAddress: '0xFactory',
+      factoryArtifact: { abi: [] },
+      templArtifact,
+      maxMembers: '5'
+    });
+
+    expect(createTempl).not.toHaveBeenCalled();
+    expect(createTemplWithConfig.staticCall).toHaveBeenCalled();
+    const configArg = createTemplWithConfig.staticCall.mock.calls[0][0];
+    expect(configArg.maxMembers).toBe(5n);
+  });
+
   it('purchaseAccess approves token and purchases membership when needed', async () => {
     const purchaseTx = { wait: vi.fn() };
     const approvalTx = { wait: vi.fn() };
@@ -353,6 +396,51 @@ describe('templ flows', () => {
     expect(interfaceInstance.decodeFunctionData).toHaveBeenCalledWith(expect.objectContaining({ name: 'setDictatorshipDAO' }), '0xabcdef');
     expect(contract.createProposalSetDictatorship).toHaveBeenCalledWith(true, 0, {});
     expect(result).toEqual({ receipt: expect.any(Object), proposalId: null });
+  });
+
+  it('proposeVote supports setMaxMembers action', async () => {
+    const wait = vi.fn().mockResolvedValue({ logs: [] });
+    const contract = {
+      createProposalSetMaxMembers: vi.fn().mockResolvedValue({ wait })
+    };
+    const ethers = { Contract: vi.fn().mockReturnValue(contract) };
+    await proposeVote({
+      ethers,
+      signer: {},
+      templAddress: '0xtempl',
+      templArtifact,
+      action: 'setMaxMembers',
+      params: { newMaxMembers: 7 },
+      votingPeriod: 42,
+      txOptions: { gasLimit: 1 }
+    });
+    expect(contract.createProposalSetMaxMembers).toHaveBeenCalledWith(7n, 42, { gasLimit: 1 });
+  });
+
+  it('proposeVote decodes setMaxMembers call data', async () => {
+    const wait = vi.fn().mockResolvedValue({ logs: [] });
+    const contract = {
+      createProposalSetMaxMembers: vi.fn().mockResolvedValue({ wait })
+    };
+    const interfaceInstance = {
+      getFunction: vi.fn(() => ({ name: 'setMaxMembersDAO', inputs: [{}] })),
+      decodeFunctionData: vi.fn(() => [5n]),
+      parseLog: vi.fn()
+    };
+    const ethers = {
+      Contract: vi.fn().mockReturnValue(contract),
+      Interface: vi.fn(() => interfaceInstance),
+      ZeroAddress: '0x0',
+      isAddress: () => true
+    };
+    await proposeVote({
+      ethers,
+      signer: {},
+      templAddress: '0xtempl',
+      templArtifact,
+      callData: '0xabcdef01'
+    });
+    expect(contract.createProposalSetMaxMembers).toHaveBeenCalledWith(5n, 0, {});
   });
 
   it('voteOnProposal calls vote', async () => {

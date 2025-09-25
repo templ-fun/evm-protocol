@@ -19,7 +19,7 @@ Each module handles a focused responsibility:
 
 - `TemplBase`: shared storage layout, immutables, counters, events, and modifiers (including the `priestIsDictator` flag that toggles priest-only governance). All other modules inherit it, so audits can focus on a single storage contract.
 - `TemplMembership`: membership lifecycle (`purchaseAccess`, claims, view helpers) and accounting for the member pool.
-- `TemplTreasury`: governance-callable treasury/config/priest handlers and their internal helpers.
+- `TemplTreasury`: governance-callable treasury/config/priest handlers and their internal helpers, including member limit management via `setMaxMembersDAO`.
 - `TemplGovernance`: proposal creation, voting/quorum logic, execution router, and governance view helpers.
 - `TEMPL`: thin concrete contract wiring the constructor requirements (`priest`, `protocolFeeRecipient`, `token`, `entryFee`, fee splits) and exposing the payable `receive` hook.
 - `TemplFactory`: immutable protocol recipient/percentage plus helpers that deploy templ instances with per-templ burn/treasury/member splits.
@@ -74,6 +74,7 @@ sequenceDiagram
   - `withdrawTreasuryDAO(address,address,uint256,string)` - withdraw a specific amount of any asset (access token, other ERC-20, or ETH with `address(0)`).
   - `changePriestDAO(address)` - change the priest address via governance; the resulting `PriestChanged` event signals the backend to clear all delegate assignments and active mutes so the new priest inherits a clean moderation slate.
   - `disbandTreasuryDAO(address token)` - move the full available balance of `token` into a member-distributable pool. When `token == accessToken`, funds roll into the member pool (`memberPoolBalance`) with per-member integer division and any remainder added to `memberRewardRemainder`. When targeting any other ERC-20 or native ETH (`address(0)`), the amount is recorded in an external rewards pool so members can later claim their share with `claimExternalToken`.
+  - `setMaxMembersDAO(uint256 limit)` - set the membership cap. `0` keeps access unlimited; any positive limit pauses new joins once the count is reached. Reverts with `MemberLimitTooLow` when the requested limit is below the current member count. If the cap is hit, `purchaseAccess` auto-pauses the contract; raising or clearing the cap lets newcomers in, and unpausing without raising the limit resets it to unlimited.
   - `setDictatorshipDAO(bool enabled)` - flip the `priestIsDictator` flag. This helper is callable through proposals in both directions; when dictatorship is active, the DAO helper also accepts direct calls from the priest (all other callers receive `PriestOnly`).
 - Dictatorship toggle: while `priestIsDictator` is `true`, standard proposal entrypoints (`createProposal*`, `vote`, `executeProposal`) revert with `DictatorshipEnabled`. The dedicated `createProposalSetDictatorship(...)` path stays open so members can still vote the system back to democracy.
 
@@ -91,6 +92,7 @@ sequenceDiagram
 
 - `createProposalSetPaused(bool paused, uint256 votingPeriod)`
 - `createProposalUpdateConfig(uint256 newEntryFee, uint256 newBurnPercent, uint256 newTreasuryPercent, uint256 newMemberPoolPercent, bool updateFeeSplit, uint256 votingPeriod)` - set `updateFeeSplit = true` to apply the provided percentages; when false, the existing burn/treasury/member splits remain unchanged and only the fee (or paused state) is updated.
+- `createProposalSetMaxMembers(uint256 newLimit, uint256 votingPeriod)` - set the member cap (use `0` to remove the limit). Reverts immediately with `MemberLimitTooLow` if the proposal attempts to lower the cap beneath the current membership count.
 - `createProposalWithdrawTreasury(address token, address recipient, uint256 amount, string reason, uint256 votingPeriod)`
 - `createProposalChangePriest(address newPriest, uint256 votingPeriod)`
 - `createProposalDisbandTreasury(address token, uint256 votingPeriod)` (`token` can be the access token, another ERC-20, or `address(0)` for ETH)
@@ -131,13 +133,14 @@ Note: Proposal metadata (title/description) is not stored on-chain. Keep human-r
 ## State, events, errors
 
 - Key immutables: `protocolFeeRecipient`, `accessToken`, `burnAddress`. Priest is changeable via governance.
-- Key variables: `entryFee` (≥10 and multiple of 10), `paused`, `treasuryBalance` (tracks fee-sourced tokens only), `memberPoolBalance`, `priestIsDictator`, counters (`totalBurned`, `totalToTreasury`, `totalToMemberPool`, `totalToProtocol`).
+- Key variables: `entryFee` (≥10 and multiple of 10), `paused`, `MAX_MEMBERS` (0 = unlimited; when a non-zero cap is reached the contract auto-pauses new joins until the limit is raised or cleared), `treasuryBalance` (tracks fee-sourced tokens only), `memberPoolBalance`, `priestIsDictator`, counters (`totalBurned`, `totalToTreasury`, `totalToMemberPool`, `totalToProtocol`).
 - Governance constants: `quorumPercent` and `executionDelayAfterQuorum` are set during deployment (factory defaults 33% and 7 days, but overridable during templ creation) and remain immutable afterwards.
 - External reward claims:
   - `claimExternalToken(address token)` - transfers the caller’s accrued share of the specified external token (ERC-20 or `address(0)` for ETH). Reverts with `NoRewardsToClaim` if nothing is available. Emitted `ExternalRewardClaimed` mirrors successful withdrawals.
 - Events:
   - `AccessPurchased(purchaser,totalAmount,burnedAmount,treasuryAmount,memberPoolAmount,protocolAmount,timestamp,blockNumber,purchaseId)`
   - `MemberPoolClaimed(member,amount,timestamp)`
+  - `MaxMembersUpdated(maxMembers)`
   - `ProposalCreated(proposalId,proposer,endTime)`
   - `VoteCast(proposalId,voter,support,timestamp)`
   - `ProposalExecuted(proposalId,success,returnData)`
@@ -150,6 +153,8 @@ Note: Proposal metadata (title/description) is not stored on-chain. Keep human-r
     - Backend listeners purge all delegates/mutes on this event so the incoming priest takes over with a clean moderation slate.
   - `DictatorshipModeChanged(enabled)`
 - Custom errors (from `TemplErrors.sol`): `NotMember`, `NotDAO`, `PriestOnly`, `ContractPausedError`, `AlreadyPurchased`, `InsufficientBalance`, `ActiveProposalExists`, `VotingPeriodTooShort`, `VotingPeriodTooLong`, `InvalidProposal`, `VotingEnded`, `JoinedAfterProposal`, `VotingNotEnded`, `AlreadyExecuted`, `ProposalNotPassed`, `ProposalExecutionFailed`, `InvalidRecipient`, `AmountZero`, `InsufficientTreasuryBalance`, `NoTreasuryFunds`, `EntryFeeTooSmall`, `InvalidEntryFee`, `InvalidPercentageSplit`, `InvalidPercentage`, `NoRewardsToClaim`, `InsufficientPoolBalance`, `LimitOutOfRange`, `InvalidSender`, `InvalidCallData`, `TokenChangeDisabled`, `NoMembers`, `QuorumNotReached`, `ExecutionDelayActive`, `DictatorshipEnabled`, `DictatorshipUnchanged`.
+  - `DictatorshipModeChanged(enabled)`
+- Custom errors (from `TemplErrors.sol`): `NotMember`, `NotDAO`, `PriestOnly`, `ContractPausedError`, `AlreadyPurchased`, `InsufficientBalance`, `ActiveProposalExists`, `VotingPeriodTooShort`, `VotingPeriodTooLong`, `InvalidProposal`, `VotingEnded`, `JoinedAfterProposal`, `VotingNotEnded`, `AlreadyExecuted`, `ProposalNotPassed`, `ProposalExecutionFailed`, `InvalidRecipient`, `AmountZero`, `InsufficientTreasuryBalance`, `NoTreasuryFunds`, `EntryFeeTooSmall`, `InvalidEntryFee`, `InvalidPercentageSplit`, `InvalidPercentage`, `NoRewardsToClaim`, `InsufficientPoolBalance`, `MemberLimitTooLow`, `LimitOutOfRange`, `InvalidSender`, `InvalidCallData`, `TokenChangeDisabled`, `NoMembers`, `QuorumNotReached`, `ExecutionDelayActive`, `DictatorshipEnabled`, `DictatorshipUnchanged`.
 
 ## Flows
 
@@ -187,7 +192,7 @@ sequenceDiagram
 
 ## Configuration & Deployment
 
-- Primary entrypoint is `TemplFactory(address protocolFeeRecipient, uint256 protocolPercent)`. Creating a new templ instance can rely on defaults (`createTempl(token, entryFee)`) or a custom struct (`createTemplWithConfig`). Burn/treasury/member percentages are `int256` values: each slice may be explicitly configured to `0`, and providing `-1` defers to the factory default. Once defaults resolve, the three slices plus the factory’s immutable `protocolPercent` must total 100. The struct also includes a `priestIsDictator` boolean to opt into priest-only governance.
+- Primary entrypoint is `TemplFactory(address protocolFeeRecipient, uint256 protocolPercent)`. Creating a new templ instance can rely on defaults (`createTempl(token, entryFee)`) or a custom struct (`createTemplWithConfig`). Burn/treasury/member percentages are `int256` values: each slice may be explicitly configured to `0`, and providing `-1` defers to the factory default. Once defaults resolve, the three slices plus the factory’s immutable `protocolPercent` must total 100. The struct also includes a `priestIsDictator` boolean to opt into priest-only governance and a `maxMembers` field (`0` for unlimited) to cap membership from genesis.
 - `scripts/deploy.js` deploys a factory when none is provided (`FACTORY_ADDRESS`), then creates a templ via the factory using environment variables: `PRIEST_ADDRESS` (defaults to deployer), `PROTOCOL_FEE_RECIPIENT`, `PROTOCOL_PERCENT`, `TOKEN_ADDRESS`, `ENTRY_FEE`, `BURN_PERCENT`, `TREASURY_PERCENT`, `MEMBER_POOL_PERCENT` (plus optional `QUORUM_PERCENT`, `EXECUTION_DELAY_SECONDS`, `BURN_ADDRESS`, `PRIEST_IS_DICTATOR`). Set any of the three split variables to `-1` to reuse the defaults while editing the others; the resolved percentages must still sum to 100 alongside the protocol fee.
 - Commands:
   - Compile/tests: `npm run compile`, `npm test`, `npm run slither`.
