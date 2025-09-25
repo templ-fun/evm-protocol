@@ -17,7 +17,8 @@ contract TEMPL is TemplGovernance {
         uint256 _quorumPercent,
         uint256 _executionDelay,
         address _burnAddress,
-        bool _priestIsDictator
+        bool _priestIsDictator,
+        uint256 _maxMembers
     ) TemplGovernance(
         _protocolFeeRecipient,
         _token,
@@ -40,6 +41,9 @@ contract TEMPL is TemplGovernance {
         priest = _priest;
         entryFee = _entryFee;
         paused = false;
+        if (_maxMembers != 0) {
+            _setMaxMembers(_maxMembers);
+        }
     }
 
     receive() external payable {}

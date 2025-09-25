@@ -28,6 +28,7 @@ abstract contract TemplBase is ReentrancyGuard {
     uint256 public treasuryBalance;
     uint256 public memberPoolBalance;
     bool public paused;
+    uint256 public MAX_MEMBERS;
 
     uint256 public quorumPercent;
     uint256 public executionDelayAfterQuorum;
@@ -65,6 +66,7 @@ abstract contract TemplBase is ReentrancyGuard {
         uint256 newBurnPercent;
         uint256 newTreasuryPercent;
         uint256 newMemberPoolPercent;
+        uint256 newMaxMembers;
         uint256 yesVotes;
         uint256 noVotes;
         uint256 endTime;
@@ -97,6 +99,7 @@ abstract contract TemplBase is ReentrancyGuard {
         DisbandTreasury,
         ChangePriest,
         SetDictatorship,
+        SetMaxMembers,
         Undefined
     }
 
@@ -157,6 +160,7 @@ abstract contract TemplBase is ReentrancyGuard {
     );
 
     event ContractPaused(bool isPaused);
+    event MaxMembersUpdated(uint256 maxMembers);
     event PriestChanged(address indexed oldPriest, address indexed newPriest);
     event TreasuryDisbanded(
         uint256 indexed proposalId,
@@ -269,5 +273,23 @@ abstract contract TemplBase is ReentrancyGuard {
         if (priestIsDictator == _enabled) revert TemplErrors.DictatorshipUnchanged();
         priestIsDictator = _enabled;
         emit DictatorshipModeChanged(_enabled);
+    }
+
+    function _setMaxMembers(uint256 newMaxMembers) internal {
+        uint256 currentMembers = memberList.length;
+        if (newMaxMembers > 0 && newMaxMembers < currentMembers) {
+            revert TemplErrors.MemberLimitTooLow();
+        }
+        MAX_MEMBERS = newMaxMembers;
+        emit MaxMembersUpdated(newMaxMembers);
+        _autoPauseIfLimitReached();
+    }
+
+    function _autoPauseIfLimitReached() internal {
+        uint256 limit = MAX_MEMBERS;
+        if (limit > 0 && memberList.length >= limit && !paused) {
+            paused = true;
+            emit ContractPaused(true);
+        }
     }
 }

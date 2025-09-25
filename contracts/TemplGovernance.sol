@@ -66,6 +66,20 @@ abstract contract TemplGovernance is TemplTreasury {
         return id;
     }
 
+    function createProposalSetMaxMembers(
+        uint256 _newMaxMembers,
+        uint256 _votingPeriod
+    ) external returns (uint256) {
+        if (priestIsDictator) revert TemplErrors.DictatorshipEnabled();
+        if (_newMaxMembers > 0 && _newMaxMembers < memberList.length) {
+            revert TemplErrors.MemberLimitTooLow();
+        }
+        (uint256 id, Proposal storage p) = _createBaseProposal(_votingPeriod);
+        p.action = Action.SetMaxMembers;
+        p.newMaxMembers = _newMaxMembers;
+        return id;
+    }
+
     function createProposalWithdrawTreasury(
         address _token,
         address _recipient,
@@ -228,6 +242,8 @@ abstract contract TemplGovernance is TemplTreasury {
             _changePriest(proposal.recipient);
         } else if (proposal.action == Action.SetDictatorship) {
             _updateDictatorship(proposal.setDictatorship);
+        } else if (proposal.action == Action.SetMaxMembers) {
+            _setMaxMembers(proposal.newMaxMembers);
         } else {
             revert TemplErrors.InvalidCallData();
         }
