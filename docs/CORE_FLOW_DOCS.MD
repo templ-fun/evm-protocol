@@ -47,7 +47,6 @@ flowchart LR
     F -->|POST /join| B
     B -->|hasAccess(member)| C
     C -->|true/false| B
-    B -->|persist membership set| D
     B -->|respond with templ links| F
 ```
 
@@ -58,13 +57,11 @@ sequenceDiagram
     participant F as Frontend
     participant C as Contract
     participant B as Backend
-    participant D as SQLite
     F->>C: approve + purchaseAccess()
     C-->>F: tx receipt (member counted)
     F->>B: POST /join {contract, member, signature}
     B->>C: hasAccess(member)?
     C-->>B: true
-    B->>D: add member to in-memory set
     B-->>F: { member:{hasAccess:true}, templ:{...}, links:{...} }
 ```
 

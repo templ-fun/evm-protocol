@@ -9,7 +9,7 @@ Templ keeps the original on-chain design—paid memberships, enforced fee splits
   - entry fee (`purchaseAccess`),
   - configurable burn/treasury/member/protocol percentages,
   - optional member caps (`MAX_MEMBERS`),
-  - 1 token = 1 vote proposals, including pause/unpause, priest changes, treasury moves, dictatorship toggles.
+  - one member = one vote proposals (each member wallet counts once) covering pause/unpause, priest changes, treasury moves, dictatorship toggles.
 
 See inline NatSpec comments and Hardhat tests for state transitions.
 
