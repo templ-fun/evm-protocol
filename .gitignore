@@ -44,3 +44,6 @@ backend/e2e-groups.db*
 coverage/
 frontend/coverage/
 backend/coverage/
+frontend/.vitest-cache/
+frontend/pw-dist/
+frontend/pw-results/
