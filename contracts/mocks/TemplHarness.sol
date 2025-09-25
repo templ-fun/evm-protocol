@@ -18,7 +18,8 @@ contract TemplHarness is TEMPL {
         uint256 _quorumPercent,
         uint256 _executionDelay,
         address _burnAddress,
-        bool _priestIsDictator
+        bool _priestIsDictator,
+        uint256 _maxMembers
     )
         TEMPL(
             _priest,
@@ -32,7 +33,8 @@ contract TemplHarness is TEMPL {
             _quorumPercent,
             _executionDelay,
             _burnAddress,
-            _priestIsDictator
+            _priestIsDictator,
+            _maxMembers
         )
     {}
 

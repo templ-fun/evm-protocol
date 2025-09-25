@@ -99,6 +99,37 @@ describe("Governance coverage gaps", function () {
     ).to.be.revertedWithCustomError(templ, "InvalidRecipient");
   });
 
+  it("allows governance to set member limits", async function () {
+    const { templ, token, accounts } = await deployTempl({ entryFee: ENTRY_FEE });
+    const [, , memberA, memberB, memberC, outsider] = accounts;
+
+    await mintToUsers(token, [memberA, memberB, memberC], ENTRY_FEE * 5n);
+    await purchaseAccess(templ, token, [memberA, memberB]);
+
+    await expect(
+      templ.connect(outsider).createProposalSetMaxMembers(4, VOTING_PERIOD)
+    ).to.be.revertedWithCustomError(templ, "NotMember");
+
+    await expect(
+      templ.connect(memberA).createProposalSetMaxMembers(1, VOTING_PERIOD)
+    ).to.be.revertedWithCustomError(templ, "MemberLimitTooLow");
+
+    await templ.connect(memberA).createProposalSetMaxMembers(4, VOTING_PERIOD);
+    const proposalId = (await templ.proposalCount()) - 1n;
+
+    await templ.connect(memberB).vote(proposalId, true);
+    const delay = Number(await templ.executionDelayAfterQuorum());
+    await ethers.provider.send("evm_increaseTime", [delay + 1]);
+    await ethers.provider.send("evm_mine", []);
+
+    await templ.executeProposal(proposalId);
+    expect(await templ.MAX_MEMBERS()).to.equal(4n);
+
+    await purchaseAccess(templ, token, [memberC]);
+    expect(await templ.totalPurchases()).to.equal(3n);
+    expect(await templ.paused()).to.equal(false);
+  });
+
   it("clears active proposals once earlier windows expire", async function () {
     const { templ, token, accounts } = await deployTempl({ entryFee: ENTRY_FEE });
     const [, , member] = accounts;

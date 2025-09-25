@@ -12,6 +12,7 @@ async function deployTempl({
   burnAddress = "0x000000000000000000000000000000000000dEaD",
   protocolFeeRecipient,
   priestIsDictator = false,
+  maxMembers = 0,
 } = {}) {
   async function fixture() {
     const accounts = await ethers.getSigners();
@@ -37,7 +38,8 @@ async function deployTempl({
       quorumPercent,
       executionDelay,
       burnAddress,
-      priestIsDictator
+      priestIsDictator,
+      maxMembers
     );
     await templ.waitForDeployment();
     try {

@@ -54,6 +54,8 @@ library TemplErrors {
     error NoRewardsToClaim();
     /// @notice Thrown when the member pool lacks sufficient funds.
     error InsufficientPoolBalance();
+    /// @notice Thrown when attempting to set the member limit below the current member count.
+    error MemberLimitTooLow();
     /// @notice Thrown when a limit is zero or exceeds the maximum allowed.
     error LimitOutOfRange();
     /// @notice Thrown when the caller is the contract itself.
