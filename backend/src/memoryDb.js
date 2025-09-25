@@ -1,23 +1,36 @@
+/**
+ * @typedef {{ run?: (...args: any[]) => any, all?: () => any[], get?: (...args: any[]) => any }} MemoryStatementInit
+ */
+
+/**
+ * @implements {Pick<import('better-sqlite3').Statement, 'run' | 'all' | 'get'>}
+ */
 class MemoryStatement {
-  constructor({ run, all, get }) {
-    this._run = run;
-    this._all = all;
-    this._get = get;
+  /**
+   * @param {MemoryStatementInit} [init]
+   */
+  constructor(init = {}) {
+    this._run = init.run ?? (() => ({ changes: 0 }));
+    this._all = init.all ?? (() => []);
+    this._get = init.get ?? (() => undefined);
   }
 
   run(...args) {
-    return this._run?.(...args);
+    return this._run(...args);
   }
 
   all() {
-    return this._all?.() ?? [];
+    return this._all();
   }
 
   get(...args) {
-    return this._get?.(...args);
+    return this._get(...args);
   }
 }
 
+/**
+ * @returns {Pick<import('better-sqlite3').Database, 'exec' | 'prepare' | 'close'>}
+ */
 export function createMemoryDatabase() {
   const groups = new Map();
   const pendingBindings = new Map();
