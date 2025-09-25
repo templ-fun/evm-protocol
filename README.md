@@ -55,6 +55,10 @@ Fees keep bots at bay, demand proof-of-faith (skin in the game), and continuousl
 
 The founding Priest can choose any split at deploy time – 30/30/30 is just our default scaffolding. The protocol tithe comes from the factory configuration: whatever percentage and recipient the factory was deployed with is appended to the priest-selected splits so the totals sum to 100. Any burn/treasury/member slice may be explicitly set to `0%`, and when calling `createTemplWithConfig` (or piping values through `scripts/deploy.js`) you can pass `-1` for a slice to reuse the factory default while tweaking the others. Teams can stand up alternate factories with different protocol percentages, but every templ created through the same factory shares the immutable protocol fee recipient and rate.
 
+### Member Limits
+
+Templs can optionally cap the active congregation. Deployments (and later governance votes) may set `maxMembers` to a non-zero value to define the ceiling; the default of `0` keeps membership unlimited. Once the cap is reached, the contract automatically pauses new purchases so the community can ratify the next step. Raising the limit (or setting it back to `0`) lets membership continue, and unpausing without increasing the cap intentionally clears it so stagnated templs can reopen without juggling numbers.
+
 ### Protocol Tithe (factory-defined)
 
 Every tribute also powers the protocol. The templ factory forwards its configured protocol-share of every entry fee to the templ.fun protocol treasury, funding keeper costs, future rewards programs, and long-term upgrades. The repo’s tooling and examples default to 10%, but the factory owner can pick any percentage when the factory is deployed.

@@ -25,6 +25,7 @@ contract TemplFactory {
         uint256 executionDelaySeconds;
         address burnAddress;
         bool priestIsDictator;
+        uint256 maxMembers;
     }
 
     address public immutable protocolFeeRecipient;
@@ -42,7 +43,8 @@ contract TemplFactory {
         uint256 quorumPercent,
         uint256 executionDelaySeconds,
         address burnAddress,
-        bool priestIsDictator
+        bool priestIsDictator,
+        uint256 maxMembers
     );
 
     constructor(address _protocolFeeRecipient, uint256 _protocolPercent) {
@@ -63,7 +65,8 @@ contract TemplFactory {
             quorumPercent: DEFAULT_QUORUM_PERCENT,
             executionDelaySeconds: DEFAULT_EXECUTION_DELAY,
             burnAddress: DEFAULT_BURN_ADDRESS,
-            priestIsDictator: false
+            priestIsDictator: false,
+            maxMembers: 0
         });
         return _deploy(cfg);
     }
@@ -107,7 +110,8 @@ contract TemplFactory {
             cfg.quorumPercent,
             cfg.executionDelaySeconds,
             cfg.burnAddress,
-            cfg.priestIsDictator
+            cfg.priestIsDictator,
+            cfg.maxMembers
         );
         templAddress = address(templ);
         emit TemplCreated(
@@ -122,7 +126,8 @@ contract TemplFactory {
             cfg.quorumPercent,
             cfg.executionDelaySeconds,
             cfg.burnAddress,
-            cfg.priestIsDictator
+            cfg.priestIsDictator,
+            cfg.maxMembers
         );
     }
 

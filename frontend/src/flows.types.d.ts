@@ -18,6 +18,7 @@ export interface DeployRequest {
   factoryAddress: Address
   factoryArtifact: { abi: any }
   templArtifact: { abi: any; bytecode?: string }
+  maxMembers?: number | string | bigint
   backendUrl?: string
   txOptions?: Record<string, any>
 }

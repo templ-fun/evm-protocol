@@ -69,16 +69,19 @@ function App() {
   const [proposeOpen, setProposeOpen] = useState(false);
   const [proposeTitle, setProposeTitle] = useState('');
   const [proposeDesc, setProposeDesc] = useState('');
-  const [proposeAction, setProposeAction] = useState('none'); // none | pause | unpause | moveTreasuryToMe | reprice | disband | changePriest | enableDictatorship | disableDictatorship
+  const [proposeAction, setProposeAction] = useState('none'); // none | pause | unpause | moveTreasuryToMe | reprice | disband | changePriest | enableDictatorship | disableDictatorship | setMaxMembers
   const [proposeFee, setProposeFee] = useState('');
   const [proposeToken, setProposeToken] = useState('');
   const [proposeNewPriest, setProposeNewPriest] = useState('');
+  const [proposeMaxMembers, setProposeMaxMembers] = useState('');
   const [currentFee, setCurrentFee] = useState(null);
   const [tokenDecimals, setTokenDecimals] = useState(null);
   const [currentBurnPercent, setCurrentBurnPercent] = useState(null);
   const [currentTreasuryPercent, setCurrentTreasuryPercent] = useState(null);
   const [currentMemberPercent, setCurrentMemberPercent] = useState(null);
   const [currentProtocolPercent, setCurrentProtocolPercent] = useState(null);
+  const [currentMaxMembers, setCurrentMaxMembers] = useState(null);
+  const [currentMemberCount, setCurrentMemberCount] = useState(null);
   const [proposeBurnPercent, setProposeBurnPercent] = useState('');
   const [proposeTreasuryPercent, setProposeTreasuryPercent] = useState('');
   const [proposeMemberPercent, setProposeMemberPercent] = useState('');
@@ -109,6 +112,7 @@ function App() {
   const [burnPercent, setBurnPercent] = useState('30');
   const [treasuryPercent, setTreasuryPercent] = useState('30');
   const [memberPoolPercent, setMemberPoolPercent] = useState('30');
+  const [maxMembers, setMaxMembers] = useState('');
   // Governance: all members have 1 vote
 
   // joining form
@@ -136,6 +140,19 @@ function App() {
   const parsedTreasuryInput = Number.isFinite(Number(proposeTreasuryPercent)) ? Number(proposeTreasuryPercent) : 0;
   const parsedMemberInput = Number.isFinite(Number(proposeMemberPercent)) ? Number(proposeMemberPercent) : 0;
   const proposeSplitTotal = parsedBurnInput + parsedTreasuryInput + parsedMemberInput + (Number.isFinite(activeProtocolPercent) ? activeProtocolPercent : 0);
+  const maxMembersValue = currentMaxMembers === null ? null : String(currentMaxMembers);
+  const memberCountValue = currentMemberCount === null ? null : String(currentMemberCount);
+  const maxMembersLabel = maxMembersValue === null ? '…' : (maxMembersValue === '0' ? 'Unlimited' : maxMembersValue);
+  const memberCountLabel = memberCountValue === null ? '…' : memberCountValue;
+  const memberCountWithLimit = maxMembersValue && maxMembersValue !== '0'
+    ? `${memberCountLabel} / ${maxMembersValue}`
+    : memberCountLabel;
+  let limitReached = false;
+  try {
+    if (maxMembersValue !== null && maxMembersValue !== '0' && memberCountValue !== null) {
+      limitReached = BigInt(memberCountValue) >= BigInt(maxMembersValue);
+    }
+  } catch {}
 
   // Fetch entry fee and token decimals for display in reprice UI
   useEffect(() => {
@@ -152,6 +169,8 @@ function App() {
         let treasuryPct = null;
         let memberPct = null;
         let protocolPct = null;
+        let maxMembersRaw = null;
+        let memberCountRaw = null;
         try {
           const cfg = await c.getConfig();
           tokenAddr = cfg[0];
@@ -168,6 +187,8 @@ function App() {
           try { memberPct = Number(await c.memberPoolPercent()); } catch {}
           try { protocolPct = Number(await c.protocolPercent()); } catch {}
         }
+        try { maxMembersRaw = await c.MAX_MEMBERS(); } catch {}
+        try { memberCountRaw = await c.totalPurchases(); } catch {}
         let dictatorshipState = null;
         try {
           dictatorshipState = await c.priestIsDictator();
@@ -188,6 +209,16 @@ function App() {
             setIsDictatorship(Boolean(dictatorshipState));
           } else {
             setIsDictatorship(null);
+          }
+          if (maxMembersRaw !== null && maxMembersRaw !== undefined) {
+            try { setCurrentMaxMembers(String(maxMembersRaw)); } catch { setCurrentMaxMembers(null); }
+          } else {
+            setCurrentMaxMembers(null);
+          }
+          if (memberCountRaw !== null && memberCountRaw !== undefined) {
+            try { setCurrentMemberCount(String(memberCountRaw)); } catch { setCurrentMemberCount(null); }
+          } else {
+            setCurrentMemberCount(null);
           }
         }
       } catch {}
@@ -508,7 +539,8 @@ function App() {
         treasuryPercent,
         memberPoolPercent,
         protocolPercent,
-        factoryAddress
+        factoryAddress,
+        maxMembers
       });
     } catch {}
     if (!signer) return;
@@ -527,6 +559,18 @@ function App() {
     }
     if (!/^\d+$/.test(entryFee)) {
       alert('Invalid entry fee');
+      return;
+    }
+    const limitInput = String(maxMembers || '').trim();
+    if (limitInput && !/^\d+$/.test(limitInput)) {
+      alert('Max members must be a non-negative integer');
+      return;
+    }
+    let normalizedMaxMembers = 0n;
+    try {
+      normalizedMaxMembers = limitInput ? BigInt(limitInput) : 0n;
+    } catch {
+      alert('Invalid max members value');
       return;
     }
     const splits = [burnPercent, treasuryPercent, memberPoolPercent];
@@ -557,7 +601,8 @@ function App() {
         treasuryPercent,
         memberPoolPercent,
         protocolPercent,
-        factoryAddress
+        factoryAddress,
+        maxMembers: normalizedMaxMembers.toString()
       });
       const result = await deployTempl({
         ethers,
@@ -569,6 +614,7 @@ function App() {
         burnPercent,
         treasuryPercent,
         memberPoolPercent,
+        maxMembers: normalizedMaxMembers,
         factoryAddress: trimmedFactory,
         factoryArtifact: templFactoryArtifact,
         templArtifact
@@ -599,7 +645,7 @@ function App() {
       console.error('[app] deploy failed', err);
       alert(err.message);
     }
-  }, [signer, xmtp, tokenAddress, entryFee, burnPercent, treasuryPercent, memberPoolPercent, protocolPercent, factoryAddress, walletAddress, updateTemplAddress, pushStatus, navigate]);
+  }, [signer, xmtp, tokenAddress, entryFee, burnPercent, treasuryPercent, memberPoolPercent, protocolPercent, factoryAddress, walletAddress, updateTemplAddress, pushStatus, navigate, maxMembers]);
 
   // In e2e debug mode, auto-trigger deploy once inputs are valid to deflake clicks
   useEffect(() => {
@@ -612,15 +658,16 @@ function App() {
     if (!signer) return;
     try {
       const splitsValid = [burnPercent, treasuryPercent, memberPoolPercent].every((n) => /^\d+$/.test(n));
+      const limitValid = !maxMembers || /^\d+$/.test(maxMembers);
       const sumValid = !Number.isFinite(protocolPercent) ? true : (Number(burnPercent) + Number(treasuryPercent) + Number(memberPoolPercent) + Number(protocolPercent)) === 100;
       const trimmedFactory = factoryAddress.trim();
-      if (trimmedFactory && ethers.isAddress(trimmedFactory) && ethers.isAddress(tokenAddress) && /^\d+$/.test(entryFee) && splitsValid && sumValid) {
+      if (trimmedFactory && ethers.isAddress(trimmedFactory) && ethers.isAddress(tokenAddress) && /^\d+$/.test(entryFee) && splitsValid && sumValid && limitValid) {
         autoDeployTriggeredRef.current = true;
         // Fire and forget; UI will reflect status
         handleDeploy();
       }
     } catch {}
-  }, [path, signer, factoryAddress, tokenAddress, entryFee, burnPercent, treasuryPercent, memberPoolPercent, protocolPercent, handleDeploy]);
+  }, [path, signer, factoryAddress, tokenAddress, entryFee, burnPercent, treasuryPercent, memberPoolPercent, protocolPercent, maxMembers, handleDeploy]);
 
   const handlePurchaseAndJoin = useCallback(async () => {
     dlog('[app] handlePurchaseAndJoin invoked', {
@@ -1158,9 +1205,16 @@ function App() {
     let cancelled = false;
     const checkPaused = async () => {
       try {
-        const c = new ethers.Contract(templAddress, templArtifact.abi, signer);
-        const p = await c.paused();
-        if (!cancelled) setPaused(Boolean(p));
+        const [p, maxRaw, countRaw] = await Promise.all([
+          contract.paused(),
+          contract.MAX_MEMBERS(),
+          contract.totalPurchases()
+        ]);
+        if (!cancelled) {
+          setPaused(Boolean(p));
+          try { setCurrentMaxMembers(String(maxRaw)); } catch { setCurrentMaxMembers(null); }
+          try { setCurrentMemberCount(String(countRaw)); } catch { setCurrentMemberCount(null); }
+        }
       } catch {}
     };
     checkPaused();
@@ -1717,6 +1771,10 @@ function App() {
                 <input className="w-full border border-black/20 rounded px-3 py-2" placeholder="Entry fee" value={entryFee} onChange={(e) => setEntryFee(e.target.value)} />
               </div>
               <div>
+                <label className="block text-sm font-medium text-black/70 mb-1">Max members (0 = unlimited)</label>
+                <input className="w-full border border-black/20 rounded px-3 py-2" placeholder="Optional" value={maxMembers} onChange={(e) => setMaxMembers(e.target.value)} />
+              </div>
+              <div>
                 <label className="block text-sm font-medium text-black/70 mb-1">Fee split (%)</label>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   <input className="border border-black/20 rounded px-3 py-2" placeholder="Burn" value={burnPercent} onChange={(e) => setBurnPercent(e.target.value)} />
@@ -1809,6 +1867,11 @@ function App() {
                 <div className="drawer-title">Group Info</div>
                 <div className="drawer-grid">
                   <div className="text-sm text-black/70">DAO Status: {paused ? 'Paused' : 'Active'}</div>
+                  <div className="text-sm">Members: {memberCountWithLimit}</div>
+                  <div className="text-sm text-black/70">Member limit: {maxMembersLabel}</div>
+                  {limitReached && (
+                    <div className="text-xs text-red-600" data-testid="member-limit-reached">Member limit reached — contract paused until the limit is raised or removed.</div>
+                  )}
                   {templAddress && (
                     <>
                       <div className="text-sm">Treasury: {treasuryInfo?.treasury || '0'}</div>
@@ -2093,6 +2156,7 @@ function App() {
                 <button className={`btn ${proposeAction==='moveTreasuryToMe'?'btn-primary':''}`} onClick={() => setProposeAction('moveTreasuryToMe')}>Move Treasury To Me</button>
                 <button className={`btn ${proposeAction==='disband'?'btn-primary':''}`} onClick={() => setProposeAction('disband')}>Disband Treasury</button>
                 <button className={`btn ${proposeAction==='reprice'?'btn-primary':''}`} onClick={() => setProposeAction('reprice')}>Reprice Entry Fee</button>
+                <button className={`btn ${proposeAction==='setMaxMembers'?'btn-primary':''}`} onClick={() => setProposeAction('setMaxMembers')}>Set Member Limit</button>
                 <button className={`btn ${proposeAction==='rebalance'?'btn-primary':''}`} onClick={() => setProposeAction('rebalance')}>Adjust Fee Split</button>
                 <button className={`btn ${proposeAction==='changePriest'?'btn-primary':''}`} onClick={() => setProposeAction('changePriest')}>Change Priest</button>
                 <button
@@ -2119,7 +2183,7 @@ function App() {
                     : 'Returning to democracy requires member voting and restores proposal-based governance.'}
                 </div>
               )}
-              <div className="text-xs text-black/60">Tip: Pause/Unpause and Move Treasury encode the call data automatically. Reprice expects a new fee in raw token units. Adjust Fee Split collects the burn/treasury/member percentages (protocol share stays at the contract’s configured value).</div>
+              <div className="text-xs text-black/60">Tip: Pause/Unpause, Move Treasury, and Set Member Limit encode the call data automatically. Reprice expects a new fee in raw token units. Adjust Fee Split collects the burn/treasury/member percentages (protocol share stays at the contract’s configured value).</div>
               {proposeAction === 'reprice' && (
                 <div className="text-xs text-black/80 mt-1 flex flex-col gap-2">
                   <div className="flex gap-2 items-center">
@@ -2128,6 +2192,19 @@ function App() {
                   <div className="text-xs text-black/60">
                     Current fee: {currentFee ?? '…'}{typeof tokenDecimals === 'number' ? ` (decimals ${tokenDecimals})` : ''}
                   </div>
+                </div>
+              )}
+              {proposeAction === 'setMaxMembers' && (
+                <div className="text-xs text-black/80 mt-1 flex flex-col gap-2">
+                  <div className="flex gap-2 items-center">
+                    <input
+                      className="w-full border border-black/20 rounded px-3 py-2"
+                      placeholder={maxMembersLabel === '…' ? 'New member limit' : `Current ${memberCountWithLimit}`}
+                      value={proposeMaxMembers}
+                      onChange={(e) => setProposeMaxMembers(e.target.value)}
+                    />
+                  </div>
+                  <div className="text-xs text-black/60">Current members: {memberCountWithLimit}. Enter 0 to remove the limit; values below the current member count will be rejected on-chain.</div>
                 </div>
               )}
               {proposeAction === 'moveTreasuryToMe' && (
@@ -2218,6 +2295,24 @@ function App() {
                       if (!proposeTitle) setProposeTitle('Reprice Entry Fee');
                       if (!proposeDesc) setProposeDesc(`Set new entry fee to ${String(newFee)}`);
                     } catch {}
+                  } else if (proposeAction === 'setMaxMembers') {
+                    try {
+                      const trimmed = String(proposeMaxMembers || '').trim();
+                      if (trimmed && !/^\d+$/.test(trimmed)) throw new Error('Member limit must be a non-negative integer');
+                      const target = trimmed ? BigInt(trimmed) : 0n;
+                      if (memberCountValue !== null && target > 0n && BigInt(memberCountValue) > target) {
+                        throw new Error('Limit must be at least the current member count');
+                      }
+                      const iface = new ethers.Interface(['function setMaxMembersDAO(uint256)']);
+                      callData = iface.encodeFunctionData('setMaxMembersDAO', [target]);
+                      if (!proposeTitle) setProposeTitle('Set Member Limit');
+                      if (!proposeDesc) {
+                        setProposeDesc(target === 0n ? 'Remove the member limit' : `Set max members to ${target.toString()}`);
+                      }
+                    } catch (e) {
+                      alert(e?.message || 'Invalid member limit');
+                      return;
+                    }
                   } else if (proposeAction === 'rebalance') {
                     try {
                       if (!Number.isFinite(activeProtocolPercent)) {

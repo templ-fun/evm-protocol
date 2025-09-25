@@ -48,6 +48,9 @@ function createStubEthers(state) {
       const executionDelaySeconds = Number(input.executionDelaySeconds ?? DEFAULT_EXECUTION_DELAY);
       const burnAddress = input.burnAddress ? normalize(input.burnAddress) : DEFAULT_BURN_ADDRESS;
       const priestIsDictator = input.priestIsDictator === true;
+      const maxMembers = input.maxMembers !== undefined && input.maxMembers !== null
+        ? Number(input.maxMembers)
+        : 0;
       return {
         priest,
         token,
@@ -58,7 +61,8 @@ function createStubEthers(state) {
         quorumPercent,
         executionDelaySeconds,
         burnAddress,
-        priestIsDictator
+        priestIsDictator,
+        maxMembers
       };
     }
 
@@ -74,7 +78,8 @@ function createStubEthers(state) {
         quorumPercent: config.quorumPercent,
         executionDelaySeconds: config.executionDelaySeconds,
         burnAddress: config.burnAddress,
-        priestIsDictator: config.priestIsDictator
+        priestIsDictator: config.priestIsDictator,
+        maxMembers: config.maxMembers
       });
       state.templs[addr] = {
         accessToken: config.token,
@@ -87,6 +92,8 @@ function createStubEthers(state) {
         executionDelaySeconds: config.executionDelaySeconds,
         burnAddress: config.burnAddress,
         priestIsDictator: config.priestIsDictator,
+        maxMembers: config.maxMembers,
+        paused: false,
         members: new Set()
       };
       state.pendingTempl = null;
@@ -182,7 +189,50 @@ function createStubEthers(state) {
     async purchaseAccess() {
       const templ = state.templs[this.address];
       const member = normalize(await this.signer.getAddress());
+      if (templ.paused) {
+        throw new Error('paused');
+      }
+      if (templ.maxMembers > 0 && templ.members.size >= templ.maxMembers) {
+        templ.paused = true;
+        throw new Error('paused');
+      }
       templ.members.add(member);
+      if (templ.maxMembers > 0 && templ.members.size >= templ.maxMembers) {
+        templ.paused = true;
+      }
+      return { wait: async () => ({}) };
+    }
+
+    async MAX_MEMBERS() {
+      const templ = state.templs[this.address];
+      return BigInt(templ.maxMembers);
+    }
+
+    async totalPurchases() {
+      const templ = state.templs[this.address];
+      return BigInt(templ.members.size);
+    }
+
+    async paused() {
+      const templ = state.templs[this.address];
+      return templ.paused;
+    }
+
+    async setMaxMembersDAO(limit) {
+      const templ = state.templs[this.address];
+      templ.maxMembers = Number(limit);
+      if (templ.maxMembers > 0 && templ.members.size >= templ.maxMembers) {
+        templ.paused = true;
+      }
+      return { wait: async () => ({}) };
+    }
+
+    async setPausedDAO(next) {
+      const templ = state.templs[this.address];
+      templ.paused = !!next;
+      if (!templ.paused && templ.maxMembers > 0 && templ.members.size >= templ.maxMembers) {
+        templ.maxMembers = 0;
+      }
       return { wait: async () => ({}) };
     }
 

@@ -24,7 +24,8 @@ contract DaoCallerHarness is TEMPL {
             33,
             7 days,
             0x000000000000000000000000000000000000dEaD,
-            false
+            false,
+            0
         )
     {}
     /// @notice Wrapper to call withdrawTreasuryDAO via contract self-call
@@ -58,6 +59,11 @@ contract DaoCallerHarness is TEMPL {
     /// @notice Wrapper to call setDictatorshipDAO via contract self-call
     function daoSetDictatorship(bool enabled) external {
         this.setDictatorshipDAO(enabled);
+    }
+
+    /// @notice Wrapper to call setMaxMembersDAO via contract self-call
+    function daoSetMaxMembers(uint256 newMax) external {
+        this.setMaxMembersDAO(newMax);
     }
 
     /// @dev Test helper to set action to an undefined value (testing only)

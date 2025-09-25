@@ -67,7 +67,7 @@ Everything on-chain is modular so each templ instance inherits the same safeguar
 - `TemplTreasury` (treasury/config/priest handlers)
 - `TemplGovernance` (proposal lifecycle)
 - `TEMPL` (constructor wiring + payable receive)
-- `TemplFactory` (fixes protocol fee percentage + recipient and deploys templ instances). `createTempl(token, entryFee)` uses defaults (priest = caller, 30/30/30 split, quorum 33%, execution delay 7 days, burn address `0x000000000000000000000000000000000000dEaD`). `createTemplWithConfig(CreateConfig)` accepts overrides for priest, the three percentages, burn address, quorum percent, execution delay, **and** whether the templ launches in priest dictatorship mode (`priestIsDictator`). Burn/treasury/member percentages use `int256` values: `-1` defers to the factory default, `0` is a valid explicit split, and the resolved values must still sum with the factory’s immutable protocol percent to 100. The mode can later be flipped by governance.
+- `TemplFactory` (fixes protocol fee percentage + recipient and deploys templ instances). `createTempl(token, entryFee)` uses defaults (priest = caller, 30/30/30 split, quorum 33%, execution delay 7 days, burn address `0x000000000000000000000000000000000000dEaD`). `createTemplWithConfig(CreateConfig)` accepts overrides for priest, the three percentages, burn address, quorum percent, execution delay, **whether the templ launches in priest dictatorship mode (`priestIsDictator`)**, and an optional `maxMembers` cap for membership (0 = unlimited). Burn/treasury/member percentages use `int256` values: `-1` defers to the factory default, `0` is a valid explicit split, and the resolved values must still sum with the factory’s immutable protocol percent to 100. Dictatorship mode and member limits can later be governed on-chain.
 
 ### Economic model (per `purchaseAccess()`)
 
@@ -152,6 +152,7 @@ flowchart LR
 - `updateConfigDAO(address,uint256,bool,uint256,uint256,uint256)` — update entry fee and optionally the burn/treasury/member pool percentages. Token changes are disabled (`TokenChangeDisabled`). `_token` must be `address(0)` or the current token. When `_updateFeeSplit` is true the provided percentages must sum with `protocolPercent` to 100.
 - `withdrawTreasuryDAO(address token, address recipient, uint256 amount, string reason)` — move a specific amount of any asset held by the contract. For the access token, only the treasury portion is withdrawable; the member pool is preserved.
 - `disbandTreasuryDAO(address token)` — move the full available balance of `token` into a member-distributable pool. With the access token this increases the member pool (`memberPoolBalance`) and remainder; with any other ERC-20 or ETH the funds are tracked in an external rewards pool that members withdraw via `claimExternalToken`.
+- `setMaxMembersDAO(uint256 limit)` — set the membership cap (0 = unlimited). Reverts with `MemberLimitTooLow` if the limit is below the current member count. Once the limit is reached the contract auto-pauses new purchases; raising the cap (or setting it back to 0) plus an unpause lets membership resume.
 - `changePriestDAO(address)` — change the on-chain `priest` address.
 
 Creation helpers (`createProposalX`) initialize proposals with normalized timing, proposer auto-YES, and optional quorum exemption for priest-proposed disband.
@@ -180,6 +181,7 @@ These helpers expose the templ state without mutating anything:
 - `onlyDAO` guards administration to self-calls via `executeProposal`; when `priestIsDictator` is true it also whitelists the priest address for direct calls.
 - `notSelf` prevents DAO from purchasing membership.
 - `paused` blocks new purchases; proposing/voting continue while paused.
+- Member caps: `MAX_MEMBERS` defaults to unlimited. A non-zero cap pauses new joins once the count is reached; governance (or a dictator priest) must raise or clear the cap before unpausing. Lowering below the current member count reverts with `MemberLimitTooLow`.
 - Token change disabled in governance; entry fee constrained (≥10 and multiple of 10).
 - No arbitrary external calls; proposal execution is internal and typed.
 - Member pool is preserved: withdrawals of access token are limited to the available treasury (excludes pool). Disband operations increase the pool for equitable member distribution.

@@ -27,6 +27,7 @@ export async function deployTempl({
   factoryAddress,
   factoryArtifact,
   templArtifact,
+  maxMembers = 0,
   backendUrl = BACKEND_URL,
   txOptions = {}
 }) {
@@ -64,6 +65,15 @@ export async function deployTempl({
   } catch {
     throw new Error('Invalid entry fee');
   }
+  let normalizedMaxMembers = 0n;
+  try {
+    normalizedMaxMembers = maxMembers !== undefined && maxMembers !== null ? BigInt(maxMembers) : 0n;
+  } catch {
+    throw new Error('Invalid max members');
+  }
+  if (normalizedMaxMembers < 0n) {
+    throw new Error('Max members must be non-negative');
+  }
   const normalizedToken = String(tokenAddress);
   const config = {
     priest: walletAddress,
@@ -75,7 +85,8 @@ export async function deployTempl({
     burnAddress: burnAddress && ethers.isAddress?.(burnAddress)
       ? burnAddress
       : (ethers.ZeroAddress ?? '0x0000000000000000000000000000000000000000'),
-    priestIsDictator: priestIsDictator === true
+    priestIsDictator: priestIsDictator === true,
+    maxMembers: normalizedMaxMembers
   };
   if (quorumPercent !== undefined && quorumPercent !== null) {
     config.quorumPercent = Number(quorumPercent);
@@ -93,7 +104,8 @@ export async function deployTempl({
     config.burnAddress === zeroAddress &&
     config.quorumPercent === undefined &&
     config.executionDelaySeconds === undefined &&
-    config.priestIsDictator === false;
+    config.priestIsDictator === false &&
+    normalizedMaxMembers === 0n;
 
   let contractAddress;
   if (defaultsRequested) {

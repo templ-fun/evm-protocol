@@ -28,6 +28,11 @@ function encodeUpdateConfigDAO(token, entryFee, updateSplit, burnPercent, treasu
   ]);
 }
 
+function encodeSetMaxMembersDAO(limit) {
+  const iface = new ethers.Interface(["function setMaxMembersDAO(uint256)"]);
+  return iface.encodeFunctionData("setMaxMembersDAO", [limit]);
+}
+
 function encodePurchaseAccess() {
   const iface = new ethers.Interface(["function purchaseAccess()"]);
   return iface.encodeFunctionData("purchaseAccess", []);
@@ -37,5 +42,6 @@ module.exports = {
   encodeSetPausedDAO,
   encodeWithdrawTreasuryDAO,
   encodeUpdateConfigDAO,
+  encodeSetMaxMembersDAO,
   encodePurchaseAccess,
 };
