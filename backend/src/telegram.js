@@ -1,5 +1,16 @@
 import { logger as defaultLogger } from './logger.js';
 
+/**
+ * @typedef {import('pino').Logger} Logger
+ */
+
+/**
+ * @typedef {Object} TelegramNotifierOptions
+ * @property {string} [botToken]
+ * @property {string} [linkBaseUrl]
+ * @property {Logger} [logger]
+ */
+
 const TELEGRAM_API_BASE = 'https://api.telegram.org';
 
 function escapeHtml(value) {
@@ -60,6 +71,9 @@ function formatHomeLinkLine(value) {
   return `<b>Home:</b> ${escapeHtml(trimmed)}`;
 }
 
+/**
+ * @param {{ botToken?: string | null, chatId?: string | null, text: string, disablePreview?: boolean, logger?: Logger }} params
+ */
 async function postTelegramMessage({ botToken, chatId, text, disablePreview = true, logger = defaultLogger }) {
   if (!botToken || !chatId || !text) return;
   const url = `${TELEGRAM_API_BASE}/bot${botToken}/sendMessage`;
@@ -75,6 +89,7 @@ async function postTelegramMessage({ botToken, chatId, text, disablePreview = tr
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: body.toString()
     });
+    /** @type {any} */
     const result = await response.json().catch(() => ({}));
     if (!response.ok || result?.ok === false) {
       const errMsg = result?.description || response.statusText || 'Telegram request failed';
@@ -91,6 +106,9 @@ function normaliseChatId(value) {
   return trimmed.length ? trimmed : null;
 }
 
+/**
+ * @param {TelegramNotifierOptions} [opts]
+ */
 export function createTelegramNotifier({ botToken, linkBaseUrl, logger = defaultLogger } = {}) {
   const token = typeof botToken === 'string' && botToken.trim().length ? botToken.trim() : null;
   const baseUrl = typeof linkBaseUrl === 'string' && linkBaseUrl.trim().length ? linkBaseUrl.trim() : null;
@@ -211,6 +229,9 @@ export function createTelegramNotifier({ botToken, linkBaseUrl, logger = default
         templLink(`/templs/${encodeURIComponent(String(contractAddress || ''))}`, 'Open templ overview')
       ]);
     },
+    /**
+     * @param {{ offset?: number, timeout?: number }} [opts]
+     */
     async fetchUpdates({ offset, timeout = 10 } = {}) {
       if (!token) return { updates: [], nextOffset: offset ?? 0 };
       const params = new URLSearchParams();
@@ -219,6 +240,7 @@ export function createTelegramNotifier({ botToken, linkBaseUrl, logger = default
       const url = `${TELEGRAM_API_BASE}/bot${token}/getUpdates?${params.toString()}`;
       try {
         const response = await fetch(url);
+        /** @type {any} */
         const data = await response.json().catch(() => ({}));
         if (!response.ok || data?.ok === false) {
           const errMsg = data?.description || response.statusText || 'getUpdates failed';
