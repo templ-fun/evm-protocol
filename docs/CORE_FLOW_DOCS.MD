@@ -15,11 +15,15 @@ Use this reference to see how the contracts, backend API, frontend, and Telegram
 
 ```mermaid
 flowchart LR
-    F[Frontend] -->|factory.createTemplWithConfig| C[Contract]
-    F -->|POST /templs| B[Backend]
-    B -->|verify contract/priest (optional)| C
-    B -->|persist templ binding| D[(SQLite)]
-    B -->|register watcher| C
+    F[Frontend];
+    B[Backend];
+    C[Contract];
+    D[(SQLite)];
+    F -->|"factory.createTemplWithConfig"| C;
+    F -->|"POST /templs"| B;
+    B -->|"verify contract/priest (optional)"| C;
+    B -->|"persist templ binding"| D;
+    B -->|"register watcher"| C;
 ```
 
 Sequence:
@@ -44,11 +48,14 @@ sequenceDiagram
 
 ```mermaid
 flowchart LR
-    F -->|purchaseAccess| C
-    F -->|POST /join| B
-    B -->|hasAccess(member)| C
-    C -->|true/false| B
-    B -->|respond with templ links| F
+    F[Frontend];
+    B[Backend];
+    C[Contract];
+    F -->|"purchaseAccess"| C;
+    F -->|"POST /join"| B;
+    B -->|"hasAccess(member)"| C;
+    C -->|"true/false"| B;
+    B -->|"respond with templ links"| F;
 ```
 
 Sequence:
@@ -91,9 +98,13 @@ Messages use `APP_BASE_URL` to build URLs such as `/templs/<address>` or `/templ
 
 ```mermaid
 flowchart LR
-    M -->|createProposalX| C
-    C -->|emit ProposalCreated(id, proposer, endTime, title, description)| B
-    B -->|notifyProposalCreated| T[Telegram]
+    M[Member];
+    C[Contract];
+    B[Backend];
+    T[Telegram];
+    M -->|"createProposalX"| C;
+    C -->|"emit ProposalCreated(id, proposer, endTime, title, description)"| B;
+    B -->|"notifyProposalCreated"| T;
 ```
 
 Sequence:
@@ -114,9 +125,13 @@ sequenceDiagram
 
 ```mermaid
 flowchart LR
-    M -->|vote(id, support)| C
-    C -->|emit VoteCast(id, voter, support, timestamp)| B
-    B -->|notifyVoteCast (+ quorum checks)| T[Telegram]
+    M[Member];
+    C[Contract];
+    B[Backend];
+    T[Telegram];
+    M -->|"vote(id, support)"| C;
+    C -->|"emit VoteCast(id, voter, support, timestamp)"| B;
+    B -->|"notifyVoteCast (+ quorum checks)"| T;
 ```
 
 Sequence:
@@ -155,8 +170,10 @@ sequenceDiagram
 
 ```mermaid
 flowchart LR
-    B[Backend] -->|INSERT/UPDATE| D[(SQLite)]
-    D -->|rows restored on boot| B
+    B[Backend];
+    D[(SQLite)];
+    B -->|"INSERT/UPDATE"| D;
+    D -->|"rows restored on boot"| B;
 ```
 
 - `templ_bindings` table keeps the templ contract ↔ optional Telegram chat mapping so notifications resume after restarts (NULL chat ids indicate pending bindings).
