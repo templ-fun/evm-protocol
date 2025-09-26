@@ -32,6 +32,12 @@ You can deploy from the CLI or via the frontend. The CLI is convenient for scrip
    ```bash
    export RPC_URL=http://127.0.0.1:8545
    ```
+
+   > Deploying to Base (or any remote network) requires a funded deployer key. Export `PRIVATE_KEY` so Hardhat can sign transactions, and add `BASESCAN_API_KEY` if you plan to verify immediately:
+   > ```bash
+   > export PRIVATE_KEY=0xyourdeployerkey
+   > export BASESCAN_API_KEY=your-basescan-key
+   > ```
 2. In one terminal start Hardhat for local testing:
    ```bash
    npm run node
@@ -43,12 +49,43 @@ You can deploy from the CLI or via the frontend. The CLI is convenient for scrip
    export PROTOCOL_FEE_RECIPIENT=0x...  # required: protocol treasury address
    export PROTOCOL_PERCENT=10            # optional override (defaults to 10)
    export PRIEST_ADDRESS=0x...           # optional (defaults to deployer)
+   export FACTORY_ADDRESS=0x...          # optional: reuse an existing factory; leave unset to deploy a new one
+   ```
+
+   > For remote deployments, confirm `PRIVATE_KEY` is still exported in your shell so Hardhat can access the deployer signer.
+
+   Optional configuration knobs:
+   ```bash
+   export QUORUM_PERCENT=40            # override default 33% quorum
+   export EXECUTION_DELAY_SECONDS=86400  # override governance delay (seconds)
+   export BURN_ADDRESS=0x...           # use a custom burn sink
+   export MAX_MEMBERS=1000             # 0 keeps membership uncapped
+   export TEMPL_HOME_LINK="https://example.com"  # stored on-chain, shown in the app/alerts
+   export BACKEND_URL=http://localhost:3001  # auto-register with backend (requires priest PRIVATE_KEY)
+   export TELEGRAM_CHAT_ID=-1001234567890   # optional: seed the backend with an existing chat id
    ```
 4. Deploy a templ with custom parameters:
    ```bash
-   npx hardhat run scripts/deploy.js --network localhost
+   npx hardhat run scripts/deploy.js --network localhost   # use --network base when targeting Base mainnet
    ```
-   The script prints the new `TemplFactory` and `TEMPL` addresses.
+   The script deploys `TemplFactory` automatically when `FACTORY_ADDRESS` is unset and then mints the templ. Copy the logged factory address and export it as `FACTORY_ADDRESS` before subsequent deployments on the same network so every templ originates from the same factory. The script prints both the `TemplFactory` and `TEMPL` addresses.
+
+5. Register the templ with the backend so the UI and Telegram bridge can discover it:
+   - If you exported `BACKEND_URL` before running the deploy script and the deployer signer matches the priest, the script already POSTed to `${BACKEND_URL}/templs`. Check the console output for a binding code or stored chat id.
+   - Otherwise run the helper script with the priest key:
+     ```bash
+     export BACKEND_URL=http://localhost:3001
+     export TEMPL_ADDRESS=<templ address printed above>
+     export PRIVATE_KEY=0xyourpriestkey
+     npx hardhat run scripts/register-templ.js --network base
+     ```
+     The backend responds with either a binding code (invite @templfunbot and send `templ <code>`) or the stored chat id if you pre-populated one. Registration is required before the frontend can list the templ or membership verification will succeed.
+
+6. (Optional) Verify the factory once you deploy to a public network:
+   ```bash
+   npx hardhat verify --network <network> $FACTORY_ADDRESS $PROTOCOL_FEE_RECIPIENT $PROTOCOL_PERCENT
+   ```
+   Verification is required only the first time you deploy the factory; the `deployments/` JSON captures the address and configuration for later reference.
 
 ### UI deployment (recommended for first run)
 
@@ -80,12 +117,14 @@ You can deploy from the CLI or via the frontend. The CLI is convenient for scrip
    npm --prefix backend start
    ```
    The server persists Telegram bindings in `backend/groups.db` and begins watching contract events.
+   > The backend only recognises templs that call the `/templs` registration endpoint. The CLI deploy script can auto-register (see step 5 above) or run `scripts/register-templ.js`. Until registration completes, the frontend will not list the templ and membership verification requests will return 404.
 
 ### Telegram binding flow
 
 Every templ can expose notifications in a Telegram group. When you register a templ without a chat id, the backend returns a one-time **binding code**. Complete the binding once for each templ:
 
 1. Invite `@templfunbot` to your Telegram group and give it permission to post.
+   > Bots must be able to read messages in order to detect the binding code. After inviting the bot, open the group info → **Administrators**, promote `@templfunbot`, and enable “Read Messages” / “Manage Chat” (Telegram renames this toggle periodically). If the bot remains a regular member it will only receive mentions and cannot see the `templ <code>` message.
 2. In that group, send the binding message shown in the UI, e.g.:
    ```
    templ ca83cfbc0f47a9d1

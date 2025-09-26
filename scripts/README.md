@@ -11,6 +11,7 @@ Run each script from the repo root unless noted. All commands assume dependencie
 
 ## At a glance
 - `deploy.js` - stand up a factory/templ pair with environment-driven configuration and save deployment metadata.
+- `register-templ.js` - register an already-deployed templ with the backend API so the UI/alerts can discover it.
 - `gen-wallets.js` - mint fresh Hardhat wallets (and optional ERC-20 balances) for local integration or e2e runs.
 - `test-all.sh` - replicate CI locally in four phases so regressions surface before pushing.
 
@@ -19,8 +20,21 @@ Run each script from the repo root unless noted. All commands assume dependencie
 - Reads configuration from `.env` (fee splits, quorum, delay, burn address) and persists outputs under `deployments/`.
 - Validates invariants locally (percent totals, entry-fee divisibility, quorum/delay bounds) before broadcasting.
 - Recognizes `PRIEST_IS_DICTATOR=1`/`true` to bypass proposal governance and grant the priest instant control of all DAO actions; the toggle can be flipped later through the on-chain `setDictatorship` governance proposal.
+- When `BACKEND_URL` is exported, automatically signs the registration payload with the priest wallet and POSTs it to `${BACKEND_URL}/templs`, printing the binding code returned by the backend.
 
 **Run:** `npx hardhat run scripts/deploy.js --network <network>`
+
+## register-templ.js
+- Registers an existing templ contract with the backend REST API using the priest wallet (requires the priest key in `PRIVATE_KEY`).
+- Supports optional `TELEGRAM_CHAT_ID`/`TEMPL_HOME_LINK` env vars so the initial metadata lands on the backend immediately.
+
+**Run:**
+```bash
+export BACKEND_URL=http://localhost:3001
+export TEMPL_ADDRESS=0x...
+export PRIVATE_KEY=0x...   # priest wallet
+npx hardhat run scripts/register-templ.js --network <network>
+```
 
 ## gen-wallets.js
 - Generates funded Hardhat wallets for local testing and writes them to `wallets.local.json`.

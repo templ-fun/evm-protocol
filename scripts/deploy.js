@@ -30,8 +30,70 @@ function readSplitPercent(label, primaryEnv, fallbackEnv, defaultValue) {
   return { configValue: parsed, resolvedPercent: parsed, usedDefault: false };
 }
 
+async function waitForContractCode(address, provider, attempts = 20, delayMs = 3000) {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const code = await provider.getCode(address);
+    if (code && code !== '0x') {
+      return;
+    }
+    if (attempt === 0) {
+      console.log(`Waiting for on-chain code at ${address} ...`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+  }
+  throw new Error(`Timed out waiting for contract code at ${address}`);
+}
+
+async function registerTemplWithBackend({
+  backendUrl,
+  templAddress,
+  signer,
+  priestAddress,
+  chainId,
+  telegramChatId,
+  templHomeLink
+}) {
+  if (!backendUrl) return null;
+  const baseUrl = backendUrl.replace(/\/$/, '');
+  const { buildCreateTypedData } = await import('../shared/signing.js');
+  const typed = buildCreateTypedData({ chainId, contractAddress: templAddress.toLowerCase() });
+  const signature = await signer.signTypedData(typed.domain, typed.types, typed.message);
+  const payload = {
+    contractAddress: templAddress,
+    priestAddress,
+    signature,
+    chainId,
+    nonce: typed.message.nonce,
+    issuedAt: typed.message.issuedAt,
+    expiry: typed.message.expiry
+  };
+  if (telegramChatId) {
+    payload.telegramChatId = telegramChatId;
+  }
+  if (templHomeLink) {
+    payload.templHomeLink = templHomeLink;
+  }
+
+  const response = await fetch(`${baseUrl}/templs`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    throw new Error(`Backend registration failed (${response.status} ${response.statusText}): ${text}`.trim());
+  }
+  return response.json();
+}
+
 async function main() {
-  const [deployer] = await hre.ethers.getSigners();
+  const signers = await hre.ethers.getSigners();
+  const deployer = signers[0];
+  if (!deployer) {
+    throw new Error(
+      "No Hardhat signer available. Set PRIVATE_KEY in your environment or configure accounts for this network."
+    );
+  }
   const PRIEST_ADDRESS = process.env.PRIEST_ADDRESS || deployer.address;
   const PROTOCOL_FEE_RECIPIENT = process.env.PROTOCOL_FEE_RECIPIENT;
   const TOKEN_ADDRESS = process.env.TOKEN_ADDRESS;
@@ -45,6 +107,10 @@ async function main() {
   const QUORUM_PERCENT = process.env.QUORUM_PERCENT !== undefined ? Number(process.env.QUORUM_PERCENT) : undefined;
   const EXECUTION_DELAY_SECONDS = process.env.EXECUTION_DELAY_SECONDS !== undefined ? Number(process.env.EXECUTION_DELAY_SECONDS) : undefined;
   const BURN_ADDRESS = (process.env.BURN_ADDRESS || '').trim();
+  const MAX_MEMBERS = process.env.MAX_MEMBERS !== undefined ? Number(process.env.MAX_MEMBERS) : 0;
+  const HOME_LINK = process.env.TEMPL_HOME_LINK || "";
+  const BACKEND_URL = (process.env.BACKEND_URL || process.env.TEMPL_BACKEND_URL || '').trim();
+  const TELEGRAM_CHAT_ID = (process.env.TELEGRAM_CHAT_ID || process.env.CHAT_ID || '').trim();
   const PRIEST_IS_DICTATOR = /^(?:1|true)$/i.test((process.env.PRIEST_IS_DICTATOR || '').trim());
 
   if (!TOKEN_ADDRESS) {
@@ -129,6 +195,7 @@ async function main() {
   console.log("Deployer balance:", hre.ethers.formatEther(balance), "ETH");
   
   const network = await hre.ethers.provider.getNetwork();
+  const chainIdNumber = Number(network.chainId);
   console.log("Network Chain ID:", network.chainId.toString());
   console.log("Quorum Percent:", QUORUM_PERCENT ?? 33);
   console.log("Execution Delay (seconds):", EXECUTION_DELAY_SECONDS ?? 7 * 24 * 60 * 60);
@@ -157,6 +224,10 @@ async function main() {
 
   console.log("\nCreating TEMPL via factory...");
   const factoryContract = await hre.ethers.getContractAt("TemplFactory", factoryAddress);
+  if (!Number.isFinite(MAX_MEMBERS) || MAX_MEMBERS < 0) {
+    throw new Error('MAX_MEMBERS must be a non-negative number');
+  }
+
   const templConfig = {
     priest: PRIEST_ADDRESS,
     token: TOKEN_ADDRESS,
@@ -164,22 +235,75 @@ async function main() {
     burnPercent: burnPercent.configValue,
     treasuryPercent: treasuryPercent.configValue,
     memberPoolPercent: memberPoolPercent.configValue,
-    priestIsDictator: PRIEST_IS_DICTATOR
+    quorumPercent: QUORUM_PERCENT ?? 0,
+    executionDelaySeconds: EXECUTION_DELAY_SECONDS ?? 0,
+    burnAddress: BURN_ADDRESS || hre.ethers.ZeroAddress,
+    priestIsDictator: PRIEST_IS_DICTATOR,
+    maxMembers: MAX_MEMBERS,
+    homeLink: HOME_LINK
   };
-  if (QUORUM_PERCENT !== undefined) templConfig.quorumPercent = QUORUM_PERCENT;
-  if (EXECUTION_DELAY_SECONDS !== undefined) templConfig.executionDelaySeconds = EXECUTION_DELAY_SECONDS;
-  if (BURN_ADDRESS) templConfig.burnAddress = BURN_ADDRESS;
   const expectedTempl = await factoryContract.createTemplWithConfig.staticCall(templConfig);
   const createTx = await factoryContract.createTemplWithConfig(templConfig);
   console.log("Factory tx hash:", createTx.hash);
-  await createTx.wait();
+  const receipt = await createTx.wait();
 
-  const contractAddress = expectedTempl;
+  let contractAddress = expectedTempl;
+  try {
+    for (const log of receipt?.logs ?? []) {
+      if ((log.address || '').toLowerCase() !== factoryAddress.toLowerCase()) {
+        continue;
+      }
+      const parsed = factoryContract.interface.parseLog(log);
+      if (parsed?.name === 'TemplCreated' && parsed.args?.templ) {
+        contractAddress = parsed.args.templ;
+        break;
+      }
+    }
+  } catch (err) {
+    console.warn('Warning: could not parse factory logs for templ address:', err);
+  }
+
+  await waitForContractCode(contractAddress, hre.ethers.provider);
   const contract = await hre.ethers.getContractAt("TEMPL", contractAddress);
   
   console.log("✅ Contract deployed to:", contractAddress);
   if (!FACTORY_ADDRESS_ENV) {
     console.log("TemplFactory Transaction hash:", createTx.hash);
+  }
+
+  if (BACKEND_URL) {
+    const signerAddress = deployer.address.toLowerCase();
+    if (signerAddress !== PRIEST_ADDRESS.toLowerCase()) {
+      console.warn(
+        'Skipping backend registration: deployer signer does not match priest address. Use scripts/register-templ.js with the priest key.'
+      );
+    } else {
+      try {
+        console.log(`\nRegistering templ with backend at ${BACKEND_URL} ...`);
+        const registration = await registerTemplWithBackend({
+          backendUrl: BACKEND_URL,
+          templAddress: contractAddress,
+          signer: deployer,
+          priestAddress: PRIEST_ADDRESS,
+          chainId: chainIdNumber,
+          telegramChatId: TELEGRAM_CHAT_ID || undefined,
+          templHomeLink: HOME_LINK
+        });
+        if (registration) {
+          if (registration.bindingCode) {
+            console.log('Backend binding code:', registration.bindingCode);
+          }
+          if (registration.telegramChatId) {
+            console.log('Backend stored chat id:', registration.telegramChatId);
+          }
+          if (registration.templHomeLink) {
+            console.log('Backend templ home link:', registration.templHomeLink);
+          }
+        }
+      } catch (err) {
+        console.error('Backend registration failed:', err?.message || err);
+      }
+    }
   }
   
   const config = await contract.getConfig();
