@@ -75,6 +75,9 @@ export function HomePage({ walletAddress, onConnectWallet, onNavigate, templs, l
                     <tr key={templ.contract} className="bg-white">
                       <td className={table.cell}>
                         <div className={`${text.mono} text-xs`}>{templ.contract}</div>
+                        {templ.priest ? (
+                          <span className="sr-only">Priest: {templ.priest}</span>
+                        ) : null}
                       </td>
                       <td className={table.cell}>
                         <div className="text-sm font-medium text-slate-900">{templ.tokenSymbol}</div>
