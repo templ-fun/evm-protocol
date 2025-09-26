@@ -4,6 +4,11 @@ import { buildJoinTypedData } from '../../../shared/signing.js';
 import { dlog } from './utils.js';
 import { postJson } from './http.js';
 
+/**
+ * Ensures the spender has sufficient allowance for the requested amount.
+ * Nonce management is delegated to the connected wallet/provider to avoid
+ * conflicting overrides across sequential transactions.
+ */
 async function ensureAllowance({ ethers, signer, owner, token, spender, amount, txOptions }) {
   const zero = (ethers?.ZeroAddress ?? '0x0000000000000000000000000000000000000000').toLowerCase();
   if (!token || String(token).toLowerCase() === zero) {
@@ -23,14 +28,7 @@ async function ensureAllowance({ ethers, signer, owner, token, spender, amount, 
   }
   const approval = await erc20.approve(spender, amount, { ...txOptions, value: undefined });
   await approval.wait();
-  const next = { ...txOptions };
-  if (approval?.nonce !== undefined && approval?.nonce !== null) {
-    const raw = typeof approval.nonce === 'bigint' ? Number(approval.nonce) : approval.nonce;
-    if (Number.isFinite(raw)) {
-      next.nonce = raw + 1;
-    }
-  }
-  return next;
+  return { ...txOptions };
 }
 
 export async function purchaseAccess({
