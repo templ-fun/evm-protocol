@@ -3,6 +3,22 @@
 const DEFAULT_SIGNATURE_RETENTION_MS = 6 * 60 * 60 * 1000; // 6 hours
 
 /**
+ * @typedef {{
+ *   bind(...values: Array<string | number | null | undefined>): D1Statement;
+ *   first<T = any>(): Promise<T | null>;
+ *   run(): Promise<{ success?: boolean | undefined, meta?: { changes?: number | null | undefined } | undefined }>;
+ *   all<T = any>(): Promise<{ results: Array<T> }>;
+ * }} D1Statement
+ */
+
+/**
+ * @typedef {{
+ *   prepare(statement: string): D1Statement;
+ *   exec(statement: string): Promise<unknown>;
+ * }} D1Database
+ */
+
+/**
  * Normalise a contract address/string key.
  * @param {string | null | undefined} value
  */
@@ -13,7 +29,7 @@ function normaliseKey(value) {
 /**
  * Create a persistence layer backed by Cloudflare D1.
  * @param {object} opts
- * @param {import('@cloudflare/workers-types').D1Database} opts.d1
+ * @param {D1Database} opts.d1
  * @param {number} [opts.retentionMs]
  */
 export async function createD1Persistence({ d1, retentionMs = DEFAULT_SIGNATURE_RETENTION_MS }) {
@@ -57,6 +73,7 @@ export async function createD1Persistence({ d1, retentionMs = DEFAULT_SIGNATURE_
       const existing = Number(countRow?.count ?? 0);
       if (!existing) {
         const legacyRows = await selectLegacyRowsStmt.all();
+        /** @type {Array<{ contract?: string | null | undefined, groupId?: string | number | null | undefined }>} */
         const rows = Array.isArray(legacyRows?.results) ? legacyRows.results : [];
         for (const row of rows) {
           const contractKey = normaliseKey(row?.contract);
@@ -84,12 +101,14 @@ export async function createD1Persistence({ d1, retentionMs = DEFAULT_SIGNATURE_
 
   async function listBindings() {
     try {
-      const { results = [] } = await listBindingsStmt.all();
+      const { results = [] } =
+        /** @type {{ results?: Array<{ contract?: string | null, telegramChatId?: string | number | null, priest?: string | null, bindingCode?: string | number | null }> }} */
+        (await listBindingsStmt.all());
       return results.map((row) => ({
-        contract: normaliseKey(row.contract),
-        telegramChatId: row.telegramChatId != null ? String(row.telegramChatId) : null,
-        priest: row.priest != null ? normaliseKey(row.priest) : null,
-        bindingCode: row.bindingCode != null ? String(row.bindingCode) : null
+        contract: normaliseKey(row?.contract),
+        telegramChatId: row?.telegramChatId != null ? String(row.telegramChatId) : null,
+        priest: row?.priest != null ? normaliseKey(row.priest) : null,
+        bindingCode: row?.bindingCode != null ? String(row.bindingCode) : null
       }));
     } catch {
       return [];
@@ -100,13 +119,15 @@ export async function createD1Persistence({ d1, retentionMs = DEFAULT_SIGNATURE_
     const key = normaliseKey(contract);
     if (!key) return null;
     try {
-      const row = await findBindingStmt.bind(key).first();
+      const row =
+        /** @type {{ contract?: string | null, telegramChatId?: string | number | null, priest?: string | null, bindingCode?: string | number | null } | null} */
+        (await findBindingStmt.bind(key).first());
       if (!row) return null;
       return {
         contract: key,
-        telegramChatId: row.telegramChatId != null ? String(row.telegramChatId) : null,
-        priest: row.priest != null ? normaliseKey(row.priest) : null,
-        bindingCode: row.bindingCode != null ? String(row.bindingCode) : null
+        telegramChatId: row?.telegramChatId != null ? String(row.telegramChatId) : null,
+        priest: row?.priest != null ? normaliseKey(row.priest) : null,
+        bindingCode: row?.bindingCode != null ? String(row.bindingCode) : null
       };
     } catch {
       return null;
@@ -211,7 +232,7 @@ export function createMemoryPersistence({ retentionMs = DEFAULT_SIGNATURE_RETENT
 /**
  * Resolve the appropriate persistence layer based on the provided options.
  * @param {object} [opts]
- * @param {import('@cloudflare/workers-types').D1Database} [opts.d1]
+ * @param {D1Database} [opts.d1]
  * @param {number} [opts.retentionMs]
  */
 export async function createPersistence(opts = {}) {

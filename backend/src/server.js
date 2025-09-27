@@ -17,6 +17,22 @@ import { ensureTemplFromFactory } from './services/contractValidation.js';
 
 import { createPersistence } from './persistence/index.js';
 
+/**
+ * @typedef {{
+ *   bind(...values: Array<string | number | null | undefined>): D1Statement;
+ *   first<T = any>(): Promise<T | null>;
+ *   run(): Promise<{ success?: boolean | undefined, meta?: { changes?: number | null | undefined } | undefined }>;
+ *   all<T = any>(): Promise<{ results: Array<T> }>;
+ * }} D1Statement
+ */
+
+/**
+ * @typedef {{
+ *   prepare(statement: string): D1Statement;
+ *   exec(statement: string): Promise<unknown>;
+ * }} D1Database
+ */
+
 const TEMPL_EVENT_ABI = [
   'event AccessPurchased(address indexed purchaser,uint256 totalAmount,uint256 burnedAmount,uint256 treasuryAmount,uint256 memberPoolAmount,uint256 protocolAmount,uint256 timestamp,uint256 blockNumber,uint256 purchaseId)',
   'event ProposalCreated(uint256 indexed proposalId,address indexed proposer,uint256 endTime,string title,string description)',
@@ -135,7 +151,21 @@ function updateMetaFromSnapshots(meta, snapshots) {
   if (asNum) meta.quorumReachedAt = asNum;
 }
 
-async function initializePersistence({ persistence, d1, retentionMs } = {}) {
+/**
+ * @param {{
+ *   persistence?: {
+ *     persistBinding?: Function,
+ *     listBindings?: Function,
+ *     findBinding?: Function,
+ *     signatureStore?: { consume?: Function, prune?: Function },
+ *     dispose?: Function
+ *   } | null,
+ *   d1?: D1Database,
+ *   retentionMs?: number
+ * }} [opts]
+ */
+async function initializePersistence(opts = {}) {
+  const { persistence, d1, retentionMs } = opts;
   if (persistence) {
     return persistence;
   }
