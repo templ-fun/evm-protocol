@@ -177,6 +177,8 @@ You can deploy from the CLI or via the frontend. The CLI is convenient for scrip
 
 > **Note:** Express on Workers is powered by the Node.js compatibility layer. It is suitable for production traffic but still labelled beta by Cloudflare—keep Wrangler up to date and review the [Node compatibility documentation](https://developers.cloudflare.com/workers/runtime-apis/node-compatibility/) for the latest caveats.
 
+> **Why Workers + D1?** The backend now targets Cloudflare’s serverless primitives. Workers scale to zero between requests and fan out globally without warmup time, which keeps latency low for communities spread across regions. D1 provides durable storage with the same pay-for-what-you-use billing model, so low-volume templs stay inside the free tier while larger deployments only pay for their actual queries and storage. Because the Express app runs unmodified inside Workers, we avoid bespoke Lambda rewrites and can keep iterating locally with the in-memory adapter before binding a production D1 database.
+
 ### Telegram binding flow
 
 Every templ can expose notifications in a Telegram group. When you register a templ without a chat id, the backend returns a one-time **binding code**. Complete the binding once for each templ:
