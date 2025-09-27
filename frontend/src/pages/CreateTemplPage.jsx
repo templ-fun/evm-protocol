@@ -80,6 +80,27 @@ export function CreateTemplPage({
       onConnectWallet?.();
       return;
     }
+
+    const trimmedEntryFee = entryFee.trim();
+    if (!trimmedEntryFee) {
+      pushMessage?.('Entry fee is required');
+      return;
+    }
+    let parsedEntryFee;
+    try {
+      parsedEntryFee = BigInt(trimmedEntryFee);
+    } catch {
+      pushMessage?.('Entry fee must be a whole number (wei)');
+      return;
+    }
+    if (parsedEntryFee < 10n) {
+      pushMessage?.('Entry fee must be at least 10 wei to satisfy templ requirements');
+      return;
+    }
+    if (parsedEntryFee % 10n !== 0n) {
+      pushMessage?.('Entry fee must be divisible by 10 wei');
+      return;
+    }
     setSubmitting(true);
     pushMessage?.('Deploying templ…');
     try {

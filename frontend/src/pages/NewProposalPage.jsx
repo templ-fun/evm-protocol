@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import templArtifact from '../contracts/TEMPL.json';
 import { fetchGovernanceParameters, proposeVote } from '../services/governance.js';
+import { fetchTemplStats } from '../services/templs.js';
 import { button, form, layout, surface, text } from '../ui/theme.js';
 import { formatDuration } from '../ui/format.js';
 
@@ -165,6 +166,7 @@ export function NewProposalPage({
   const [withdrawRecipient, setWithdrawRecipient] = useState('');
   const [withdrawAmount, setWithdrawAmount] = useState('');
   const [withdrawReason, setWithdrawReason] = useState('');
+  const [withdrawPercent, setWithdrawPercent] = useState(0);
   const [disbandTokenMode, setDisbandTokenMode] = useState('accessToken');
   const [disbandCustomToken, setDisbandCustomToken] = useState('');
   const [updateEntryFee, setUpdateEntryFee] = useState('');
@@ -173,6 +175,13 @@ export function NewProposalPage({
   const [updateTreasuryPercent, setUpdateTreasuryPercent] = useState('');
   const [updateMemberPercent, setUpdateMemberPercent] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [treasurySnapshot, setTreasurySnapshot] = useState({
+    tokenAddress: '',
+    tokenSymbol: '',
+    tokenDecimals: 18,
+    treasuryBalanceRaw: '0',
+    treasuryBalanceFormatted: '0'
+  });
   const [governanceInfo, setGovernanceInfo] = useState({
     defaultVotingPeriod: 7 * 24 * 60 * 60,
     minVotingPeriod: 7 * 24 * 60 * 60,
@@ -187,6 +196,86 @@ export function NewProposalPage({
   const requiresWithdrawal = useMemo(() => proposalType === 'withdrawTreasury', [proposalType]);
   const requiresDisband = useMemo(() => proposalType === 'disbandTreasury', [proposalType]);
   const requiresConfigUpdate = useMemo(() => proposalType === 'updateConfig', [proposalType]);
+
+  const availableTreasuryBalance = useMemo(() => {
+    try {
+      return BigInt(treasurySnapshot.treasuryBalanceRaw || '0');
+    } catch {
+      return 0n;
+    }
+  }, [treasurySnapshot.treasuryBalanceRaw]);
+
+  const treasuryTokenDecimals = treasurySnapshot.tokenDecimals ?? 18;
+  const treasuryTokenSymbol = treasurySnapshot.tokenSymbol || 'tokens';
+
+  const formatTokenAmount = (amount) => {
+    if (!amount) {
+      return '0';
+    }
+    try {
+      return ethers?.formatUnits ? ethers.formatUnits(amount, treasuryTokenDecimals) : amount.toString();
+    } catch {
+      return amount.toString();
+    }
+  };
+
+  const amountFromPercent = useCallback((percent) => {
+    if (availableTreasuryBalance === 0n) {
+      return 0n;
+    }
+    const pct = percent < 0 ? 0 : percent > 100 ? 100 : percent;
+    return (availableTreasuryBalance * BigInt(pct)) / 100n;
+  }, [availableTreasuryBalance]);
+
+  const currentPercentAmount = useMemo(() => amountFromPercent(withdrawPercent), [withdrawPercent, amountFromPercent]);
+  const currentPercentAmountFormatted = formatTokenAmount(currentPercentAmount);
+
+  const handleWithdrawAmountInput = (value) => {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      setWithdrawPercent(0);
+      setWithdrawAmount('');
+      return;
+    }
+    try {
+      let parsed = BigInt(trimmed);
+      if (parsed <= 0n) {
+        setWithdrawPercent(0);
+        setWithdrawAmount('');
+        return;
+      }
+      if (availableTreasuryBalance > 0n && parsed > availableTreasuryBalance) {
+        parsed = availableTreasuryBalance;
+      }
+      setWithdrawAmount(parsed.toString());
+      if (availableTreasuryBalance > 0n) {
+        let percent = Number((parsed * 100n) / availableTreasuryBalance);
+        if (!Number.isFinite(percent)) {
+          percent = 0;
+        }
+        if (percent > 100) percent = 100;
+        if (percent < 0) percent = 0;
+        setWithdrawPercent(percent);
+      } else {
+        setWithdrawPercent(0);
+      }
+    } catch {
+      setWithdrawAmount(trimmed);
+    }
+  };
+
+  const handleWithdrawPercentChange = (value) => {
+    const next = Number(value);
+    if (!Number.isFinite(next)) {
+      setWithdrawPercent(0);
+      setWithdrawAmount('');
+      return;
+    }
+    const clamped = Math.min(Math.max(Math.floor(next), 0), 100);
+    setWithdrawPercent(clamped);
+    const amount = amountFromPercent(clamped);
+    setWithdrawAmount(amount.toString());
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -210,6 +299,39 @@ export function NewProposalPage({
         }
       } catch (err) {
         console.warn('[templ] Failed to load templ governance config', err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [ethers, signer, readProvider, templAddress]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const provider = signer?.provider ?? readProvider;
+    if (!ethers || !provider || !templAddress) {
+      return undefined;
+    }
+    (async () => {
+      try {
+        const stats = await fetchTemplStats({
+          ethers,
+          provider,
+          templAddress
+        });
+        if (!stats || cancelled) {
+          return;
+        }
+        setTreasurySnapshot({
+          tokenAddress: stats.tokenAddress || '',
+          tokenSymbol: stats.tokenSymbol || '',
+          tokenDecimals: stats.tokenDecimals ?? 18,
+          treasuryBalanceRaw: stats.treasuryBalanceRaw || '0',
+          treasuryBalanceFormatted: stats.treasuryBalanceFormatted || '0'
+        });
+        setWithdrawToken((prev) => prev || stats.tokenAddress || '');
+      } catch (err) {
+        console.warn('[templ] Failed to load templ treasury snapshot', err);
       }
     })();
     return () => {
@@ -370,46 +492,82 @@ export function NewProposalPage({
           </label>
         )}
         {requiresWithdrawal && (
-          <div className="grid gap-4 md:grid-cols-2">
-            <label className={form.label}>
-              Withdrawal token (address or "ETH")
-              <input
-                type="text"
-                className={form.input}
-                value={withdrawToken}
-                onChange={(e) => setWithdrawToken(e.target.value.trim())}
-                placeholder="0x… or ETH"
-              />
-            </label>
-            <label className={form.label}>
-              Withdrawal recipient
-              <input
-                type="text"
-                className={form.input}
-                value={withdrawRecipient}
-                onChange={(e) => setWithdrawRecipient(e.target.value.trim())}
-                placeholder="0x…"
-              />
-            </label>
-            <label className={form.label}>
-              Withdrawal amount (wei)
-              <input
-                type="text"
-                className={form.input}
-                value={withdrawAmount}
-                onChange={(e) => setWithdrawAmount(e.target.value.trim())}
-                placeholder="1000000000000000000"
-              />
-            </label>
-            <label className={form.label}>
-              Withdrawal reason
-              <textarea
-                className={`${form.textarea} min-h-[80px]`}
-                value={withdrawReason}
-                onChange={(e) => setWithdrawReason(e.target.value)}
-                placeholder="Explain the withdrawal"
-              />
-            </label>
+          <div className="space-y-4">
+            <div className="rounded-md border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-600">Treasury available</span>
+                <span className="font-semibold text-slate-900">
+                  {treasurySnapshot.treasuryBalanceFormatted} {treasuryTokenSymbol}
+                </span>
+              </div>
+              <div className="mt-4">
+                <div className="flex items-center justify-between text-xs font-medium text-slate-600">
+                  <span>Withdraw percentage</span>
+                  <span>
+                    {withdrawPercent}% · {currentPercentAmountFormatted} {treasuryTokenSymbol}
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="1"
+                  value={withdrawPercent}
+                  onChange={(e) => handleWithdrawPercentChange(e.target.value)}
+                  className="mt-2 w-full accent-primary"
+                  disabled={availableTreasuryBalance === 0n}
+                />
+                {availableTreasuryBalance === 0n && (
+                  <p className="mt-2 text-xs text-slate-500">No treasury balance is currently available to withdraw.</p>
+                )}
+              </div>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <label className={form.label}>
+                Withdrawal token (address or "ETH")
+                <input
+                  type="text"
+                  className={form.input}
+                  value={withdrawToken}
+                  onChange={(e) => setWithdrawToken(e.target.value.trim())}
+                  placeholder="0x… or ETH"
+                />
+                {treasurySnapshot.tokenAddress && (
+                  <span className={text.hint}>
+                    Defaults to {treasurySnapshot.tokenAddress}
+                  </span>
+                )}
+              </label>
+              <label className={form.label}>
+                Withdrawal recipient
+                <input
+                  type="text"
+                  className={form.input}
+                  value={withdrawRecipient}
+                  onChange={(e) => setWithdrawRecipient(e.target.value.trim())}
+                  placeholder="0x…"
+                />
+              </label>
+              <label className={form.label}>
+                Withdrawal amount (wei)
+                <input
+                  type="text"
+                  className={form.input}
+                  value={withdrawAmount}
+                  onChange={(e) => handleWithdrawAmountInput(e.target.value)}
+                  placeholder="1000000000000000000"
+                />
+              </label>
+              <label className={form.label}>
+                Withdrawal reason
+                <textarea
+                  className={`${form.textarea} min-h-[80px]`}
+                  value={withdrawReason}
+                  onChange={(e) => setWithdrawReason(e.target.value)}
+                  placeholder="Explain the withdrawal"
+                />
+              </label>
+            </div>
           </div>
         )}
         {requiresDisband && (
