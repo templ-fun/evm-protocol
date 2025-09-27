@@ -89,7 +89,7 @@ export async function registerTempl(body, context) {
 
   templs.set(contract, stored);
   if (typeof watchContract === 'function') {
-    watchContract(contract, stored);
+    await watchContract(contract, existing);
   }
 
   return {
