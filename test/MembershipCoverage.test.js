@@ -374,4 +374,106 @@ describe("Membership coverage extras", function () {
 
     expect(treasuryAfter - treasuryBefore).to.equal(treasuryPortion + expectedRemainder);
   });
+
+  it("preserves fractional member pool rewards across sequential disbands", async function () {
+    const { templ, token, accounts, priest } = await deployTempl({
+      entryFee: ENTRY_FEE,
+      priestIsDictator: true,
+    });
+    const [, , memberA, memberB, donor] = accounts;
+
+    await mintToUsers(token, [memberA, memberB], ENTRY_FEE * 5n);
+    await purchaseAccess(templ, token, [memberA, memberB]);
+
+    const templAddress = await templ.getAddress();
+    const donations = [
+      ethers.parseUnits("5", 18),
+      ethers.parseUnits("1", 18),
+      ethers.parseUnits("1", 18),
+    ];
+    const members = [priest, memberA, memberB];
+
+    async function drainMemberClaims() {
+      let progress = true;
+      while (progress) {
+        progress = false;
+        for (const member of members) {
+          const claimable = await templ.getClaimablePoolAmount(member.address);
+          if (claimable === 0n) continue;
+          const poolBalance = await templ.memberPoolBalance();
+          const remainder = await templ.memberRewardRemainder();
+          if (poolBalance - remainder < claimable) continue;
+          const balanceBefore = await token.balanceOf(member.address);
+          await templ.connect(member).claimMemberPool();
+          const balanceAfter = await token.balanceOf(member.address);
+          expect(balanceAfter - balanceBefore).to.equal(claimable);
+          progress = true;
+        }
+      }
+    }
+
+    for (const amount of donations) {
+      await token.mint(donor.address, amount);
+      await token.connect(donor).transfer(templAddress, amount);
+      await templ.connect(priest).disbandTreasuryDAO(await token.getAddress());
+      await drainMemberClaims();
+    }
+
+    const memberPool = await templ.memberPoolBalance();
+    const remainder = await templ.memberRewardRemainder();
+    expect(memberPool - remainder).to.equal(0n);
+  });
+
+  it("preserves fractional external rewards across sequential disbands", async function () {
+    const { templ, token, accounts, priest } = await deployTempl({
+      entryFee: ENTRY_FEE,
+      priestIsDictator: true,
+    });
+    const [, , memberA, memberB, donor] = accounts;
+
+    await mintToUsers(token, [memberA, memberB], ENTRY_FEE * 5n);
+    await purchaseAccess(templ, token, [memberA, memberB]);
+
+    const OtherToken = await ethers.getContractFactory("contracts/mocks/TestToken.sol:TestToken");
+    const otherToken = await OtherToken.deploy("Bonus", "BON", 18);
+    await otherToken.waitForDeployment();
+
+    const templAddress = await templ.getAddress();
+    const otherTokenAddress = otherToken.target;
+    const donations = [
+      ethers.parseUnits("5", 18),
+      ethers.parseUnits("1", 18),
+      ethers.parseUnits("1", 18),
+    ];
+    const members = [priest, memberA, memberB];
+
+    async function drainExternalClaims() {
+      let progress = true;
+      while (progress) {
+        progress = false;
+        for (const member of members) {
+          const claimable = await templ.getClaimableExternalToken(member.address, otherTokenAddress);
+          if (claimable === 0n) continue;
+          const state = await templ.getExternalRewardState(otherTokenAddress);
+          const distributable = state[0] - state[2];
+          if (distributable < claimable) continue;
+          const balanceBefore = await otherToken.balanceOf(member.address);
+          await templ.connect(member).claimExternalToken(otherTokenAddress);
+          const balanceAfter = await otherToken.balanceOf(member.address);
+          expect(balanceAfter - balanceBefore).to.equal(claimable);
+          progress = true;
+        }
+      }
+    }
+
+    for (const amount of donations) {
+      await otherToken.mint(donor.address, amount);
+      await otherToken.connect(donor).transfer(templAddress, amount);
+      await templ.connect(priest).disbandTreasuryDAO(otherTokenAddress);
+      await drainExternalClaims();
+    }
+
+    const externalState = await templ.getExternalRewardState(otherTokenAddress);
+    expect(externalState[0] - externalState[2]).to.equal(0n);
+  });
 });

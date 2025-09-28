@@ -126,10 +126,12 @@ abstract contract TemplMembership is TemplBase {
 
         uint256 accrued = cumulativeMemberRewards;
         uint256 snapshot = members[member].rewardSnapshot;
+        uint256 dust = memberRewardDust[member];
         if (accrued <= snapshot) {
-            return 0;
+            return dust / REWARD_SCALE;
         }
-        return (accrued - snapshot) / REWARD_SCALE;
+        uint256 total = (accrued - snapshot) + dust;
+        return total / REWARD_SCALE;
     }
 
     /// @notice Lists ERC-20 (or ETH) reward tokens with active external pools.
@@ -172,20 +174,31 @@ abstract contract TemplMembership is TemplBase {
         if (snapshot < baseline) {
             snapshot = baseline;
         }
+        uint256 dust = memberExternalRewardDust[member][token];
         if (accrued <= snapshot) {
-            return 0;
+            return dust / REWARD_SCALE;
         }
-        return (accrued - snapshot) / REWARD_SCALE;
+        uint256 total = (accrued - snapshot) + dust;
+        return total / REWARD_SCALE;
     }
 
     /// @notice Claims the caller's accrued share of the member pool.
     function claimMemberPool() external onlyMember nonReentrant {
-        uint256 claimableAmount = getClaimablePoolAmount(msg.sender);
+        Member storage memberInfo = members[msg.sender];
+        uint256 accrued = cumulativeMemberRewards;
+        uint256 snapshot = memberInfo.rewardSnapshot;
+        uint256 dust = memberRewardDust[msg.sender];
+        uint256 total = dust;
+        if (accrued > snapshot) {
+            total += accrued - snapshot;
+        }
+        uint256 claimableAmount = total / REWARD_SCALE;
         if (claimableAmount == 0) revert TemplErrors.NoRewardsToClaim();
         uint256 distributableBalance = memberPoolBalance - memberRewardRemainder;
         if (distributableBalance < claimableAmount) revert TemplErrors.InsufficientPoolBalance();
 
-        members[msg.sender].rewardSnapshot = cumulativeMemberRewards;
+        memberInfo.rewardSnapshot = accrued;
+        memberRewardDust[msg.sender] = total % REWARD_SCALE;
         memberPoolClaims[msg.sender] += claimableAmount;
         memberPoolBalance -= claimableAmount;
 
@@ -201,14 +214,27 @@ abstract contract TemplMembership is TemplBase {
         ExternalRewardState storage rewards = externalRewards[token];
         if (!rewards.exists) revert TemplErrors.NoRewardsToClaim();
 
-        uint256 claimable = getClaimableExternalToken(msg.sender, token);
+        Member storage memberInfo = members[msg.sender];
+        uint256 accrued = rewards.cumulativeRewards;
+        uint256 baseline = _externalBaselineForMember(rewards, memberInfo);
+        uint256 snapshot = memberExternalRewardSnapshots[msg.sender][token];
+        if (snapshot < baseline) {
+            snapshot = baseline;
+        }
+        uint256 dust = memberExternalRewardDust[msg.sender][token];
+        uint256 total = dust;
+        if (accrued > snapshot) {
+            total += accrued - snapshot;
+        }
+        uint256 claimable = total / REWARD_SCALE;
         if (claimable == 0) revert TemplErrors.NoRewardsToClaim();
 
         uint256 remaining = rewards.poolBalance;
         uint256 distributable = remaining - rewards.rewardRemainder;
         if (distributable < claimable) revert TemplErrors.InsufficientPoolBalance();
 
-        memberExternalRewardSnapshots[msg.sender][token] = rewards.cumulativeRewards;
+        memberExternalRewardSnapshots[msg.sender][token] = accrued;
+        memberExternalRewardDust[msg.sender][token] = total % REWARD_SCALE;
         memberExternalClaims[msg.sender][token] += claimable;
         rewards.poolBalance = remaining - claimable;
 

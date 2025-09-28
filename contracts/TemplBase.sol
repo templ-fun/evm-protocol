@@ -79,6 +79,8 @@ abstract contract TemplBase is ReentrancyGuard {
     mapping(address => Member) public members;
     address[] public memberList;
     mapping(address => uint256) public memberPoolClaims;
+    /// @notice Fractional reward dust retained per member across member-pool claims.
+    mapping(address => uint256) internal memberRewardDust;
     /// @notice Aggregate rewards per member scaled by REWARD_SCALE for on-chain snapshotting.
     uint256 public cumulativeMemberRewards;
     /// @notice Reward dust retained to preserve exact accounting when rounding per-share payouts.
@@ -241,6 +243,8 @@ abstract contract TemplBase is ReentrancyGuard {
     address[] internal externalRewardTokens;
     /// @notice Member snapshots for each external reward token.
     mapping(address => mapping(address => uint256)) internal memberExternalRewardSnapshots;
+    /// @notice Fractional reward dust tracked per member for each external reward token.
+    mapping(address => mapping(address => uint256)) internal memberExternalRewardDust;
     /// @notice Cumulative amounts each member has claimed per external reward token.
     mapping(address => mapping(address => uint256)) internal memberExternalClaims;
 
