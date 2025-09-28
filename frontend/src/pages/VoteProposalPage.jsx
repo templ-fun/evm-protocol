@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import templArtifact from '../contracts/TEMPL.json';
 import { voteOnProposal } from '../services/governance.js';
-import { button, form, layout, surface } from '../ui/theme.js';
+import { button, form, layout, surface, text } from '../ui/theme.js';
 
 export function VoteProposalPage({
   ethers,
@@ -42,37 +42,51 @@ export function VoteProposalPage({
   return (
     <div className={layout.page}>
       <header className={layout.header}>
-        <h1 className="text-3xl font-semibold tracking-tight">Vote on Proposal</h1>
+        <div className="space-y-2">
+          <h1 className="text-3xl font-semibold tracking-tight">Vote on proposal</h1>
+          <p className="text-sm text-slate-600">
+            Review the options below and confirm your vote. Your choice is recorded on-chain and cannot be changed after
+            submission.
+          </p>
+        </div>
         <span className={surface.pill}>Templ {templAddress}</span>
       </header>
-      <form className={`${layout.card} flex flex-col gap-4`} onSubmit={handleSubmit}>
-        <p className="text-sm text-slate-600">Proposal #{proposalId}</p>
-        <label className={form.radio}>
-          <input
-            type="radio"
-            name="support"
-            value="yes"
-            className="h-4 w-4 border-slate-300 text-primary focus:ring-primary"
-            checked={support === 'yes'}
-            onChange={(e) => setSupport(e.target.value)}
-          />
-          Yes
-        </label>
-        <label className={form.radio}>
-          <input
-            type="radio"
-            name="support"
-            value="no"
-            className="h-4 w-4 border-slate-300 text-primary focus:ring-primary"
-            checked={support === 'no'}
-            onChange={(e) => setSupport(e.target.value)}
-          />
-          No
-        </label>
-        <button type="submit" className={button.primary} disabled={pending}>
-          {pending ? 'Submitting…' : 'Submit vote'}
-        </button>
-      </form>
+      <section className={`${layout.card} space-y-4`}>
+        <div className="space-y-1 text-sm text-slate-600">
+          <p>Proposal #{proposalId}</p>
+          <p className={text.hint}>Connect your wallet if the vote buttons are disabled.</p>
+        </div>
+        <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
+          <label className={form.radio}>
+            <input
+              type="radio"
+              name="support"
+              value="yes"
+              className="h-4 w-4 border-slate-300 text-primary focus:ring-primary"
+              checked={support === 'yes'}
+              onChange={(e) => setSupport(e.target.value)}
+            />
+            Support (YES)
+          </label>
+          <label className={form.radio}>
+            <input
+              type="radio"
+              name="support"
+              value="no"
+              className="h-4 w-4 border-slate-300 text-primary focus:ring-primary"
+              checked={support === 'no'}
+              onChange={(e) => setSupport(e.target.value)}
+            />
+            Oppose (NO)
+          </label>
+          <div className="flex flex-wrap items-center gap-3">
+            <button type="submit" className={button.primary} disabled={pending}>
+              {pending ? 'Submitting…' : 'Submit vote'}
+            </button>
+            <span className={text.hint}>A transaction window will appear in your wallet.</span>
+          </div>
+        </form>
+      </section>
     </div>
   );
 }

@@ -155,6 +155,28 @@ export function buildActionConfig(kind, params, helpers = {}) {
   }
 }
 
+function SummaryTile({ label, value, hint }) {
+  return (
+    <div className="flex flex-col gap-1 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
+      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</span>
+      <span className="text-base font-semibold text-slate-900">{value}</span>
+      {hint ? <span className={text.hint}>{hint}</span> : null}
+    </div>
+  );
+}
+
+function FormSection({ title, description, children }) {
+  return (
+    <section className="space-y-4 rounded-2xl border border-slate-200/70 bg-slate-50/60 p-4">
+      <div className="space-y-1">
+        <h3 className="text-base font-semibold text-slate-900">{title}</h3>
+        {description ? <p className="text-sm text-slate-600">{description}</p> : null}
+      </div>
+      <div className="flex flex-col gap-4">{children}</div>
+    </section>
+  );
+}
+
 export function NewProposalPage({
   ethers,
   signer,
@@ -420,291 +442,308 @@ export function NewProposalPage({
   return (
     <div className={layout.page}>
       <header className={layout.header}>
-        <h1 className="text-3xl font-semibold tracking-tight">New Proposal</h1>
+        <div className="space-y-2">
+          <h1 className="text-3xl font-semibold tracking-tight">Create a proposal</h1>
+          <p className="max-w-2xl text-sm text-slate-600">
+            Outline the change, supply any required parameters, and choose a voting window that gives members enough time to respond.
+          </p>
+        </div>
         <span className={surface.pill}>Templ {templAddress}</span>
       </header>
-      <section className={`${layout.card} space-y-3 text-sm text-slate-700`}>
-        <h2 className="text-base font-semibold text-slate-900">Governance basics</h2>
-        <p>
-          Quorum is satisfied when YES votes represent at least{' '}
-          <strong>{governanceInfo.quorumPercent}%</strong> of the eligible members captured when the proposal was
-          created. Once quorum is achieved, the proposal waits{' '}
-          <strong>{formatDuration(governanceInfo.executionDelay)}</strong> before it can be executed, provided YES votes
-          still outnumber NO votes.
-        </p>
-        <p className={text.subtle}>
-          Leaving the voting period blank or setting it to 0 seconds will use the templ default of{' '}
-          <strong>
-            {governanceInfo.defaultVotingPeriod} seconds ({formatDuration(governanceInfo.defaultVotingPeriod)})
-          </strong>
-          . Voting windows must be at least{' '}
-          <strong>
-            {governanceInfo.minVotingPeriod} seconds ({formatDuration(governanceInfo.minVotingPeriod)})
-          </strong>{' '}
-          and no longer than{' '}
-          <strong>
-            {governanceInfo.maxVotingPeriod} seconds ({formatDuration(governanceInfo.maxVotingPeriod)})
-          </strong>
-          .
+      <section className={`${layout.card} space-y-4`}>
+        <div className={layout.sectionHeader}>
+          <div>
+            <h2 className="text-xl font-semibold text-slate-900">Governance snapshot</h2>
+            <p className={text.hint}>These values come directly from the templ contract.</p>
+          </div>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <SummaryTile label="Quorum requirement" value={`${governanceInfo.quorumPercent}%`} hint="Minimum YES voting power" />
+          <SummaryTile label="Execution delay" value={formatDuration(governanceInfo.executionDelay)} hint="Wait before execution" />
+          <SummaryTile
+            label="Voting window range"
+            value={`${formatDuration(governanceInfo.minVotingPeriod)} – ${formatDuration(governanceInfo.maxVotingPeriod)}`}
+            hint="Allowed minimum and maximum voting periods"
+          />
+        </div>
+        <p className={text.hint}>
+          Leave the voting period blank to use the default of {governanceInfo.defaultVotingPeriod} seconds ({formatDuration(governanceInfo.defaultVotingPeriod)}).
         </p>
       </section>
-      <form className={`${layout.card} flex flex-col gap-4`} onSubmit={handleSubmit}>
-        <label className={form.label}>
-          Title
-          <input
-            type="text"
-            className={form.input}
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Short summary"
-          />
-        </label>
-        <label className={form.label}>
-          Description
-          <textarea
-            className={`${form.textarea} min-h-[120px]`}
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Explain the proposal"
-          />
-        </label>
-        <label className={form.label}>
-          Proposal type
-          <select
-            className={`${form.input} appearance-none`}
-            value={proposalType}
-            onChange={(e) => setProposalType(e.target.value)}
-          >
-            {ACTIONS.map((option) => (
-              <option key={option.value} value={option.value}>{option.label}</option>
-            ))}
-          </select>
-        </label>
-        {requiresPriest && (
+      <form className={`${layout.card} space-y-6`} onSubmit={handleSubmit}>
+        <FormSection
+          title="Proposal basics"
+          description="Give members context so the change is easy to evaluate."
+        >
           <label className={form.label}>
-            New priest address
+            Title
             <input
               type="text"
               className={form.input}
-              value={newPriest}
-              onChange={(e) => setNewPriest(e.target.value.trim())}
-              placeholder="0x…"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Short summary"
             />
           </label>
-        )}
-        {requiresMaxMembers && (
           <label className={form.label}>
-            Max members
-            <input
-              type="text"
-              className={form.input}
-              value={maxMembers}
-              onChange={(e) => setMaxMembers(e.target.value.trim())}
-              placeholder="0 for unlimited"
+            Description
+            <textarea
+              className={`${form.textarea} min-h-[120px]`}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Explain the motivation, impact, and any risks"
             />
           </label>
-        )}
-        {requiresHomeLink && (
           <label className={form.label}>
-            New home link
-            <input
-              type="text"
-              className={form.input}
-              value={homeLink}
-              onChange={(e) => setHomeLink(e.target.value.trim())}
-              placeholder="https://t.me/..."
-            />
+            Proposal type
+            <select
+              className={`${form.input} appearance-none`}
+              value={proposalType}
+              onChange={(e) => setProposalType(e.target.value)}
+            >
+              {ACTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
           </label>
-        )}
-        {requiresWithdrawal && (
-          <div className="space-y-4">
-            <div className="rounded-md border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+        </FormSection>
+        <FormSection
+          title="Action configuration"
+          description="Provide the inputs required for the selected action."
+        >
+          {requiresPriest && (
+            <label className={form.label}>
+              New priest address
+              <input
+                type="text"
+                className={form.input}
+                value={newPriest}
+                onChange={(e) => setNewPriest(e.target.value.trim())}
+                placeholder="0x…"
+              />
+            </label>
+          )}
+          {requiresMaxMembers && (
+            <label className={form.label}>
+              Max members
+              <input
+                type="text"
+                className={form.input}
+                value={maxMembers}
+                onChange={(e) => setMaxMembers(e.target.value.trim())}
+                placeholder="0 for unlimited"
+              />
+            </label>
+          )}
+          {requiresHomeLink && (
+            <label className={form.label}>
+              New home link
+              <input
+                type="text"
+                className={form.input}
+                value={homeLink}
+                onChange={(e) => setHomeLink(e.target.value.trim())}
+                placeholder="https://t.me/..."
+              />
+            </label>
+          )}
+          {requiresWithdrawal && (
+            <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
               <div className="flex items-center justify-between">
-                <span className="text-slate-600">Treasury available</span>
+                <span className="text-sm font-medium text-slate-600">Treasury available</span>
                 <span className="font-semibold text-slate-900">
                   {treasurySnapshot.treasuryBalanceFormatted} {treasuryTokenSymbol}
                 </span>
               </div>
-              <div className="mt-4">
-                <div className="flex items-center justify-between text-xs font-medium text-slate-600">
-                  <span>Withdraw percentage</span>
-                  <span>
-                    {withdrawPercent}% · {currentPercentAmountFormatted} {treasuryTokenSymbol}
+              <div className="space-y-3">
+                <label className={form.label}>
+                  Withdrawal token (address or "ETH")
+                  <input
+                    type="text"
+                    className={form.input}
+                    value={withdrawToken}
+                    onChange={(e) => setWithdrawToken(e.target.value.trim())}
+                    placeholder="0x… or ETH"
+                  />
+                  {treasurySnapshot.tokenAddress && (
+                    <span className={text.hint}>Access token: {treasurySnapshot.tokenAddress}</span>
+                  )}
+                </label>
+                <label className={form.label}>
+                  Recipient address
+                  <input
+                    type="text"
+                    className={form.input}
+                    value={withdrawRecipient}
+                    onChange={(e) => setWithdrawRecipient(e.target.value.trim())}
+                    placeholder="0x…"
+                  />
+                </label>
+                <label className={form.label}>
+                  Withdrawal amount (wei)
+                  <input
+                    type="text"
+                    className={form.input}
+                    value={withdrawAmount}
+                    onChange={(e) => handleWithdrawAmountInput(e.target.value)}
+                    placeholder="Raw units"
+                  />
+                  <span className={text.hint}>
+                    Use the slider to estimate an amount based on current treasury balance.
                   </span>
+                </label>
+                <div>
+                  <div className="flex items-center justify-between text-xs font-medium text-slate-600">
+                    <span>Percent of treasury</span>
+                    <span>{withdrawPercent}% · {currentPercentAmountFormatted} {treasuryTokenSymbol}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="1"
+                    value={withdrawPercent}
+                    onChange={(e) => handleWithdrawPercentChange(e.target.value)}
+                    className="mt-2 w-full accent-primary"
+                    disabled={availableTreasuryBalance === 0n}
+                  />
+                  {availableTreasuryBalance === 0n && (
+                    <p className="mt-2 text-xs text-slate-500">No treasury balance is currently available to withdraw.</p>
+                  )}
                 </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  step="1"
-                  value={withdrawPercent}
-                  onChange={(e) => handleWithdrawPercentChange(e.target.value)}
-                  className="mt-2 w-full accent-primary"
-                  disabled={availableTreasuryBalance === 0n}
-                />
-                {availableTreasuryBalance === 0n && (
-                  <p className="mt-2 text-xs text-slate-500">No treasury balance is currently available to withdraw.</p>
-                )}
+                <label className={form.label}>
+                  Reason (optional)
+                  <textarea
+                    className={`${form.textarea} min-h-[80px]`}
+                    value={withdrawReason}
+                    onChange={(e) => setWithdrawReason(e.target.value)}
+                    placeholder="Explain why funds are being moved"
+                  />
+                </label>
               </div>
             </div>
+          )}
+          {requiresDisband && (
             <div className="grid gap-4 md:grid-cols-2">
               <label className={form.label}>
-                Withdrawal token (address or "ETH")
-                <input
-                  type="text"
-                  className={form.input}
-                  value={withdrawToken}
-                  onChange={(e) => setWithdrawToken(e.target.value.trim())}
-                  placeholder="0x… or ETH"
-                />
-                {treasurySnapshot.tokenAddress && (
-                  <span className={text.hint}>
-                    Defaults to {treasurySnapshot.tokenAddress}
-                  </span>
-                )}
+                Treasury token source
+                <select
+                  className={`${form.input} appearance-none`}
+                  value={disbandTokenMode}
+                  onChange={(e) => setDisbandTokenMode(e.target.value)}
+                >
+                  <option value="accessToken">Use templ access token</option>
+                  <option value="eth">Native ETH</option>
+                  <option value="custom">Custom token address</option>
+                </select>
               </label>
-              <label className={form.label}>
-                Withdrawal recipient
-                <input
-                  type="text"
-                  className={form.input}
-                  value={withdrawRecipient}
-                  onChange={(e) => setWithdrawRecipient(e.target.value.trim())}
-                  placeholder="0x…"
-                />
-              </label>
-              <label className={form.label}>
-                Withdrawal amount (wei)
-                <input
-                  type="text"
-                  className={form.input}
-                  value={withdrawAmount}
-                  onChange={(e) => handleWithdrawAmountInput(e.target.value)}
-                  placeholder="1000000000000000000"
-                />
-              </label>
-              <label className={form.label}>
-                Withdrawal reason
-                <textarea
-                  className={`${form.textarea} min-h-[80px]`}
-                  value={withdrawReason}
-                  onChange={(e) => setWithdrawReason(e.target.value)}
-                  placeholder="Explain the withdrawal"
-                />
-              </label>
+              {disbandTokenMode === 'custom' && (
+                <label className={form.label}>
+                  Custom token address
+                  <input
+                    type="text"
+                    className={form.input}
+                    value={disbandCustomToken}
+                    onChange={(e) => setDisbandCustomToken(e.target.value.trim())}
+                    placeholder="0x…"
+                  />
+                </label>
+              )}
             </div>
-          </div>
-        )}
-        {requiresDisband && (
-          <div className="grid gap-4 md:grid-cols-2">
-            <label className={form.label}>
-              Treasury token source
-              <select
-                className={`${form.input} appearance-none`}
-                value={disbandTokenMode}
-                onChange={(e) => setDisbandTokenMode(e.target.value)}
-              >
-                <option value="accessToken">Use templ access token</option>
-                <option value="eth">Native ETH</option>
-                <option value="custom">Custom token address</option>
-              </select>
-            </label>
-            {disbandTokenMode === 'custom' && (
+          )}
+          {requiresConfigUpdate && (
+            <div className="space-y-4">
               <label className={form.label}>
-                Custom token address
+                New entry fee (wei)
                 <input
                   type="text"
                   className={form.input}
-                  value={disbandCustomToken}
-                  onChange={(e) => setDisbandCustomToken(e.target.value.trim())}
-                  placeholder="0x…"
+                  value={updateEntryFee}
+                  onChange={(e) => setUpdateEntryFee(e.target.value.trim())}
+                  placeholder="Leave blank to keep current fee"
                 />
               </label>
-            )}
-          </div>
-        )}
-        {requiresConfigUpdate && (
-          <div className="space-y-4">
-            <label className={form.label}>
-              New entry fee (wei)
-              <input
-                type="text"
-                className={form.input}
-                value={updateEntryFee}
-                onChange={(e) => setUpdateEntryFee(e.target.value.trim())}
-                placeholder="Leave blank to keep current fee"
-              />
-            </label>
-            <label className={form.checkbox}>
-              <input
-                type="checkbox"
-                className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-                checked={updateFeeSplit}
-                onChange={(e) => setUpdateFeeSplit(e.target.checked)}
-              />
-              Update fee split
-            </label>
-            {updateFeeSplit && (
-              <div className="grid gap-4 sm:grid-cols-3">
-                <label className={form.label}>
-                  Burn percent
-                  <input
-                    type="number"
-                    min="0"
-                    max="100"
-                    className={form.input}
-                    value={updateBurnPercent}
-                    onChange={(e) => setUpdateBurnPercent(e.target.value)}
-                  />
-                </label>
-                <label className={form.label}>
-                  Treasury percent
-                  <input
-                    type="number"
-                    min="0"
-                    max="100"
-                    className={form.input}
-                    value={updateTreasuryPercent}
-                    onChange={(e) => setUpdateTreasuryPercent(e.target.value)}
-                  />
-                </label>
-                <label className={form.label}>
-                  Member pool percent
-                  <input
-                    type="number"
-                    min="0"
-                    max="100"
-                    className={form.input}
-                    value={updateMemberPercent}
-                    onChange={(e) => setUpdateMemberPercent(e.target.value)}
-                  />
-                </label>
-              </div>
-            )}
-            {updateFeeSplit && (
-              <p className={text.hint}>
-                Burn + treasury + member pool must total {feeSplitTarget}%
-                {protocolPercentNumber !== null ? ` (protocol keeps ${protocolPercentNumber}%)` : ''}.
-              </p>
-            )}
-          </div>
-        )}
-        <label className={form.label}>
-          Voting period (seconds)
-          <input
-            type="number"
-            min="0"
-            className={form.input}
-            value={votingPeriod}
-            onChange={(e) => setVotingPeriod(e.target.value)}
-          />
-          <span className={text.hint}>
-            Enter 0 to fall back to {governanceInfo.defaultVotingPeriod} seconds ({formatDuration(governanceInfo.defaultVotingPeriod)}).
-          </span>
-        </label>
-        <button type="submit" className={button.primary} disabled={submitting}>
-          {submitting ? 'Submitting…' : 'Create proposal'}
-        </button>
+              <label className={form.checkbox}>
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                  checked={updateFeeSplit}
+                  onChange={(e) => setUpdateFeeSplit(e.target.checked)}
+                />
+                Update fee split
+              </label>
+              {updateFeeSplit && (
+                <>
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    <label className={form.label}>
+                      Burn percent
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        className={form.input}
+                        value={updateBurnPercent}
+                        onChange={(e) => setUpdateBurnPercent(e.target.value)}
+                      />
+                    </label>
+                    <label className={form.label}>
+                      Treasury percent
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        className={form.input}
+                        value={updateTreasuryPercent}
+                        onChange={(e) => setUpdateTreasuryPercent(e.target.value)}
+                      />
+                    </label>
+                    <label className={form.label}>
+                      Member pool percent
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        className={form.input}
+                        value={updateMemberPercent}
+                        onChange={(e) => setUpdateMemberPercent(e.target.value)}
+                      />
+                    </label>
+                  </div>
+                  <p className={text.hint}>
+                    Burn + treasury + member pool must total {feeSplitTarget}%{protocolPercentNumber !== null ? ` (protocol keeps ${protocolPercentNumber}%)` : ''}.
+                  </p>
+                </>
+              )}
+            </div>
+          )}
+          {!(requiresPriest || requiresMaxMembers || requiresHomeLink || requiresWithdrawal || requiresDisband || requiresConfigUpdate) && (
+            <p className={text.hint}>No additional parameters required for this proposal type.</p>
+          )}
+        </FormSection>
+        <FormSection
+          title="Voting schedule"
+          description="Choose how long members have to vote before the proposal closes."
+        >
+          <label className={form.label}>
+            Voting period (seconds)
+            <input
+              type="number"
+              min="0"
+              className={form.input}
+              value={votingPeriod}
+              onChange={(e) => setVotingPeriod(e.target.value)}
+            />
+            <span className={text.hint}>
+              Enter 0 to fall back to the default of {governanceInfo.defaultVotingPeriod} seconds ({formatDuration(governanceInfo.defaultVotingPeriod)}).
+            </span>
+          </label>
+        </FormSection>
+        <div className="flex flex-wrap items-center gap-3">
+          <button type="submit" className={button.primary} disabled={submitting}>
+            {submitting ? 'Submitting…' : 'Create proposal'}
+          </button>
+          <span className={text.hint}>Your connected wallet will sign the transaction.</span>
+        </div>
       </form>
     </div>
   );

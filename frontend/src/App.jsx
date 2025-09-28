@@ -332,11 +332,25 @@ export default function App() {
 
   return (
     <div className={layout.appShell}>
-      <nav className="flex flex-wrap items-center gap-3 bg-slate-900 px-6 py-3">
-        <button type="button" className={button.nav} onClick={() => navigate('/')}>Home</button>
-        <button type="button" className={button.nav} onClick={() => navigate('/templs/create')}>Create</button>
-        <button type="button" className={button.nav} onClick={() => navigate('/templs/join')}>Join</button>
-      </nav>
+      <header className="bg-slate-900 text-white">
+        <div className="mx-auto flex w-full max-w-5xl flex-col gap-3 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-1">
+            <button
+              type="button"
+              className="text-left text-lg font-semibold tracking-tight text-white hover:text-white/80 focus:outline-none"
+              onClick={() => navigate('/')}
+            >
+              templ.fun console
+            </button>
+            <p className="text-xs text-white/70">Operate templ communities with confidence.</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" className={button.nav} onClick={() => navigate('/')}>Dashboard</button>
+            <button type="button" className={button.nav} onClick={() => navigate('/templs/create')}>Create templ</button>
+            <button type="button" className={button.nav} onClick={() => navigate('/templs/join')}>Join templ</button>
+          </div>
+        </div>
+      </header>
       <main className={layout.main}>
         <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading…</div>}>
           {renderRoute()}

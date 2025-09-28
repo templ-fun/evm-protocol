@@ -2,7 +2,16 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { sanitizeLink } from '../../../shared/linkSanitizer.js';
 import templArtifact from '../contracts/TEMPL.json';
 import { approveEntryFee, loadEntryRequirements, purchaseAccess, verifyMembership } from '../services/membership.js';
-import { button, form, layout, text } from '../ui/theme.js';
+import { button, form, layout, surface, text } from '../ui/theme.js';
+
+function DetailRow({ label, value, emphasis }) {
+  return (
+    <div className="flex items-center justify-between gap-4 text-sm">
+      <dt className="text-slate-600">{label}</dt>
+      <dd className={`font-mono text-xs ${emphasis || 'text-slate-800'}`}>{value}</dd>
+    </div>
+  );
+}
 
 export function JoinTemplPage({
   ethers,
@@ -198,12 +207,30 @@ export function JoinTemplPage({
     }
   };
 
+  const sanitizedTemplLink = sanitizeLink(templRecord?.templHomeLink);
+
   return (
     <div className={layout.page}>
       <header className={layout.header}>
-        <h1 className="text-3xl font-semibold tracking-tight">Join a Templ</h1>
+        <div className="space-y-2">
+          <h1 className="text-3xl font-semibold tracking-tight">Join a templ</h1>
+          <p className="max-w-2xl text-sm text-slate-600">
+            Confirm the templ address, review the entry requirements, then approve and purchase access. If you already joined,
+            use the verification step to check your membership status.
+          </p>
+        </div>
+        {hasWallet ? null : (
+          <button type="button" className={button.primary} onClick={onConnectWallet}>
+            Connect wallet
+          </button>
+        )}
       </header>
-      <section className={`${layout.card} flex flex-col gap-4`}>
+
+      <section className={`${layout.card} space-y-4`}>
+        <div className={layout.sectionHeader}>
+          <h2 className="text-xl font-semibold text-slate-900">Step 1 · Identify the templ</h2>
+          {templRecord ? <span className={surface.pill}>Known templ</span> : null}
+        </div>
         <label className={form.label}>
           Templ address
           <input
@@ -213,15 +240,70 @@ export function JoinTemplPage({
             onChange={(e) => setTemplAddress(e.target.value.trim())}
             placeholder="0x…"
           />
+          <span className={text.hint}>Paste the contract address shared by the templ priest.</span>
         </label>
-        <div className={layout.cardActions}>
+        <div className={`${layout.cardActions} justify-between`}>
+          <div className="text-xs text-slate-500">
+            {templRecord ? 'Loaded details from the templ registry.' : 'Enter a full 42-character Ethereum address.'}
+          </div>
+          <button type="button" className={button.muted} onClick={refreshEntryInfo} disabled={loadingEntry}>
+            {loadingEntry ? 'Refreshing…' : 'Check entry details'}
+          </button>
+        </div>
+        {sanitizedTemplLink.text ? (
+          <p className={text.hint}>
+            Home link:{' '}
+            {sanitizedTemplLink.href ? (
+              <a className="text-primary underline" href={sanitizedTemplLink.href} target="_blank" rel="noreferrer">
+                {sanitizedTemplLink.text}
+              </a>
+            ) : (
+              sanitizedTemplLink.text
+            )}
+          </p>
+        ) : null}
+      </section>
+
+      <section className={`${layout.card} space-y-4`}>
+        <div className={layout.sectionHeader}>
+          <h2 className="text-xl font-semibold text-slate-900">Step 2 · Review entry requirements</h2>
+          {loadingEntry ? <span className={text.hint}>Fetching token allowances…</span> : null}
+        </div>
+        {(templRecord || entryInfo) ? (
+          <dl className="space-y-3 rounded-2xl bg-slate-50 px-4 py-3">
+            <DetailRow label="Access token" value={tokenAddress || 'Unknown'} />
+            <DetailRow label="Entry fee" value={entryFeeDisplay} />
+            {allowanceDisplay ? (
+              <DetailRow
+                label="Approved allowance"
+                value={allowanceDisplay}
+                emphasis={allowanceSatisfied ? 'text-emerald-600' : 'text-amber-600'}
+              />
+            ) : null}
+            {balanceDisplay ? <DetailRow label="Wallet balance" value={balanceDisplay} /> : null}
+          </dl>
+        ) : (
+          <p className="text-sm text-slate-600">Enter a templ address above to load the entry configuration.</p>
+        )}
+        <p className={text.hint}>
+          Allowances must cover the entire entry fee. Approve first, then purchase access. Both actions require wallet
+          confirmation.
+        </p>
+      </section>
+
+      <section className={`${layout.card} space-y-4`}>
+        <div className={layout.sectionHeader}>
+          <h2 className="text-xl font-semibold text-slate-900">Step 3 · Join and verify</h2>
+          {!hasWallet ? <span className={text.hint}>Connect a wallet to enable the buttons</span> : null}
+        </div>
+        <div className={`${layout.cardActions} flex-wrap`}>
           <button
             type="button"
             className={button.base}
             onClick={handleApprove}
             disabled={approvePending || purchasePending || !templAddress || !hasWallet || !entryFeeWei || allowanceSatisfied}
           >
-            {approvePending ? 'Approving…' : 'Approve entry fee'}
+            {approvePending ? 'Approving…' : allowanceSatisfied ? 'Allowance ready' : 'Approve entry fee'}
           </button>
           <button
             type="button"
@@ -229,7 +311,7 @@ export function JoinTemplPage({
             onClick={handlePurchase}
             disabled={purchasePending || !templAddress || !hasWallet || !allowanceSatisfied}
           >
-            {purchasePending ? 'Purchasing…' : 'Purchase Access'}
+            {purchasePending ? 'Purchasing…' : 'Purchase access'}
           </button>
           <button
             type="button"
@@ -237,41 +319,21 @@ export function JoinTemplPage({
             onClick={handleVerify}
             disabled={purchasePending || approvePending || !templAddress}
           >
-            Verify Membership
+            Verify membership
           </button>
         </div>
-        {(templRecord || entryInfo) && (
-          <dl className="grid gap-2 rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-700">
-            <div className="flex items-center justify-between gap-4">
-              <dt className="font-medium text-slate-600">Access token</dt>
-              <dd className="font-mono text-xs text-slate-800">{tokenAddress || 'Unknown'}</dd>
-            </div>
-            <div className="flex items-center justify-between gap-4">
-              <dt className="font-medium text-slate-600">Entry fee</dt>
-              <dd className="font-mono text-xs text-slate-800">{entryFeeDisplay}</dd>
-            </div>
-            {allowanceDisplay && (
-              <div className="flex items-center justify-between gap-4">
-                <dt className="font-medium text-slate-600">Current allowance</dt>
-                <dd className={`font-mono text-xs ${allowanceSatisfied ? 'text-emerald-600' : 'text-amber-600'}`}>
-                  {allowanceDisplay}
-                </dd>
-              </div>
-            )}
-            {balanceDisplay && (
-              <div className="flex items-center justify-between gap-4">
-                <dt className="font-medium text-slate-600">Wallet balance</dt>
-                <dd className="font-mono text-xs text-slate-800">{balanceDisplay}</dd>
-              </div>
-            )}
-          </dl>
-        )}
-        {loadingEntry && <p className={text.subtle}>Refreshing entry information…</p>}
+        <p className={text.hint}>
+          Need to retry later? You can return to this page with <code className={`${text.mono} text-xs`}>/templs/join?address={templAddress || '...'}</code>.
+        </p>
       </section>
+
       {verification && (
-        <section className={layout.card}>
-          <h2 className="text-xl font-semibold text-slate-900">Membership Details</h2>
-          <dl className="mt-4 grid gap-4">
+        <section className={`${layout.card} space-y-4`}>
+          <div className={layout.sectionHeader}>
+            <h2 className="text-xl font-semibold text-slate-900">Membership details</h2>
+            <span className={surface.pill}>Verified member</span>
+          </div>
+          <dl className="grid gap-4 md:grid-cols-2">
             <div className="space-y-1">
               <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Member address</dt>
               <dd className={`${text.mono} text-xs`}>{verification.member?.address || 'Unknown'}</dd>

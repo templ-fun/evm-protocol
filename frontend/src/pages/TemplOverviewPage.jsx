@@ -135,6 +135,16 @@ function describeProposalAction(proposal, templRecord) {
   }
 }
 
+function MetricCard({ title, value, hint }) {
+  return (
+    <div className="flex flex-col gap-1 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</span>
+      <span className="text-base font-semibold text-slate-900">{value}</span>
+      {hint ? <span className={text.hint}>{hint}</span> : null}
+    </div>
+  );
+}
+
 export function TemplOverviewPage({
   templAddress,
   templRecord,
@@ -263,94 +273,69 @@ export function TemplOverviewPage({
     }
   }, [signer, onConnectWallet, pushMessage, templAddress, refreshProposalList]);
 
+  const [treasuryValue, treasuryUnit] = splitDisplay(
+    formatTokenDisplay(ethers.formatUnits, templRecord?.treasuryBalanceRaw || '0', templRecord?.tokenDecimals ?? 18)
+  );
+  const [poolValue, poolUnit] = splitDisplay(
+    formatTokenDisplay(ethers.formatUnits, templRecord?.memberPoolBalanceRaw || '0', templRecord?.tokenDecimals ?? 18)
+  );
+  const [burnedValue, burnedUnit] = splitDisplay(
+    formatTokenDisplay(ethers.formatUnits, templRecord?.burnedRaw || '0', templRecord?.tokenDecimals ?? 18)
+  );
+
   return (
     <div className={layout.page}>
       <header className={layout.header}>
-        <h1 className="text-3xl font-semibold tracking-tight">Templ Overview</h1>
+        <div className="space-y-2">
+          <h1 className="text-3xl font-semibold tracking-tight">Templ overview</h1>
+          <p className="max-w-2xl text-sm text-slate-600">
+            Review treasury health, membership numbers, and governance activity for this templ. Use the shortcuts below to join,
+            propose, or claim rewards.
+          </p>
+        </div>
         <span className={surface.pill}>{templAddress}</span>
       </header>
-      <section className={layout.card}>
-        <h2 className="text-xl font-semibold text-slate-900">Details</h2>
-        <dl className="mt-4 grid gap-4">
-          <div className="space-y-1">
-            <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Entry fee</dt>
-            <dd className={`${text.mono} text-sm`}>
-              {templRecord?.entryFeeFormatted
-                ? `${templRecord.entryFeeFormatted}${templRecord.tokenSymbol ? ` ${templRecord.tokenSymbol}` : ''}`
-                : templRecord?.entryFeeRaw || 'Unknown'}
-            </dd>
+
+      <section className={`${layout.card} space-y-6`}>
+        <div className={layout.sectionHeader}>
+          <div>
+            <h2 className="text-xl font-semibold text-slate-900">Key metrics</h2>
+            <p className={text.hint}>All figures refresh automatically whenever you revisit this page.</p>
           </div>
-          <div className="space-y-1">
-            <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Members</dt>
-            <dd className={`${text.mono} text-sm`}>
-              {Number.isFinite(templRecord?.memberCount) ? templRecord.memberCount : 'Unknown'}
-              {templRecord?.totalPurchases ? (
-                <span className={`ml-2 ${text.subtle}`}>({templRecord.totalPurchases} total purchases)</span>
-              ) : null}
-            </dd>
-          </div>
-          {(() => {
-            const [treasuryValue, treasuryUnit] = splitDisplay(formatTokenDisplay(ethers.formatUnits, templRecord?.treasuryBalanceRaw || '0', templRecord?.tokenDecimals ?? 18));
-            const [poolValue, poolUnit] = splitDisplay(formatTokenDisplay(ethers.formatUnits, templRecord?.memberPoolBalanceRaw || '0', templRecord?.tokenDecimals ?? 18));
-            const [burnedValue, burnedUnit] = splitDisplay(formatTokenDisplay(ethers.formatUnits, templRecord?.burnedRaw || '0', templRecord?.tokenDecimals ?? 18));
-            return (
-              <>
-                <div className="space-y-1">
-                  <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Treasury balance</dt>
-                  <dd className={`${text.mono} text-sm`}>
-                    <div className="flex w-32 flex-col leading-tight">
-                      <span>{treasuryValue}</span>
-                      {treasuryUnit ? <span className="text-xs text-slate-500">{treasuryUnit}</span> : null}
-                    </div>
-                  </dd>
-                </div>
-                <div className="space-y-1">
-                  <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Member pool</dt>
-                  <dd className={`${text.mono} text-sm`}>
-                    <div className="flex w-32 flex-col leading-tight">
-                      <span>{poolValue}</span>
-                      {poolUnit ? <span className="text-xs text-slate-500">{poolUnit}</span> : null}
-                    </div>
-                  </dd>
-                </div>
-                <div className="space-y-1">
-                  <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Total burned</dt>
-                  <dd className={`${text.mono} text-sm`}>
-                    <div className="flex w-32 flex-col leading-tight">
-                      <span>{burnedValue}</span>
-                      {burnedUnit ? <span className="text-xs text-slate-500">{burnedUnit}</span> : null}
-                    </div>
-                  </dd>
-                </div>
-              </>
-            );
-          })()}
-          <div className="space-y-1">
-            <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Priest</dt>
-            <dd className={`${text.mono} text-sm`}>{currentPriest || 'Unknown'}</dd>
-          </div>
-          <div className="space-y-1">
-            <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Telegram chat id</dt>
-            <dd className={text.subtle}>{chatIdHidden ? 'Stored server-side' : localChatId || '—'}</dd>
-          </div>
-          <div className="space-y-1">
-            <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Home link</dt>
-            <dd>
-              {sanitizedHomeLink.text ? (
-                sanitizedHomeLink.href ? (
-                  <a className="text-primary underline" href={sanitizedHomeLink.href} target="_blank" rel="noreferrer">{sanitizedHomeLink.text}</a>
-                ) : (
-                  sanitizedHomeLink.text
-                )
-              ) : (
-                '—'
-              )}
-            </dd>
-          </div>
-        </dl>
-        <div className={`${layout.cardActions} mt-6`}>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <MetricCard
+            title="Entry fee"
+            value={templRecord?.entryFeeFormatted
+              ? `${templRecord.entryFeeFormatted}${templRecord.tokenSymbol ? ` ${templRecord.tokenSymbol}` : ''}`
+              : templRecord?.entryFeeRaw || 'Unknown'}
+            hint="Members pay this amount when joining"
+          />
+          <MetricCard
+            title="Active members"
+            value={Number.isFinite(templRecord?.memberCount) ? templRecord.memberCount : 'Unknown'}
+            hint={templRecord?.totalPurchases ? `${templRecord.totalPurchases} total joins` : undefined}
+          />
+          <MetricCard
+            title="Treasury balance"
+            value={treasuryValue}
+            hint={treasuryUnit || 'Entry fee token units'}
+          />
+          <MetricCard
+            title="Member pool"
+            value={poolValue}
+            hint={poolUnit || 'Reserved for member rewards'}
+          />
+          <MetricCard
+            title="Total burned"
+            value={burnedValue}
+            hint={burnedUnit || 'Removed from circulation'}
+          />
+          <MetricCard title="Priest" value={currentPriest || 'Unknown'} hint="Wallet that manages dictatorship powers" />
+        </div>
+        <div className={`${layout.cardActions} flex-wrap`}>
           <button type="button" className={button.base} onClick={() => onNavigate('/templs/join?address=' + templAddress)}>
-            Join
+            Join templ
           </button>
           <button type="button" className={button.base} onClick={() => onNavigate(`/templs/${templAddress}/proposals/new`)}>
             Create proposal
@@ -360,37 +345,65 @@ export function TemplOverviewPage({
           </button>
         </div>
       </section>
-      <section className={layout.card}>
-        <h2 className="text-xl font-semibold text-slate-900">Telegram binding</h2>
-        <div className="mt-4 space-y-4 text-sm text-slate-700">
+
+      <section className={`${layout.card} space-y-4`}>
+        <div className={layout.sectionHeader}>
+          <div>
+            <h2 className="text-xl font-semibold text-slate-900">Community touchpoints</h2>
+            <p className={text.hint}>Keep members informed by maintaining accurate contact details.</p>
+          </div>
+        </div>
+        <dl className="grid gap-4 md:grid-cols-2">
+          <div className="space-y-1">
+            <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Telegram chat id</dt>
+            <dd className={text.subtle}>{chatIdHidden ? 'Stored server-side' : localChatId || 'Not linked yet'}</dd>
+          </div>
+          <div className="space-y-1">
+            <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Home link</dt>
+            <dd>
+              {sanitizedHomeLink.text ? (
+                sanitizedHomeLink.href ? (
+                  <a className="text-primary underline" href={sanitizedHomeLink.href} target="_blank" rel="noreferrer">
+                    {sanitizedHomeLink.text}
+                  </a>
+                ) : (
+                  sanitizedHomeLink.text
+                )
+              ) : (
+                <span className={text.subtle}>No link provided</span>
+              )}
+            </dd>
+          </div>
+        </dl>
+        <div className="space-y-3 text-sm text-slate-700">
           {localChatId ? (
             <p>
-              Notifications are currently delivered to{' '}
-              <code className={`${text.mono} text-xs`}>{localChatId}</code>. Request a new binding code if you need to move the bot to another chat.
+              Notifications currently flow to <code className={`${text.mono} text-xs`}>{localChatId}</code>. Request a new
+              binding code if the chat changes.
             </p>
           ) : chatIdHidden ? (
             <p>
-              Notifications are active, but the Telegram chat ID is stored on the server. Request a new binding code if you need to rotate the chat.
+              Notifications are active, but the Telegram chat ID is stored on the server. Request a new binding code to rotate
+              the chat.
             </p>
           ) : bindingCode ? (
             <>
               <p>
-                Invite{' '}
-                <a className="text-primary underline" href="https://t.me/templfunbot" target="_blank" rel="noreferrer">@templfunbot</a>{' '}
-                to your Telegram group and post this message to confirm the new chat.
+                Invite <a className="text-primary underline" href="https://t.me/templfunbot" target="_blank" rel="noreferrer">@templfunbot</a>{' '}
+                to your Telegram group and post this confirmation message.
               </p>
               <pre className={surface.codeBlock}><code>{`templ ${bindingCode}`}</code></pre>
               <p>The bot will acknowledge the binding and resume notifications in the new chat.</p>
             </>
           ) : (
-            <p>This templ is not linked to a Telegram chat. Request a binding code to connect one.</p>
+            <p>This templ is not yet linked to a Telegram chat. Request a binding code to connect one.</p>
           )}
           {!isPriestWallet && (
-            <p className={text.subtle}>Connect as the current priest to rotate the Telegram binding.</p>
+            <p className={text.hint}>Connect with the current priest wallet to rotate the Telegram binding.</p>
           )}
           {rebindError && <p className="text-sm text-red-600">{rebindError}</p>}
         </div>
-        <div className={`${layout.cardActions} mt-6`}>
+        <div className={`${layout.cardActions} mt-2`}>
           <button
             type="button"
             className={button.primary}
@@ -401,23 +414,18 @@ export function TemplOverviewPage({
           </button>
         </div>
       </section>
+
       <section className={`${layout.card} space-y-4`}>
         <div className={layout.sectionHeader}>
-          <h2 className="text-xl font-semibold text-slate-900">Proposals</h2>
+          <div>
+            <h2 className="text-xl font-semibold text-slate-900">Governance proposals</h2>
+            <p className={text.hint}>Vote directly from here or open the detailed proposal page.</p>
+          </div>
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              className={button.base}
-              onClick={refreshProposalList}
-              disabled={loadingProposals}
-            >
+            <button type="button" className={button.base} onClick={refreshProposalList} disabled={loadingProposals}>
               {loadingProposals ? 'Refreshing…' : 'Refresh proposals'}
             </button>
-            <button
-              type="button"
-              className={button.link}
-              onClick={() => onNavigate(`/templs/${templAddress}/proposals/new`)}
-            >
+            <button type="button" className={button.link} onClick={() => onNavigate(`/templs/${templAddress}/proposals/new`)}>
               New proposal
             </button>
           </div>
@@ -459,7 +467,7 @@ export function TemplOverviewPage({
               const yesVotes = Number.isFinite(proposal.yesVotes) ? proposal.yesVotes : 0;
               const noVotes = Number.isFinite(proposal.noVotes) ? proposal.noVotes : 0;
               return (
-                <li key={proposal.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <li key={proposal.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className={`${surface.badge} font-semibold`}>#{proposal.id}</span>

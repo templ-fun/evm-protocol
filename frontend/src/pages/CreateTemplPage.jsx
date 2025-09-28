@@ -8,6 +8,18 @@ import { button, form, layout, surface, text } from '../ui/theme.js';
 
 const DEFAULT_PERCENT = 30;
 
+function FormSection({ title, description, children }) {
+  return (
+    <section className="space-y-4 rounded-2xl border border-slate-200/70 bg-slate-50/60 p-4">
+      <div className="space-y-1">
+        <h2 className="text-base font-semibold text-slate-900">{title}</h2>
+        {description ? <p className="text-sm text-slate-600">{description}</p> : null}
+      </div>
+      <div className="flex flex-col gap-4">{children}</div>
+    </section>
+  );
+}
+
 export function CreateTemplPage({
   ethers,
   signer,
@@ -19,7 +31,7 @@ export function CreateTemplPage({
   readProvider
 }) {
   const [tokenAddress, setTokenAddress] = useState('');
-  const [entryFee, setEntryFee] = useState('0');
+  const [entryFee, setEntryFee] = useState('1000000000000000000');
   const [burnPercent, setBurnPercent] = useState(String(DEFAULT_PERCENT));
   const [treasuryPercent, setTreasuryPercent] = useState(String(DEFAULT_PERCENT));
   const [memberPercent, setMemberPercent] = useState(String(DEFAULT_PERCENT));
@@ -138,143 +150,189 @@ export function CreateTemplPage({
     }
   };
 
+  const protocolSplitHint = protocolPercentLocked
+    ? `Protocol fee locked to ${protocolPercent}% by the factory`
+    : 'Adjust the split to determine how the entry fee is shared';
+
   return (
     <div className={layout.page}>
       <header className={layout.header}>
-        <h1 className="text-3xl font-semibold tracking-tight">Create a Templ</h1>
-      </header>
-      <form className={`${layout.card} flex flex-col gap-4`} onSubmit={handleSubmit}>
-        <label className={form.label}>
-          Factory address
-          <input
-            type="text"
-            className={form.input}
-            value={factoryAddress}
-            onChange={(e) => setFactoryAddress(e.target.value.trim())}
-            required
-          />
-        </label>
-        <label className={form.label}>
-          Access token address
-          <input
-            type="text"
-            className={form.input}
-            value={tokenAddress}
-            onChange={(e) => setTokenAddress(e.target.value.trim())}
-            placeholder="0x…"
-            required
-          />
-        </label>
-        <label className={form.label}>
-          Entry fee (wei)
-          <input
-            type="text"
-            className={form.input}
-            value={entryFee}
-            onChange={(e) => setEntryFee(e.target.value.trim())}
-            required
-          />
-        </label>
-        <div className={layout.grid}>
-          <label className={form.label}>
-            Burn %
-            <input
-              type="number"
-              min="0"
-              max="100"
-              className={form.input}
-              value={burnPercent}
-              onChange={(e) => setBurnPercent(e.target.value)}
-            />
-          </label>
-          <label className={form.label}>
-            Treasury %
-            <input
-              type="number"
-              min="0"
-              max="100"
-              className={form.input}
-              value={treasuryPercent}
-              onChange={(e) => setTreasuryPercent(e.target.value)}
-            />
-          </label>
-          <label className={form.label}>
-            Member pool %
-            <input
-              type="number"
-              min="0"
-              max="100"
-              className={form.input}
-              value={memberPercent}
-              onChange={(e) => setMemberPercent(e.target.value)}
-            />
-          </label>
-          <label className={form.label}>
-            Protocol %
-            <input
-              type="number"
-              min="0"
-              max="100"
-              className={form.input}
-              value={protocolPercent}
-              onChange={(e) => setProtocolPercent(e.target.value)}
-              disabled={protocolPercentLocked}
-            />
-            {protocolPercentLocked ? (
-              <span className={text.hint}>Locked to factory protocol fee</span>
-            ) : null}
-          </label>
+        <div>
+          <h1 className="text-3xl font-semibold tracking-tight">Create a templ</h1>
+          <p className="mt-2 max-w-xl text-sm text-slate-600">
+            Gather the key details below. You can fine-tune these values later through governance proposals if the templ is not
+            under dictatorship.
+          </p>
         </div>
-        <label className={form.label}>
-          Max members (0 = unlimited)
-          <input
-            type="text"
-            className={form.input}
-            value={maxMembers}
-            onChange={(e) => setMaxMembers(e.target.value.trim())}
-          />
-        </label>
-        <label className={form.checkbox}>
-          <input
-            type="checkbox"
-            className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-            checked={dictatorship}
-            onChange={(e) => setDictatorship(e.target.checked)}
-          />
-          Priest starts with dictatorship powers
-        </label>
-        <label className={form.label}>
-          Telegram chat id
-          <input
-            type="text"
-            className={form.input}
-            value={telegramChatId}
-            onChange={(e) => setTelegramChatId(e.target.value)}
-            placeholder="e.g. -100123456"
-          />
-        </label>
-        <label className={form.label}>
-          Templ home link
-          <input
-            type="text"
-            className={form.input}
-            value={homeLink}
-            onChange={(e) => setHomeLink(e.target.value)}
-            placeholder="https://t.me/your-group"
-          />
-        </label>
-        <button type="submit" className={button.primary} disabled={submitting}>
-          {submitting ? 'Deploying…' : 'Deploy templ'}
-        </button>
+      </header>
+
+      <form className={`${layout.card} flex flex-col gap-6`} onSubmit={handleSubmit}>
+        <FormSection
+          title="Factory & access token"
+          description="Point to the templ factory you want to use and choose the ERC-20 token that gates membership."
+        >
+          <label className={form.label}>
+            Factory address
+            <input
+              type="text"
+              className={form.input}
+              value={factoryAddress}
+              onChange={(e) => setFactoryAddress(e.target.value.trim())}
+              required
+            />
+            <span className={text.hint}>Use the deployed TemplFactory contract for your network.</span>
+          </label>
+          <label className={form.label}>
+            Access token address
+            <input
+              type="text"
+              className={form.input}
+              value={tokenAddress}
+              onChange={(e) => setTokenAddress(e.target.value.trim())}
+              placeholder="0x…"
+              required
+            />
+            <span className={text.hint}>Members must hold this token and approve the templ to join.</span>
+          </label>
+          <label className={form.label}>
+            Entry fee (wei)
+            <input
+              type="text"
+              className={form.input}
+              value={entryFee}
+              onChange={(e) => setEntryFee(e.target.value.trim())}
+              required
+            />
+            <span className={text.hint}>Example: 1000000000000000000 wei equals 1 token with 18 decimals.</span>
+          </label>
+        </FormSection>
+
+        <FormSection
+          title="Fee split"
+          description="Define how each entry fee is distributed between burning, the treasury, and the member pool."
+        >
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <label className={form.label}>
+              Burn %
+              <input
+                type="number"
+                min="0"
+                max="100"
+                className={form.input}
+                value={burnPercent}
+                onChange={(e) => setBurnPercent(e.target.value)}
+              />
+            </label>
+            <label className={form.label}>
+              Treasury %
+              <input
+                type="number"
+                min="0"
+                max="100"
+                className={form.input}
+                value={treasuryPercent}
+                onChange={(e) => setTreasuryPercent(e.target.value)}
+              />
+            </label>
+            <label className={form.label}>
+              Member pool %
+              <input
+                type="number"
+                min="0"
+                max="100"
+                className={form.input}
+                value={memberPercent}
+                onChange={(e) => setMemberPercent(e.target.value)}
+              />
+            </label>
+            <label className={form.label}>
+              Protocol %
+              <input
+                type="number"
+                min="0"
+                max="100"
+                className={form.input}
+                value={protocolPercent}
+                onChange={(e) => setProtocolPercent(e.target.value)}
+                disabled={protocolPercentLocked}
+              />
+              <span className={text.hint}>{protocolSplitHint}</span>
+            </label>
+          </div>
+        </FormSection>
+
+        <FormSection
+          title="Membership controls"
+          description="Limit how many wallets can join and decide whether the priest starts with dictatorship powers."
+        >
+          <label className={form.label}>
+            Max members (0 = unlimited)
+            <input
+              type="text"
+              className={form.input}
+              value={maxMembers}
+              onChange={(e) => setMaxMembers(e.target.value.trim())}
+            />
+          </label>
+          <label className={form.checkbox}>
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+              checked={dictatorship}
+              onChange={(e) => setDictatorship(e.target.checked)}
+            />
+            Priest starts with dictatorship powers
+          </label>
+        </FormSection>
+
+        <FormSection
+          title="Community touchpoints"
+          description="Provide a Telegram chat ID and a public home link so members know where to gather."
+        >
+          <label className={form.label}>
+            Telegram chat ID
+            <input
+              type="text"
+              className={form.input}
+              value={telegramChatId}
+              onChange={(e) => setTelegramChatId(e.target.value)}
+              placeholder="e.g. -100123456"
+            />
+            <span className={text.hint}>Optional. Leave blank to bind the chat after deployment.</span>
+          </label>
+          <label className={form.label}>
+            Templ home link
+            <input
+              type="text"
+              className={form.input}
+              value={homeLink}
+              onChange={(e) => setHomeLink(e.target.value)}
+              placeholder="https://t.me/your-group"
+            />
+            <span className={text.hint}>Displayed anywhere the templ is listed.</span>
+          </label>
+        </FormSection>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <button type="submit" className={button.primary} disabled={submitting}>
+            {submitting ? 'Deploying…' : 'Deploy templ'}
+          </button>
+          {!signer ? <span className={text.hint}>Connect your wallet to deploy.</span> : null}
+        </div>
       </form>
+
       {bindingInfo && (
-        <section className={layout.card}>
-          <h2 className="text-xl font-semibold text-slate-900">Connect Telegram notifications</h2>
-          <div className="mt-4 space-y-4 text-sm text-slate-700">
+        <section className={`${layout.card} space-y-4`}>
+          <div className={layout.sectionHeader}>
+            <h2 className="text-xl font-semibold text-slate-900">Next: connect Telegram notifications</h2>
+            <span className={`${surface.pill} text-xs font-medium`}>{bindingInfo.templAddress}</span>
+          </div>
+          <div className="space-y-4 text-sm text-slate-700">
             {bindingInfo.telegramChatId ? (
               <p>
                 Telegram chat <code className={`${text.mono} text-xs`}>{bindingInfo.telegramChatId}</code> is already linked. Invite{' '}
-                <a className="text-primary underline" href="https://t.me/templfunbot" target="_blank" rel="noreferrer">@templfunbot</a> if it is not in the group yet.
+                <a className="text-primary underline" href="https://t.me/templfunbot" target="_blank" rel="noreferrer">@templfunbot</a>{' '}
+                if it is not in the group yet.
               </p>
             ) : (
               <>
@@ -303,7 +361,7 @@ export function CreateTemplPage({
               </p>
             ) : null}
           </div>
-          <div className={`${layout.cardActions} mt-6`}>
+          <div className={`${layout.cardActions} mt-2`}>
             <button type="button" className={button.base} onClick={refreshTempls}>
               Refresh templ list
             </button>

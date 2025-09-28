@@ -82,31 +82,40 @@ export function ClaimRewardsPage({
   return (
     <div className={layout.page}>
       <header className={layout.header}>
-        <h1 className="text-3xl font-semibold tracking-tight">Claim Member Rewards</h1>
+        <div className="space-y-2">
+          <h1 className="text-3xl font-semibold tracking-tight">Claim member rewards</h1>
+          <p className="text-sm text-slate-600">
+            Withdraw your share of the member reward pool. Balances update after each claim, so refresh before submitting the
+            transaction.
+          </p>
+        </div>
         <span className={surface.pill}>Templ {templAddress}</span>
       </header>
-      <section className={layout.card}>
-        <h2 className="text-xl font-semibold text-slate-900">Member pool status</h2>
-        <dl className="mt-4 grid gap-4">
+      <section className={`${layout.card} space-y-6`}>
+        <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-1">
-            <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Pool balance (raw units)</dt>
-            <dd className={`${text.mono} text-sm`}>{formatAmount(stats.poolBalance)}</dd>
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Member pool balance</h2>
+            <p className={`${text.mono} text-sm`}>{formatAmount(stats.poolBalance)}</p>
+            <p className={text.hint}>Total rewards currently available to eligible members (raw token units).</p>
           </div>
           <div className="space-y-1">
-            <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Your claimed total (raw units)</dt>
-            <dd className={`${text.mono} text-sm`}>{formatAmount(stats.memberClaimed)}</dd>
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">You have claimed</h2>
+            <p className={`${text.mono} text-sm`}>{formatAmount(stats.memberClaimed)}</p>
+            <p className={text.hint}>Historical total claimed by this wallet in raw token units.</p>
           </div>
-        </dl>
-        <div className={`${layout.cardActions} mt-6`}>
+        </div>
+        <div className={`${layout.cardActions} flex-wrap`}>
           <button type="button" className={button.base} onClick={loadStats} disabled={loading || pending}>
-            {loading ? 'Refreshing…' : 'Refresh'}
+            {loading ? 'Refreshing…' : 'Refresh balances'}
           </button>
           <button type="button" className={button.primary} onClick={handleClaim} disabled={pending || loading}>
             {pending ? 'Claiming…' : 'Claim rewards'}
           </button>
         </div>
-        {!hasWallet && (
-          <p className={`${text.hint} mt-4`}>Connect your wallet to claim rewards.</p>
+        {!hasWallet ? (
+          <p className={text.hint}>Connect your wallet to initiate the claim transaction.</p>
+        ) : (
+          <p className={text.hint}>Rewards are sent directly to your connected wallet.</p>
         )}
       </section>
     </div>
