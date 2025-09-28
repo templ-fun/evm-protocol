@@ -42,16 +42,16 @@ abstract contract TemplMembership is TemplBase {
 
     /// @notice Purchase templ membership using the configured access token.
     function purchaseAccess() external whenNotPaused whenDisbandUnlocked notSelf nonReentrant {
-        Member storage m = members[msg.sender];
-        if (m.purchased) revert TemplErrors.AlreadyPurchased();
+        Member storage joiningMember = members[msg.sender];
+        if (joiningMember.purchased) revert TemplErrors.AlreadyPurchased();
 
-        uint256 existingMembers = memberList.length;
+        uint256 currentMemberCount = memberList.length;
 
-        if (MAX_MEMBERS > 0 && existingMembers >= MAX_MEMBERS) {
+        if (MAX_MEMBERS > 0 && currentMemberCount >= MAX_MEMBERS) {
             revert TemplErrors.MemberLimitReached();
         }
 
-        if (existingMembers > 0) {
+        if (currentMemberCount > 0) {
             _flushExternalRemainders();
         }
 
@@ -71,20 +71,20 @@ abstract contract TemplMembership is TemplBase {
 
         if (IERC20(accessToken).balanceOf(msg.sender) < entryFee) revert TemplErrors.InsufficientBalance();
 
-        m.purchased = true;
-        m.timestamp = block.timestamp;
-        m.block = block.number;
+        joiningMember.purchased = true;
+        joiningMember.timestamp = block.timestamp;
+        joiningMember.block = block.number;
         memberList.push(msg.sender);
         totalPurchases++;
 
-        if (existingMembers > 0) {
+        if (currentMemberCount > 0) {
             uint256 totalRewards = memberPoolAmount + memberRewardRemainder;
-            uint256 rewardPerMember = totalRewards / existingMembers;
-            memberRewardRemainder = totalRewards % existingMembers;
+            uint256 rewardPerMember = totalRewards / currentMemberCount;
+            memberRewardRemainder = totalRewards % currentMemberCount;
             cumulativeMemberRewards += rewardPerMember;
         }
 
-        m.rewardSnapshot = cumulativeMemberRewards;
+        joiningMember.rewardSnapshot = cumulativeMemberRewards;
 
         treasuryBalance += treasuryAmount;
         memberPoolBalance += memberPoolAmount;
@@ -93,11 +93,11 @@ abstract contract TemplMembership is TemplBase {
         totalToMemberPool += memberPoolAmount;
         totalToProtocol += protocolAmount;
 
-        IERC20 token = IERC20(accessToken);
+        IERC20 accessTokenContract = IERC20(accessToken);
         // NOTE: Fee-on-transfer tokens are unsupported; transfer-based fees break internal accounting.
-        token.safeTransferFrom(msg.sender, burnAddress, burnAmount);
-        token.safeTransferFrom(msg.sender, address(this), toContract);
-        token.safeTransferFrom(msg.sender, protocolFeeRecipient, protocolAmount);
+        accessTokenContract.safeTransferFrom(msg.sender, burnAddress, burnAmount);
+        accessTokenContract.safeTransferFrom(msg.sender, address(this), toContract);
+        accessTokenContract.safeTransferFrom(msg.sender, protocolFeeRecipient, protocolAmount);
 
         emit AccessPurchased(
             msg.sender,
@@ -171,18 +171,18 @@ abstract contract TemplMembership is TemplBase {
 
     /// @notice Claims the caller's accrued share of the member pool.
     function claimMemberPool() external onlyMember nonReentrant {
-        uint256 claimable = getClaimablePoolAmount(msg.sender);
-        if (claimable == 0) revert TemplErrors.NoRewardsToClaim();
-        uint256 distributable = memberPoolBalance - memberRewardRemainder;
-        if (distributable < claimable) revert TemplErrors.InsufficientPoolBalance();
+        uint256 claimableAmount = getClaimablePoolAmount(msg.sender);
+        if (claimableAmount == 0) revert TemplErrors.NoRewardsToClaim();
+        uint256 distributableBalance = memberPoolBalance - memberRewardRemainder;
+        if (distributableBalance < claimableAmount) revert TemplErrors.InsufficientPoolBalance();
 
         members[msg.sender].rewardSnapshot = cumulativeMemberRewards;
-        memberPoolClaims[msg.sender] += claimable;
-        memberPoolBalance -= claimable;
+        memberPoolClaims[msg.sender] += claimableAmount;
+        memberPoolBalance -= claimableAmount;
 
-        IERC20(accessToken).safeTransfer(msg.sender, claimable);
+        IERC20(accessToken).safeTransfer(msg.sender, claimableAmount);
 
-        emit MemberPoolClaimed(msg.sender, claimable, block.timestamp);
+        emit MemberPoolClaimed(msg.sender, claimableAmount, block.timestamp);
     }
 
     /// @notice Claims the caller's accrued share of an external reward token or ETH.
