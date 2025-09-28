@@ -106,28 +106,30 @@ abstract contract TemplTreasury is TemplMembership {
         if (amount == 0) revert TemplErrors.AmountZero();
 
         if (token == accessToken) {
-            uint256 current = IERC20(accessToken).balanceOf(address(this));
-            if (current <= memberPoolBalance) revert TemplErrors.InsufficientTreasuryBalance();
-            uint256 available = current - memberPoolBalance;
-            if (amount > available) revert TemplErrors.InsufficientTreasuryBalance();
-            uint256 fromFees = amount <= treasuryBalance ? amount : treasuryBalance;
-            treasuryBalance -= fromFees;
+            uint256 currentBalance = IERC20(accessToken).balanceOf(address(this));
+            if (currentBalance <= memberPoolBalance) revert TemplErrors.InsufficientTreasuryBalance();
+            uint256 availableBalance = currentBalance - memberPoolBalance;
+            if (amount > availableBalance) revert TemplErrors.InsufficientTreasuryBalance();
+            uint256 debitedFromFees = amount <= treasuryBalance ? amount : treasuryBalance;
+            treasuryBalance -= debitedFromFees;
 
             IERC20(accessToken).safeTransfer(recipient, amount);
         } else if (token == address(0)) {
             ExternalRewardState storage rewards = externalRewards[address(0)];
-            uint256 current = address(this).balance;
-            uint256 reserved = rewards.poolBalance;
-            uint256 available = current > reserved ? current - reserved : 0;
-            if (amount > available) revert TemplErrors.InsufficientTreasuryBalance();
+            uint256 currentBalance = address(this).balance;
+            uint256 reservedForMembers = rewards.poolBalance;
+            uint256 availableBalance = currentBalance > reservedForMembers ? currentBalance - reservedForMembers : 0;
+            if (amount > availableBalance) revert TemplErrors.InsufficientTreasuryBalance();
             (bool success, ) = payable(recipient).call{value: amount}("");
             if (!success) revert TemplErrors.ProposalExecutionFailed();
         } else {
             ExternalRewardState storage rewards = externalRewards[token];
-            uint256 current = IERC20(token).balanceOf(address(this));
-            uint256 reserved = rewards.poolBalance;
-            uint256 available = current > reserved ? current - reserved : 0;
-            if (amount > available) revert TemplErrors.InsufficientTreasuryBalance();
+            uint256 currentBalance = IERC20(token).balanceOf(address(this));
+            uint256 reservedForMembers = rewards.poolBalance;
+            uint256 availableBalance = currentBalance > reservedForMembers
+                ? currentBalance - reservedForMembers
+                : 0;
+            if (amount > availableBalance) revert TemplErrors.InsufficientTreasuryBalance();
             IERC20(token).safeTransfer(recipient, amount);
         }
         emit TreasuryAction(proposalId, token, recipient, amount, reason);
@@ -171,22 +173,22 @@ abstract contract TemplTreasury is TemplMembership {
 
     /// @dev Routes treasury balances into member or external pools so members can claim them evenly.
     function _disbandTreasury(address token, uint256 proposalId) internal {
-        uint256 n = memberList.length;
-        if (n == 0) revert TemplErrors.NoMembers();
+        uint256 memberCount = memberList.length;
+        if (memberCount == 0) revert TemplErrors.NoMembers();
 
         if (token == accessToken) {
-            uint256 current = IERC20(accessToken).balanceOf(address(this));
-            if (current <= memberPoolBalance) revert TemplErrors.NoTreasuryFunds();
-            uint256 accessTokenAmount = current - memberPoolBalance;
+            uint256 accessTokenBalance = IERC20(accessToken).balanceOf(address(this));
+            if (accessTokenBalance <= memberPoolBalance) revert TemplErrors.NoTreasuryFunds();
+            uint256 accessTokenAmount = accessTokenBalance - memberPoolBalance;
 
-            uint256 fromFees = accessTokenAmount <= treasuryBalance ? accessTokenAmount : treasuryBalance;
-            treasuryBalance -= fromFees;
+            uint256 debitedFromFees = accessTokenAmount <= treasuryBalance ? accessTokenAmount : treasuryBalance;
+            treasuryBalance -= debitedFromFees;
 
             memberPoolBalance += accessTokenAmount;
 
             uint256 poolTotalRewards = accessTokenAmount + memberRewardRemainder;
-            uint256 poolPerMember = poolTotalRewards / n;
-            uint256 poolRemainder = poolTotalRewards % n;
+            uint256 poolPerMember = poolTotalRewards / memberCount;
+            uint256 poolRemainder = poolTotalRewards % memberCount;
             cumulativeMemberRewards += poolPerMember;
             memberRewardRemainder = poolRemainder;
 
@@ -212,8 +214,8 @@ abstract contract TemplTreasury is TemplMembership {
         rewards.poolBalance += amount;
 
         uint256 totalRewards = amount + rewards.rewardRemainder;
-        uint256 perMember = totalRewards / n;
-        uint256 remainder = totalRewards % n;
+        uint256 perMember = totalRewards / memberCount;
+        uint256 remainder = totalRewards % memberCount;
         rewards.cumulativeRewards += perMember;
         rewards.rewardRemainder = remainder;
 
