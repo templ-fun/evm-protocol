@@ -12,48 +12,82 @@ abstract contract TemplBase is ReentrancyGuard {
     using SafeERC20 for IERC20;
     using TemplErrors for *;
 
+    /// @dev Basis used for fee split math so every percent is represented as an integer.
     uint256 internal constant TOTAL_PERCENT = 100;
+    /// @dev Default quorum percent applied when callers pass zero into constructors.
     uint256 internal constant DEFAULT_QUORUM_PERCENT = 33;
+    /// @dev Default post-quorum execution delay used when deployers do not override it.
     uint256 internal constant DEFAULT_EXECUTION_DELAY = 7 days;
+    /// @dev Default burn address used when deployers do not provide a custom sink.
     address internal constant DEFAULT_BURN_ADDRESS = 0x000000000000000000000000000000000000dEaD;
 
+    /// @notice Percent of the entry fee that is burned on every purchase.
     uint256 public burnPercent;
+    /// @notice Percent of the entry fee routed into the treasury balance.
     uint256 public treasuryPercent;
+    /// @notice Percent of the entry fee set aside for the member rewards pool.
     uint256 public memberPoolPercent;
+    /// @notice Percent of the entry fee forwarded to the protocol on every purchase.
     uint256 public immutable protocolPercent;
 
+    /// @notice Address empowered to act as the priest (and temporary dictator).
     address public priest;
+    /// @notice Address that receives the protocol share during purchases and distributions.
     address public immutable protocolFeeRecipient;
+    /// @notice ERC-20 token required to join the templ.
     address public immutable accessToken;
+    /// @notice Tracks whether dictatorship mode is enabled.
     bool public priestIsDictator;
+    /// @notice Current entry fee denominated in the access token.
     uint256 public entryFee;
+    /// @notice Treasury-held balance denominated in the access token.
     uint256 public treasuryBalance;
+    /// @notice Member pool balance denominated in the access token.
     uint256 public memberPoolBalance;
+    /// @notice Whether joins and other restricted flows are paused.
     bool public paused;
+    /// @notice Counter for active disband proposals that temporarily block joins.
     uint256 public activeDisbandJoinLocks;
+    uint256[] internal disbandLockIds;
+    mapping(uint256 => uint256) internal disbandLockIndex;
+    /// @notice Maximum allowed members when greater than zero (0 = uncapped).
+    /// @dev Named in uppercase historically; kept for backwards compatibility with emitted ABI.
     uint256 public MAX_MEMBERS;
 
+    /// @notice Percent of YES votes required to satisfy quorum.
     uint256 public quorumPercent;
+    /// @notice Seconds governance must wait after quorum before executing a proposal.
     uint256 public executionDelayAfterQuorum;
+    /// @notice Address that receives burn allocations.
     address public immutable burnAddress;
+    /// @notice Canonical templ home link surfaced across UIs and off-chain services.
     string public templHomeLink;
 
     struct Member {
+        /// @notice Whether the address has successfully purchased access.
         bool purchased;
+        /// @notice Block timestamp when the member joined.
         uint256 timestamp;
+        /// @notice Block number recorded at the time of the join.
         uint256 block;
+        /// @notice Reward checkpoint captured when the member joined.
         uint256 rewardSnapshot;
     }
 
     mapping(address => Member) public members;
     address[] public memberList;
     mapping(address => uint256) public memberPoolClaims;
+    /// @notice Aggregate rewards per member used for on-chain snapshotting.
     uint256 public cumulativeMemberRewards;
+    /// @notice Remainder carried forward when rewards do not divide evenly across members.
     uint256 public memberRewardRemainder;
 
     struct RewardCheckpoint {
+        /// @notice Block number when the checkpoint was recorded.
         uint64 blockNumber;
+        /// @notice Timestamp at checkpoint creation.
         uint64 timestamp;
+        /// @notice Cumulative rewards per member at that checkpoint.
         uint256 cumulative;
     }
 
@@ -199,9 +233,13 @@ abstract contract TemplBase is ReentrancyGuard {
         RewardCheckpoint[] checkpoints;
     }
 
+    /// @notice External reward accounting keyed by ERC-20/ETH address.
     mapping(address => ExternalRewardState) internal externalRewards;
+    /// @notice List of external reward tokens for enumeration in UIs.
     address[] internal externalRewardTokens;
+    /// @notice Member snapshots for each external reward token.
     mapping(address => mapping(address => uint256)) internal memberExternalRewardSnapshots;
+    /// @notice Cumulative amounts each member has claimed per external reward token.
     mapping(address => mapping(address => uint256)) internal memberExternalClaims;
 
     /// @dev Restricts a function so only wallets that successfully purchased access may call it.
@@ -234,6 +272,7 @@ abstract contract TemplBase is ReentrancyGuard {
 
     /// @dev Blocks membership joins while a disband proposal is pending execution.
     modifier whenDisbandUnlocked() {
+        _refreshDisbandLocks();
         if (activeDisbandJoinLocks != 0) revert TemplErrors.DisbandLockActive();
         _;
     }
@@ -349,4 +388,6 @@ abstract contract TemplBase is ReentrancyGuard {
             emit ContractPaused(true);
         }
     }
+
+    function _refreshDisbandLocks() internal virtual {}
 }

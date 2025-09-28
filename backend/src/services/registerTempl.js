@@ -26,7 +26,13 @@ function normaliseAddress(value, field) {
 function normaliseChatId(value) {
   if (value === null || value === undefined) return null;
   const trimmed = String(value).trim();
-  return trimmed.length ? trimmed : null;
+  if (!trimmed.length) {
+    return null;
+  }
+  if (!/^(-?[1-9]\d*)$/.test(trimmed)) {
+    throw templError('Invalid telegramChatId', 400);
+  }
+  return trimmed;
 }
 
 export async function registerTempl(body, context) {
@@ -59,7 +65,7 @@ export async function registerTempl(body, context) {
       telegramChatId: null,
       priest,
       proposalsMeta: new Map(),
-      lastDigestAt: Date.now(),
+      lastDigestAt: 0,
       templHomeLink: '',
       bindingCode: persisted?.bindingCode ?? null
     };
@@ -71,7 +77,9 @@ export async function registerTempl(body, context) {
     }
   }
   if (!existing.proposalsMeta) existing.proposalsMeta = new Map();
-  if (typeof existing.lastDigestAt !== 'number') existing.lastDigestAt = Date.now();
+  if (typeof existing.lastDigestAt !== 'number' || !Number.isFinite(existing.lastDigestAt) || existing.lastDigestAt < 0) {
+    existing.lastDigestAt = 0;
+  }
   existing.priest = priest;
   existing.telegramChatId = telegramChatId ?? existing.telegramChatId ?? null;
   existing.contractAddress = contract;
