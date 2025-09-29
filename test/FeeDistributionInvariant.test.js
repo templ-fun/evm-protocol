@@ -6,6 +6,7 @@ const { mintToUsers, purchaseAccess } = require("./utils/mintAndPurchase");
 describe("Fee Distribution Invariant", function () {
     const ENTRY_FEE = ethers.parseUnits("100", 18);
     const TOKEN_SUPPLY = ethers.parseUnits("10000", 18);
+    const BPS_DENOMINATOR = 10_000n;
 
     let templ;
     let token;
@@ -57,7 +58,7 @@ describe("Fee Distribution Invariant", function () {
 
             if (i === 0) {
                 const poolPercent = BigInt(await templ.memberPoolPercent());
-                const pioneerReward = (ENTRY_FEE * poolPercent) / 100n;
+                const pioneerReward = (ENTRY_FEE * poolPercent) / BPS_DENOMINATOR;
                 expect(await templ.cumulativeMemberRewards()).to.equal(pioneerReward);
             }
         }

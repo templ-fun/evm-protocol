@@ -13,9 +13,9 @@ abstract contract TemplBase is ReentrancyGuard {
     using TemplErrors for *;
 
     /// @dev Basis used for fee split math so every percent is represented as an integer.
-    uint256 internal constant TOTAL_PERCENT = 100;
+    uint256 internal constant TOTAL_PERCENT = 10_000;
     /// @dev Default quorum percent applied when callers pass zero into constructors.
-    uint256 internal constant DEFAULT_QUORUM_PERCENT = 33;
+    uint256 internal constant DEFAULT_QUORUM_PERCENT = 3_300;
     /// @dev Default post-quorum execution delay used when deployers do not override it.
     uint256 internal constant DEFAULT_EXECUTION_DELAY = 7 days;
     /// @dev Default burn address used when deployers do not provide a custom sink.
@@ -273,6 +273,27 @@ abstract contract TemplBase is ReentrancyGuard {
 
     event DictatorshipModeChanged(bool enabled);
 
+    /// @dev Persists a new external reward checkpoint so future joins can baseline correctly.
+    function _recordExternalCheckpoint(ExternalRewardState storage rewards) internal {
+        RewardCheckpoint memory checkpoint = RewardCheckpoint({
+            blockNumber: uint64(block.number),
+            timestamp: uint64(block.timestamp),
+            cumulative: rewards.cumulativeRewards
+        });
+        uint256 len = rewards.checkpoints.length;
+        if (len == 0) {
+            rewards.checkpoints.push(checkpoint);
+            return;
+        }
+        RewardCheckpoint storage last = rewards.checkpoints[len - 1];
+        if (last.blockNumber == checkpoint.blockNumber) {
+            last.timestamp = checkpoint.timestamp;
+            last.cumulative = checkpoint.cumulative;
+        } else {
+            rewards.checkpoints.push(checkpoint);
+        }
+    }
+
     /// @notice Sets immutable configuration and initial governance parameters shared across modules.
     /// @param _protocolFeeRecipient Address receiving the protocol share of entry fees.
     /// @param _accessToken ERC-20 token that gates membership.
@@ -304,14 +325,36 @@ abstract contract TemplBase is ReentrancyGuard {
         protocolFeeRecipient = _protocolFeeRecipient;
         accessToken = _accessToken;
         priestIsDictator = _priestIsDictator;
-        protocolPercent = _protocolPercent;
-        _setPercentSplit(_burnPercent, _treasuryPercent, _memberPoolPercent);
+
+        uint256 burnBps = _burnPercent;
+        uint256 treasuryBps = _treasuryPercent;
+        uint256 memberBps = _memberPoolPercent;
+        uint256 protocolBps = _protocolPercent;
+
+        uint256 rawTotal = _burnPercent + _treasuryPercent + _memberPoolPercent + _protocolPercent;
+        if (rawTotal == TOTAL_PERCENT) {
+            // values already provided in basis points
+        } else if (rawTotal == 100) {
+            burnBps = _burnPercent * 100;
+            treasuryBps = _treasuryPercent * 100;
+            memberBps = _memberPoolPercent * 100;
+            protocolBps = _protocolPercent * 100;
+        } else {
+            revert TemplErrors.InvalidPercentageSplit();
+        }
+
+        protocolPercent = protocolBps;
+        _setPercentSplit(burnBps, treasuryBps, memberBps);
 
         if (_quorumPercent == 0) {
             quorumPercent = DEFAULT_QUORUM_PERCENT;
         } else {
-            if (_quorumPercent > TOTAL_PERCENT) revert TemplErrors.InvalidPercentage();
-            quorumPercent = _quorumPercent;
+            uint256 normalizedQuorum = _quorumPercent;
+            if (normalizedQuorum <= 100) {
+                normalizedQuorum = normalizedQuorum * 100;
+            }
+            if (normalizedQuorum > TOTAL_PERCENT) revert TemplErrors.InvalidPercentage();
+            quorumPercent = normalizedQuorum;
         }
 
         executionDelayAfterQuorum = _executionDelay == 0 ? DEFAULT_EXECUTION_DELAY : _executionDelay;

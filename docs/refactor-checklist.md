@@ -4,7 +4,7 @@ Derived from the latest review conversation with Luiz (OpenZeppelin) and Marcus 
 
 1. **Improve percent math precision**
    - Use `Math.mulDiv` to minimise rounding drift and ensure exact accounting (burn, treasury, member pool, protocol, treasury disbandments).
-   - Revisit the fractional basis for fee splits (`TOTAL_PERCENT`) and only increase it beyond 100 if a deployment actually needs sub-percentage precision, keeping the default simple otherwise.
+   - Adopt a basis-points denominator (`TOTAL_PERCENT = 10_000`) so governance inputs and fee splits support two decimal places while remaining deterministic on chain.
 
 2. **Trim on-chain storage to the essentials**
    - Remove book-keeping fields that can be reconstructed off-chain (e.g. cumulative fee totals, purchase counters).

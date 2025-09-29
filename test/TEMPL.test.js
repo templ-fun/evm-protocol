@@ -11,6 +11,11 @@ describe("TEMPL Contract with DAO Governance", function () {
     let accounts;
     const ENTRY_FEE = ethers.parseUnits("100", 18);
     const TOKEN_SUPPLY = ethers.parseUnits("10000", 18);
+    const BURN_BPS = 3000;
+    const TREASURY_BPS = 3000;
+    const MEMBER_BPS = 3000;
+    const PROTOCOL_BPS = 1000;
+    const QUORUM_BPS = 3300;
 
     beforeEach(async function () {
         ({ templ, token, accounts } = await deployTempl({ entryFee: ENTRY_FEE }));
@@ -43,11 +48,11 @@ describe("TEMPL Contract with DAO Governance", function () {
                     priest.address,
                     await token.getAddress(),
                     invalidFee,
-                    30,
-                    30,
-                    30,
-                    10,
-                    33,
+                    BURN_BPS,
+                    TREASURY_BPS,
+                    MEMBER_BPS,
+                    PROTOCOL_BPS,
+                    QUORUM_BPS,
                     7 * 24 * 60 * 60,
                     "0x000000000000000000000000000000000000dEaD",
                     false,
@@ -65,11 +70,11 @@ describe("TEMPL Contract with DAO Governance", function () {
                     priest.address,
                     await token.getAddress(),
                     ENTRY_FEE,
-                    30,
-                    30,
-                    30,
-                    10,
-                    33,
+                    BURN_BPS,
+                    TREASURY_BPS,
+                    MEMBER_BPS,
+                    PROTOCOL_BPS,
+                    QUORUM_BPS,
                     7 * 24 * 60 * 60,
                     "0x000000000000000000000000000000000000dEaD",
                     false,
@@ -87,11 +92,11 @@ describe("TEMPL Contract with DAO Governance", function () {
                     ethers.ZeroAddress,
                     await token.getAddress(),
                     ENTRY_FEE,
-                    30,
-                    30,
-                    30,
-                    10,
-                    33,
+                    BURN_BPS,
+                    TREASURY_BPS,
+                    MEMBER_BPS,
+                    PROTOCOL_BPS,
+                    QUORUM_BPS,
                     7 * 24 * 60 * 60,
                     "0x000000000000000000000000000000000000dEaD",
                     false,
@@ -108,10 +113,10 @@ describe("TEMPL Contract with DAO Governance", function () {
                 priest.address,
                 await token.getAddress(),
                 ENTRY_FEE,
-                30,
-                30,
-                30,
-                10,
+                BURN_BPS,
+                TREASURY_BPS,
+                MEMBER_BPS,
+                PROTOCOL_BPS,
                 0,
                 0,
                 ethers.ZeroAddress,
@@ -121,7 +126,7 @@ describe("TEMPL Contract with DAO Governance", function () {
             );
             await templZero.waitForDeployment();
 
-            expect(await templZero.quorumPercent()).to.equal(33);
+            expect(await templZero.quorumPercent()).to.equal(QUORUM_BPS);
             expect(await templZero.executionDelayAfterQuorum()).to.equal(7 * 24 * 60 * 60);
             expect(await templZero.burnAddress()).to.equal("0x000000000000000000000000000000000000dEaD");
         });
@@ -138,7 +143,7 @@ describe("TEMPL Contract with DAO Governance", function () {
                     30,
                     30,
                     10,
-                    120,
+                    12_000,
                     7 * 24 * 60 * 60,
                     "0x000000000000000000000000000000000000dEaD",
                     false,
@@ -156,11 +161,11 @@ describe("TEMPL Contract with DAO Governance", function () {
                     priest.address,
                     await token.getAddress(),
                     ENTRY_FEE,
-                    50,
-                    40,
-                    30,
-                    10,
-                    33,
+                    5_000,
+                    4_000,
+                    3_000,
+                    PROTOCOL_BPS,
+                    QUORUM_BPS,
                     7 * 24 * 60 * 60,
                     "0x000000000000000000000000000000000000dEaD",
                     false,
@@ -178,11 +183,11 @@ describe("TEMPL Contract with DAO Governance", function () {
                     priest.address,
                     ethers.ZeroAddress,
                     ENTRY_FEE,
-                    30,
-                    30,
-                    30,
-                    10,
-                    33,
+                    BURN_BPS,
+                    TREASURY_BPS,
+                    MEMBER_BPS,
+                    PROTOCOL_BPS,
+                    QUORUM_BPS,
                     7 * 24 * 60 * 60,
                     "0x000000000000000000000000000000000000dEaD",
                     false,
