@@ -12,35 +12,6 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 abstract contract TemplMembership is TemplBase {
     using SafeERC20 for IERC20;
 
-    /// @notice Forwards configuration to the base contract; concrete deployments call this through inheritance.
-    constructor(
-        address _protocolFeeRecipient,
-        address _accessToken,
-        uint256 _burnPercent,
-        uint256 _treasuryPercent,
-        uint256 _memberPoolPercent,
-        uint256 _protocolPercent,
-        uint256 _quorumPercent,
-        uint256 _executionDelay,
-        address _burnAddress,
-        bool _priestIsDictator,
-        string memory _homeLink
-    )
-        TemplBase(
-            _protocolFeeRecipient,
-            _accessToken,
-            _burnPercent,
-            _treasuryPercent,
-            _memberPoolPercent,
-            _protocolPercent,
-            _quorumPercent,
-            _executionDelay,
-            _burnAddress,
-            _priestIsDictator,
-            _homeLink
-        )
-    {}
-
     /// @notice Purchase templ membership using the configured access token.
     function purchaseAccess() external whenNotPaused whenDisbandUnlocked notSelf nonReentrant {
         Member storage joiningMember = members[msg.sender];
@@ -283,27 +254,6 @@ abstract contract TemplMembership is TemplBase {
             return 0;
         }
         return 1;
-    }
-
-    /// @dev Persists a new external reward checkpoint so future joins can baseline correctly.
-    function _recordExternalCheckpoint(ExternalRewardState storage rewards) internal {
-        RewardCheckpoint memory checkpoint = RewardCheckpoint({
-            blockNumber: uint64(block.number),
-            timestamp: uint64(block.timestamp),
-            cumulative: rewards.cumulativeRewards
-        });
-        uint256 len = rewards.checkpoints.length;
-        if (len == 0) {
-            rewards.checkpoints.push(checkpoint);
-            return;
-        }
-        RewardCheckpoint storage last = rewards.checkpoints[len - 1];
-        if (last.blockNumber == checkpoint.blockNumber) {
-            last.timestamp = checkpoint.timestamp;
-            last.cumulative = checkpoint.cumulative;
-        } else {
-            rewards.checkpoints.push(checkpoint);
-        }
     }
 
     /// @dev Determines the cumulative rewards baseline for a member given join-time snapshots.

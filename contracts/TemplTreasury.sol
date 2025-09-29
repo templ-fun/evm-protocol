@@ -3,40 +3,13 @@ pragma solidity ^0.8.23;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {TemplMembership} from "./TemplMembership.sol";
+import {TemplBase} from "./TemplBase.sol";
 import {TemplErrors} from "./TemplErrors.sol";
 
 /// @title templ treasury module
 /// @notice Adds treasury controls, fee configuration, and external reward management.
-abstract contract TemplTreasury is TemplMembership {
+abstract contract TemplTreasury is TemplBase {
     using SafeERC20 for IERC20;
-
-    /// @notice Pass-through constructor wiring the treasury layer into the membership module.
-    constructor(
-        address _protocolFeeRecipient,
-        address _accessToken,
-        uint256 _burnPercent,
-        uint256 _treasuryPercent,
-        uint256 _memberPoolPercent,
-        uint256 _protocolPercent,
-        uint256 _quorumPercent,
-        uint256 _executionDelay,
-        address _burnAddress,
-        bool _priestIsDictator,
-        string memory _homeLink
-    ) TemplMembership(
-        _protocolFeeRecipient,
-        _accessToken,
-        _burnPercent,
-        _treasuryPercent,
-        _memberPoolPercent,
-        _protocolPercent,
-        _quorumPercent,
-        _executionDelay,
-        _burnAddress,
-        _priestIsDictator,
-        _homeLink
-    ) {}
 
     /// @notice Governance action that transfers available treasury or external funds to a recipient.
     /// @param token Token to withdraw (`address(0)` for ETH, access token, or arbitrary ERC-20).
