@@ -34,4 +34,4 @@ Use this page as your map through the repo. It suggests a learning path and link
 ## Shortcuts
 
 - Just want to run it locally? Open `TEST_LOCALLY.md`.
-- Ready to ship? Open `DEPLOYMENT_GUIDE.md`, then double-check `PRODUCTION_CHECKLIST.md`.
+- Ready to ship? Open `DEPLOYMENT_GUIDE.md`.
