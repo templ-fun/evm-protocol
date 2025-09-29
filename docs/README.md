@@ -20,7 +20,6 @@ Use this page as your map through the repo. It suggests a learning path and link
 - Persistence (D1/SQLite): [PERSISTENCE.md](PERSISTENCE.md)
 - Frontend routes + env: [FRONTEND.md](FRONTEND.md)
 - Deploy to prod: [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)
-- Production readiness: [PRODUCTION_CHECKLIST.md](PRODUCTION_CHECKLIST.md)
 - Local dev walkthrough: [TEST_LOCALLY.md](TEST_LOCALLY.md)
 
 ## Glossary
