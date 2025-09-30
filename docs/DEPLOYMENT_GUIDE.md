@@ -33,8 +33,6 @@ This guide walks through the production deployment of templ on Cloudflare. The b
    # or
    export PROTOCOL_BP=1000      # same value expressed directly in basis points
    ```
-
-   The contracts use basis points internally (10_000 equals 100%). Provide either `PROTOCOL_PERCENT` (0–100) or `PROTOCOL_BP` (0–10_000) and the helper normalises the value before broadcasting.
 2. Deploy the factory:
 
    ```bash
@@ -42,7 +40,6 @@ This guide walks through the production deployment of templ on Cloudflare. The b
    ```
 
    The helper prints the factory address, transaction hash, and confirmed block number, then saves a JSON artifact under `deployments/`.
-   > Note: `deploy-factory.js` deploys a fresh contract by default. It only reuses an existing factory when you explicitly export `FACTORY_ADDRESS`, which is meant for advanced recovery workflows.
 3. Export the trusted factory metadata for downstream steps:
 
    ```bash
