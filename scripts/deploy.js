@@ -382,6 +382,10 @@ async function main() {
   
   const config = await contract.getConfig();
   const treasuryInfo = await contract.getTreasuryInfo();
+
+  const treasuryAvailable = treasuryInfo?.treasury ?? treasuryInfo?.[0];
+  const memberPoolBalance = treasuryInfo?.memberPool ?? treasuryInfo?.[1];
+  const protocolRecipient = treasuryInfo?.protocolAddress ?? treasuryInfo?.[2];
   
   console.log("\n📋 Contract Configuration:");
   console.log("- Token:", config[0]);
@@ -392,12 +396,15 @@ async function main() {
   console.log("- Member Pool Balance:", config[5].toString());
   
   console.log("\n💰 Treasury Information:");
-  console.log("- Treasury Balance:", treasuryInfo[0].toString());
-  console.log("- Member Pool Balance:", treasuryInfo[1].toString());
-  console.log("- Total to Treasury:", treasuryInfo[2].toString());
-  console.log("- Total Burned:", treasuryInfo[3].toString());
-  console.log("- Total to Protocol:", treasuryInfo[4].toString());
-  console.log("- Protocol Fee Recipient:", treasuryInfo[5]);
+  if (treasuryAvailable !== undefined) {
+    console.log("- Treasury Balance:", treasuryAvailable.toString());
+  }
+  if (memberPoolBalance !== undefined) {
+    console.log("- Member Pool Balance:", memberPoolBalance.toString());
+  }
+  if (protocolRecipient) {
+    console.log("- Protocol Fee Recipient:", protocolRecipient);
+  }
   
   // Save deployment info
   const deploymentInfo = {
