@@ -35,35 +35,31 @@ This guide walks through the production deployment of templ on Cloudflare. The b
    ```
 
    The contracts use basis points internally (10_000 equals 100%). Provide either `PROTOCOL_PERCENT` (0–100) or `PROTOCOL_BP` (0–10_000) and the helper normalises the value before broadcasting.
-2. Ensure any previous `FACTORY_ADDRESS` override is cleared so the helper cannot silently reuse an older factory:
-
-   ```bash
-   unset FACTORY_ADDRESS
-   ```
-
-   Keeping this variable set forces `deploy-factory.js` to skip deployments and reuse the referenced contract, which breaks verification if the on-chain bytecode comes from an older release.
-3. Deploy the factory:
+2. Deploy the factory:
 
    ```bash
    npx hardhat run scripts/deploy-factory.js --network base
    ```
 
    The helper prints the factory address, transaction hash, and confirmed block number, then saves a JSON artifact under `deployments/`.
-4. Export the trusted factory metadata for downstream steps:
+   > Note: `deploy-factory.js` deploys a fresh contract by default. It only reuses an existing factory when you explicitly export `FACTORY_ADDRESS`, which is meant for advanced recovery workflows.
+3. Export the trusted factory metadata for downstream steps:
 
    ```bash
    export TRUSTED_FACTORY_ADDRESS=<factory address>
    export TRUSTED_FACTORY_DEPLOYMENT_BLOCK=<factory deploy block>
    ```
 
-5. (Recommended) Verify the factory on BaseScan:
+4. (Recommended) Verify the factory on BaseScan:
 
    ```bash
    npx hardhat verify --network base $TRUSTED_FACTORY_ADDRESS $PROTOCOL_FEE_RECIPIENT <protocolPercentBps from script output>
    ```
 
-   The deployment helper prints the protocol share in basis points—copy that value exactly when calling `hardhat verify`. If verification fails with a bytecode mismatch, confirm `FACTORY_ADDRESS` is still unset and redeploy so the compiled artifacts and on-chain bytecode stay in sync.
-6. All future templ instances should be minted through the app (section 6). The frontend prompts the connected wallet for token, entry-fee, and split details, then routes the deployment through the trusted factory so every templ inherits the verified bytecode.
+   The deployment helper prints the protocol share in basis points—copy that value exactly when calling `hardhat verify`.
+5. All future templ instances should be minted through the app (section 6). The frontend prompts the connected wallet for token, entry-fee, and split details, then routes the deployment through the trusted factory so every templ inherits the verified bytecode.
+
+`TRUSTED_FACTORY_ADDRESS` is the canonical value propagated to the backend and frontend so they only interact with contracts created from your verified factory. Leave `FACTORY_ADDRESS` unset unless you intentionally want to reuse a previously deployed factory during an incident response.
 
 ## 3. Provision Cloudflare resources
 
