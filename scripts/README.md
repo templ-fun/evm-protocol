@@ -17,7 +17,7 @@ Run each script from the repo root unless noted. All commands assume dependencie
 - `test-all.sh` - replicate CI locally in four phases so regressions surface before pushing.
 
 ## deploy.js
-- Deploys `TemplFactory` (when `FACTORY_ADDRESS` is unset) and creates a new templ via `createTemplWithConfig`.
+- Deploys `TemplFactory` (when `FACTORY_ADDRESS` is unset) and creates a new templ via `createTemplWithConfig`. Unset `FACTORY_ADDRESS` before running when you need a fresh factory; leaving it exported forces the script to reuse the referenced address, which can desynchronise verification if the contract bytecode differs from your current sources.
 - Accepts either `PROTOCOL_PERCENT` (0–100) or `PROTOCOL_BP` (0–10_000) and normalises them to the 10_000 basis-point scale before broadcasting.
 - Reads configuration from `.env` (fee splits, quorum, delay, burn address) and persists outputs under `deployments/`.
 - Validates invariants locally (percent totals, entry-fee divisibility, quorum/delay bounds) before broadcasting and automatically reuses the factory’s on-chain protocol share when `FACTORY_ADDRESS` is supplied (any `PROTOCOL_PERCENT` override is ignored in that case).
