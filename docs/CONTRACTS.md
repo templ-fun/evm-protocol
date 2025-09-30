@@ -15,7 +15,7 @@ Use this guide to understand the on-chain modules that handle membership, fee sp
 - Membership: `purchaseAccess`, `claimMemberPool`, `hasAccess`, `getMemberCount`.
 - Governance: create/vote/execute typed proposals; post‑quorum delay; optional dictatorship mode.
 - Treasury: `withdrawTreasuryDAO`, `disbandTreasuryDAO`, donations supported.
-- Caps & Pausing: `setMaxMembersDAO`, `setPausedDAO`; disband proposals no longer block joins.
+- Caps & Pausing: `setMaxMembersDAO`, `setPausedDAO`; disband proposals do not block joins.
 - Views: `getConfig`, `getTreasuryInfo`, `getProposal*`, `getExternalReward*`.
 - Events/Errors: emitted for all lifecycle actions; see the lists below and `contracts/TemplErrors.sol`.
 
@@ -89,7 +89,7 @@ sequenceDiagram
   - `changePriestDAO(address)` - change the priest address via governance; backends persist the new priest and announce it via Telegram notifications.
   - `disbandTreasuryDAO(address token)` - move the full available balance of `token` into a member-distributable pool. When `token == accessToken`, funds roll into the member pool (`memberPoolBalance`) with per-member integer division and any remainder added to `memberRewardRemainder`. When targeting any other ERC-20 or native ETH (`address(0)`), the amount is recorded in an external rewards pool so members can later claim their share with `claimExternalToken`.
   Remaining external dust is queued for the current cohort before new members join. Because distribution relies on integer division, nothing is emitted unless the remainder is large enough to pay every existing member at least one token; any leftover micro-units stay in `rewardRemainder` until a later disband or donation makes a clean split possible.
-  Creating a disband proposal no longer freezes membership. Governance keeps the templ open to new joins while the vote unfolds, and snapshot accounting ensures existing members keep their share of the disbanded funds.
+  Creating a disband proposal keeps membership open. Governance keeps the templ open to new joins while the vote unfolds, and snapshot accounting ensures existing members keep their share of the disbanded funds.
   - `setMaxMembersDAO(uint256 limit)` - set the membership cap. `0` keeps access unlimited; any positive limit pauses new joins once the count is reached. Reverts with `MemberLimitTooLow` when the requested limit is below the current member count. When the cap is hit, `purchaseAccess` auto-pauses the contract and future joins revert with `MemberLimitReached` until governance raises or clears the limit **and** subsequently unpauses the templ with `setPausedDAO(false)`.
   - `setTemplHomeLinkDAO(string newLink)` - update the templ’s canonical off-chain URL; emits `TemplHomeLinkUpdated` so UIs and bots sync immediately.
   - `setDictatorshipDAO(bool enabled)` - flip the `priestIsDictator` flag. This helper is callable through proposals in both directions; when dictatorship is active, the DAO helper also accepts direct calls from the priest (all other callers receive `PriestOnly`).
