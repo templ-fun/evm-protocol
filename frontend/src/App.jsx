@@ -119,7 +119,7 @@ export default function App() {
 
       let backendTempls = [];
       try {
-        // Chat identifiers remain server-side; avoid include=chatId which now returns 403.
+        // Chat identifiers remain server-side; include=chatId requests return 403.
         const res = await fetch(`${BACKEND_URL}/templs?include=homeLink`);
         if (res.ok) {
           const data = await res.json();
@@ -165,7 +165,7 @@ export default function App() {
         memberPoolBalanceRaw: '0',
         memberPoolBalanceFormatted: '0',
         memberCount: 0,
-        totalPurchases: '0',
+        totalJoins: '0',
         entryFeeRaw: '0',
         entryFeeFormatted: '0',
         templHomeLink: templ.templHomeLink,
