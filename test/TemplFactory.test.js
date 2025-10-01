@@ -339,17 +339,73 @@ describe("TemplFactory", function () {
         const tx = await factory.createTempl(await token.getAddress(), ENTRY_FEE);
         await tx.wait();
 
-        const templ = await ethers.getContractAt("TEMPL", templAddress);
+    const templ = await ethers.getContractAt("TEMPL", templAddress);
 
-        expect(await templ.priest()).to.equal(deployer.address);
-        expect(await templ.burnPercent()).to.equal(BigInt(pct(30)));
-        expect(await templ.treasuryPercent()).to.equal(BigInt(pct(30)));
-        expect(await templ.memberPoolPercent()).to.equal(BigInt(pct(30)));
-        expect(await templ.protocolPercent()).to.equal(BigInt(pct(10)));
-        expect(await templ.quorumPercent()).to.equal(BigInt(pct(33)));
-        expect(await templ.executionDelayAfterQuorum()).to.equal(7 * 24 * 60 * 60);
-        expect(await templ.burnAddress()).to.equal("0x000000000000000000000000000000000000dEaD");
-    });
+    expect(await templ.priest()).to.equal(deployer.address);
+    expect(await templ.burnPercent()).to.equal(BigInt(pct(30)));
+    expect(await templ.treasuryPercent()).to.equal(BigInt(pct(30)));
+    expect(await templ.memberPoolPercent()).to.equal(BigInt(pct(30)));
+    expect(await templ.protocolFeeRecipient()).to.equal(protocolRecipient.address);
+    expect(await templ.protocolPercent()).to.equal(BigInt(pct(10)));
+    expect(await templ.quorumPercent()).to.equal(BigInt(pct(33)));
+    expect(await templ.executionDelayAfterQuorum()).to.equal(7 * 24 * 60 * 60);
+    expect(await templ.burnAddress()).to.equal("0x000000000000000000000000000000000000dEaD");
+  });
+
+  it("reuses the immutable protocol configuration for every templ", async function () {
+    const [, priest, protocolRecipient] = await ethers.getSigners();
+    const tokenA = await deployToken("Immutable", "IMM");
+    const tokenB = await deployToken("ImmutableTwo", "IM2");
+
+    const Factory = await ethers.getContractFactory("TemplFactory");
+    const protocolPercent = pct(12);
+    const factory = await Factory.deploy(protocolRecipient.address, protocolPercent);
+    await factory.waitForDeployment();
+
+    const firstConfig = {
+      priest: priest.address,
+      token: await tokenA.getAddress(),
+      entryFee: ENTRY_FEE,
+      burnPercent: pct(24),
+      treasuryPercent: pct(36),
+      memberPoolPercent: pct(28),
+      quorumPercent: pct(40),
+      executionDelaySeconds: 5 * 24 * 60 * 60,
+      burnAddress: ethers.ZeroAddress,
+      priestIsDictator: false,
+      maxMembers: 0,
+      homeLink: "",
+    };
+
+    const secondConfig = {
+      priest: priest.address,
+      token: await tokenB.getAddress(),
+      entryFee: ENTRY_FEE * 2n,
+      burnPercent: pct(26),
+      treasuryPercent: pct(34),
+      memberPoolPercent: pct(28),
+      quorumPercent: pct(35),
+      executionDelaySeconds: 9 * 24 * 60 * 60,
+      burnAddress: ethers.ZeroAddress,
+      priestIsDictator: true,
+      maxMembers: 50,
+      homeLink: "https://templ.fun/immutability",
+    };
+
+    const firstTemplAddress = await factory.createTemplWithConfig.staticCall(firstConfig);
+    await (await factory.createTemplWithConfig(firstConfig)).wait();
+
+    const secondTemplAddress = await factory.createTemplWithConfig.staticCall(secondConfig);
+    await (await factory.createTemplWithConfig(secondConfig)).wait();
+
+    const firstTempl = await ethers.getContractAt("TEMPL", firstTemplAddress);
+    const secondTempl = await ethers.getContractAt("TEMPL", secondTemplAddress);
+
+    expect(await firstTempl.protocolFeeRecipient()).to.equal(protocolRecipient.address);
+    expect(await secondTempl.protocolFeeRecipient()).to.equal(protocolRecipient.address);
+    expect(await firstTempl.protocolPercent()).to.equal(BigInt(protocolPercent));
+    expect(await secondTempl.protocolPercent()).to.equal(BigInt(protocolPercent));
+  });
 
     it("reverts when deployed with zero protocol recipient", async function () {
         const Factory = await ethers.getContractFactory("TemplFactory");
