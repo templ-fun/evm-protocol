@@ -1,8 +1,8 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
 const { deployTempl } = require("./utils/deploy");
-const { mintToUsers, purchaseAccess } = require("./utils/mintAndPurchase");
-const { encodeSetPausedDAO } = require("./utils/callDataBuilders");
+const { mintToUsers, joinMembers } = require("./utils/mintAndPurchase");
+const { encodeSetJoinPausedDAO } = require("./utils/callDataBuilders");
 
 describe("TEMPL - Proposal Pagination", function () {
   let templ, token;
@@ -16,7 +16,7 @@ describe("TEMPL - Proposal Pagination", function () {
 
     const users = [priest, user1, user2, user3, user4, user5];
     await mintToUsers(token, users, ENTRY_FEE * 2n);
-    await purchaseAccess(templ, token, users, ENTRY_FEE * 2n);
+    await joinMembers(templ, token, users, ENTRY_FEE * 2n);
   });
 
   describe("getActiveProposalsPaginated", function () {
@@ -30,7 +30,7 @@ describe("TEMPL - Proposal Pagination", function () {
       // Create 5 proposals from different users
       const users = [priest, user1, user2, user3, user4];
       for (let i = 0; i < users.length; i++) {
-        const calldata = encodeSetPausedDAO(false);
+        const calldata = encodeSetJoinPausedDAO(false);
         await templ.connect(users[i]).createProposal(
           `Proposal ${i}`,
           `Description ${i}`,
@@ -49,7 +49,7 @@ describe("TEMPL - Proposal Pagination", function () {
     });
 
     it("Marks hasMore when active proposals remain beyond the requested window", async function () {
-      const calldata = encodeSetPausedDAO(false);
+      const calldata = encodeSetJoinPausedDAO(false);
       await templ.connect(priest).createProposal("Window 0", "Win 0", calldata, 7 * 24 * 60 * 60);
       await templ.connect(user1).createProposal("Window 1", "Win 1", calldata, 7 * 24 * 60 * 60);
       await templ.connect(user2).createProposal("Window 2", "Win 2", calldata, 7 * 24 * 60 * 60);
@@ -60,7 +60,7 @@ describe("TEMPL - Proposal Pagination", function () {
     });
 
     it("copies active proposal ids when the limit exceeds the active count", async function () {
-      const calldata = encodeSetPausedDAO(false);
+      const calldata = encodeSetJoinPausedDAO(false);
       await templ.connect(priest).createProposal("Alpha", "A", calldata, 7 * 24 * 60 * 60);
       await templ.connect(user1).createProposal("Beta", "B", calldata, 7 * 24 * 60 * 60);
 
@@ -71,7 +71,7 @@ describe("TEMPL - Proposal Pagination", function () {
 
     it("Should handle pagination correctly", async function () {
       // Create 7 proposals - need to handle one active proposal per user limit
-      const calldata = encodeSetPausedDAO(false);
+      const calldata = encodeSetJoinPausedDAO(false);
       
       // First round: 5 users create proposals (0-4)
       const users = [priest, user1, user2, user3, user4];
@@ -100,7 +100,7 @@ describe("TEMPL - Proposal Pagination", function () {
       await templ.connect(priest).createProposal("Proposal 5", "Description 5", calldata, 14 * 24 * 60 * 60);
       await templ.connect(user1).createProposal("Proposal 6", "Description 6", calldata, 14 * 24 * 60 * 60);
 
-      // Now we have proposals 2,3,4 expired but not executed, and 5,6 new and active = 2 active total
+      // At this moment proposals 2,3,4 are expired but not executed, and 5,6 are new and active = 2 active total
       // Proposals 0,1 are executed, 2,3,4 are expired, 5,6 are active
       
       // Get all active proposals
@@ -123,7 +123,7 @@ describe("TEMPL - Proposal Pagination", function () {
 
     it("Should filter out executed proposals", async function () {
       // Create proposals
-      const calldata = encodeSetPausedDAO(true);
+      const calldata = encodeSetJoinPausedDAO(true);
       
       await templ.connect(priest).createProposal("P0", "D0", calldata, 7 * 24 * 60 * 60);
       await templ.connect(user1).createProposal("P1", "D1", calldata, 7 * 24 * 60 * 60);
@@ -137,7 +137,7 @@ describe("TEMPL - Proposal Pagination", function () {
       await templ.executeProposal(0);
       
       // Don't move time back, just check that executed proposals are filtered out
-      // Proposals 1 and 2 are now expired since we moved time forward
+      // Proposals 1 and 2 are expired after advancing time
 
       // Should return empty since 0 is executed and 1,2 are expired
       const [proposalIds, hasMore] = await templ.getActiveProposalsPaginated(0, 10);
@@ -158,7 +158,7 @@ describe("TEMPL - Proposal Pagination", function () {
 
     it("Should filter out expired proposals", async function () {
       // Create proposals with different voting periods
-      const calldata = encodeSetPausedDAO(true);
+      const calldata = encodeSetJoinPausedDAO(true);
       
       await templ.connect(priest).createProposal("P0", "D0", calldata, 7 * 24 * 60 * 60);
       await templ.connect(user1).createProposal("P1", "D1", calldata, 14 * 24 * 60 * 60);
@@ -196,7 +196,7 @@ describe("TEMPL - Proposal Pagination", function () {
 
     it("Should handle hasMore flag correctly", async function () {
       // Create exactly 3 proposals
-      const calldata = encodeSetPausedDAO(false);
+      const calldata = encodeSetJoinPausedDAO(false);
       await templ.connect(priest).createProposal("P0", "D0", calldata, 7 * 24 * 60 * 60);
       await templ.connect(user1).createProposal("P1", "D1", calldata, 7 * 24 * 60 * 60);
       await templ.connect(user2).createProposal("P2", "D2", calldata, 7 * 24 * 60 * 60);
@@ -219,7 +219,7 @@ describe("TEMPL - Proposal Pagination", function () {
 
     it("Should handle mixed active/inactive proposals", async function () {
       // Create 5 proposals
-      const calldata = encodeSetPausedDAO(false);
+      const calldata = encodeSetJoinPausedDAO(false);
       const users = [priest, user1, user2, user3, user4];
       
       for (let i = 0; i < 5; i++) {
@@ -262,7 +262,7 @@ describe("TEMPL - Proposal Pagination", function () {
     });
 
     it("Should return hasMore false when offset exceeds proposal count", async function () {
-      const calldata = encodeSetPausedDAO(false);
+      const calldata = encodeSetJoinPausedDAO(false);
       await templ.connect(priest).createProposal("P0", "D0", calldata, 7 * 24 * 60 * 60);
 
       const [ids, hasMore] = await templ.getActiveProposalsPaginated(5, 10);
@@ -274,7 +274,7 @@ describe("TEMPL - Proposal Pagination", function () {
   describe("Backwards compatibility", function () {
     it("getActiveProposals should still work", async function () {
       // Create a few proposals
-      const calldata = encodeSetPausedDAO(false);
+      const calldata = encodeSetJoinPausedDAO(false);
       await templ.connect(priest).createProposal("P0", "D0", calldata, 7 * 24 * 60 * 60);
       await templ.connect(user1).createProposal("P1", "D1", calldata, 7 * 24 * 60 * 60);
       await templ.connect(user2).createProposal("P2", "D2", calldata, 7 * 24 * 60 * 60);
@@ -289,7 +289,7 @@ describe("TEMPL - Proposal Pagination", function () {
 
     it("Both functions should return same results for small counts", async function () {
       // Create proposals
-      const calldata = encodeSetPausedDAO(false);
+      const calldata = encodeSetJoinPausedDAO(false);
       await templ.connect(priest).createProposal("P0", "D0", calldata, 7 * 24 * 60 * 60);
       await templ.connect(user1).createProposal("P1", "D1", calldata, 7 * 24 * 60 * 60);
 
