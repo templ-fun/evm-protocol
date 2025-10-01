@@ -54,12 +54,15 @@ test.describe('Templ core workflows', () => {
     await expect(page).toHaveURL(/\/templs\/create$/);
     await expect(page.getByRole('heading', { name: 'Create a Templ' })).toBeVisible();
 
+    const advancedToggle = page.getByRole('button', { name: /Advanced mode/i });
+    await advancedToggle.click();
+
     const factoryInput = page.getByLabel('Factory address');
     await expect(factoryInput).toHaveValue(templFactoryAddress);
     await page.getByLabel('Access token address').fill(tokenAddress);
-    await page.getByLabel('Entry fee (wei)').fill(entryFee.toString());
+    const entryFeeTokenAmount = ethers.formatUnits(entryFee, 18);
+    await page.getByLabel('Entry fee (token amount)').fill(entryFeeTokenAmount);
     await page.getByLabel('Quorum %').fill('33');
-    await page.getByLabel('Telegram chat id').fill('-100999888777');
     await page.getByLabel('Templ home link').fill('https://t.me/templ-e2e-demo');
 
     await page.getByRole('button', { name: 'Deploy templ' }).click();

@@ -8,6 +8,11 @@ import { button, form, layout, surface, text } from '../ui/theme.js';
 
 const DEFAULT_PERCENT = 30;
 const DEFAULT_QUORUM_PERCENT = 33;
+const ERC20_DECIMALS_ABI = ['function decimals() view returns (uint8)'];
+
+const MIN_ENTRY_FEE = 10n;
+const ENTRY_FEE_STEP = 10n;
+const HEX_ADDRESS_REGEX = /^0x[0-9a-fA-F]{40}$/;
 
 export function CreateTemplPage({
   ethers,
@@ -20,7 +25,7 @@ export function CreateTemplPage({
   readProvider
 }) {
   const [tokenAddress, setTokenAddress] = useState('');
-  const [entryFee, setEntryFee] = useState('100000000000000000');
+  const [entryFeeTokens, setEntryFeeTokens] = useState('1');
   const [burnPercent, setBurnPercent] = useState(String(DEFAULT_PERCENT));
   const [treasuryPercent, setTreasuryPercent] = useState(String(DEFAULT_PERCENT));
   const [memberPercent, setMemberPercent] = useState(String(DEFAULT_PERCENT));
@@ -32,12 +37,15 @@ export function CreateTemplPage({
   const [protocolPercentLocked, setProtocolPercentLocked] = useState(() => FACTORY_CONFIG.protocolPercent !== undefined);
   const [maxMembers, setMaxMembers] = useState('0');
   const [dictatorship, setDictatorship] = useState(false);
-  const [telegramChatId, setTelegramChatId] = useState('');
   const [homeLink, setHomeLink] = useState('');
   const [factoryAddress, setFactoryAddress] = useState(() => FACTORY_CONFIG.address || '');
   const [submitting, setSubmitting] = useState(false);
   const [bindingInfo, setBindingInfo] = useState(null);
   const [autoBalanceSplit, setAutoBalanceSplit] = useState(true);
+  const [tokenDecimals, setTokenDecimals] = useState(18);
+  const [tokenDecimalsSource, setTokenDecimalsSource] = useState('default');
+  const [tokenDecimalsError, setTokenDecimalsError] = useState('');
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const sanitizedBindingHomeLink = sanitizeLink(bindingInfo?.templHomeLink);
   const bindingStartLink = useMemo(() => {
     if (!bindingInfo?.bindingCode) return null;
@@ -45,6 +53,19 @@ export function CreateTemplPage({
     if (!trimmedCode) return null;
     return `https://t.me/templfunbot?startgroup=${encodeURIComponent(trimmedCode)}`;
   }, [bindingInfo?.bindingCode]);
+
+  const resolvedTokenDecimals = useMemo(() => (Number.isInteger(tokenDecimals) ? tokenDecimals : 18), [tokenDecimals]);
+  const tokenDecimalsHint = useMemo(() => {
+    if (tokenDecimalsSource === 'chain') {
+      return `Detected ${resolvedTokenDecimals} decimals from the token contract.`;
+    }
+    if (tokenDecimalsSource === 'fallback') {
+      return tokenDecimalsError || 'Using 18 decimals because token metadata could not be read.';
+    }
+    return 'Defaults to 18 decimals until the token address is detected.';
+  }, [resolvedTokenDecimals, tokenDecimalsError, tokenDecimalsSource]);
+  const trimmedFactoryAddress = factoryAddress?.trim?.() ?? '';
+  const showFactoryInput = showAdvanced || !FACTORY_CONFIG.address;
 
   const protocolPercentValue = useMemo(() => {
     const parsed = Number(protocolPercent);
@@ -121,7 +142,7 @@ export function CreateTemplPage({
       setProtocolPercentLocked(false);
       if (!ethers) return;
       const addr = factoryAddress?.trim?.() ?? '';
-      if (!/^0x[0-9a-fA-F]{40}$/.test(addr)) {
+      if (!HEX_ADDRESS_REGEX.test(addr)) {
         return;
       }
       const provider = readProvider || signer?.provider;
@@ -152,32 +173,86 @@ export function CreateTemplPage({
     };
   }, [factoryAddress, ethers, readProvider, signer?.provider]);
 
+  useEffect(() => {
+    let cancelled = false;
+    async function loadTokenMetadata() {
+      setTokenDecimalsError('');
+      if (!ethers) return;
+      const trimmed = tokenAddress?.trim?.() ?? '';
+      if (!HEX_ADDRESS_REGEX.test(trimmed)) {
+        setTokenDecimals(18);
+        setTokenDecimalsSource('default');
+        return;
+      }
+      const provider = readProvider || signer?.provider;
+      if (!provider) {
+        return;
+      }
+      try {
+        const tokenContract = new ethers.Contract(trimmed, ERC20_DECIMALS_ABI, provider);
+        const raw = await tokenContract.decimals();
+        const parsed = Number(raw);
+        if (cancelled) return;
+        if (Number.isFinite(parsed)) {
+          setTokenDecimals(parsed);
+          setTokenDecimalsSource('chain');
+        }
+      } catch (err) {
+        if (cancelled) return;
+        console.warn('[templ] Failed to load token decimals', err);
+        setTokenDecimals(18);
+        setTokenDecimalsSource('fallback');
+        setTokenDecimalsError('Using 18 decimals because reading the token metadata failed.');
+      }
+    }
+    void loadTokenMetadata();
+    return () => {
+      cancelled = true;
+    };
+  }, [ethers, readProvider, signer?.provider, tokenAddress]);
+
   const handleSubmit = async (event) => {
     event.preventDefault();
     if (!signer) {
       onConnectWallet?.();
       return;
     }
-
-    const trimmedEntryFee = entryFee.trim();
-    if (!trimmedEntryFee) {
-      pushMessage?.('Entry fee is required');
+    const trimmedFactory = factoryAddress?.trim?.() ?? '';
+    if (!HEX_ADDRESS_REGEX.test(trimmedFactory)) {
+      pushMessage?.('Factory address must be a valid contract address.');
       return;
     }
+    const trimmedToken = tokenAddress?.trim?.() ?? '';
+    if (!HEX_ADDRESS_REGEX.test(trimmedToken)) {
+      pushMessage?.('Access token address must be a valid contract address.');
+      return;
+    }
+
+    const decimals = resolvedTokenDecimals;
     let parsedEntryFee;
     try {
-      parsedEntryFee = BigInt(trimmedEntryFee);
+      parsedEntryFee = ethers.parseUnits(entryFeeTokens.trim() || '0', decimals);
     } catch {
-      pushMessage?.('Entry fee must be a whole number (wei)');
+      pushMessage?.('Entry fee must be a numeric value.');
       return;
     }
-    if (parsedEntryFee < 10n) {
+    if (parsedEntryFee < MIN_ENTRY_FEE) {
       pushMessage?.('Entry fee must be at least 10 wei to satisfy templ requirements');
       return;
     }
-    if (parsedEntryFee % 10n !== 0n) {
-      pushMessage?.('Entry fee must be divisible by 10 wei');
-      return;
+    const remainder = parsedEntryFee % ENTRY_FEE_STEP;
+    if (remainder !== 0n) {
+      const adjusted = parsedEntryFee + (ENTRY_FEE_STEP - remainder);
+      parsedEntryFee = adjusted;
+      if (pushMessage) {
+        pushMessage('Entry fee rounded up to the nearest valid amount for templ.');
+      }
+      try {
+        const adjustedDisplay = ethers.formatUnits(parsedEntryFee, decimals);
+        setEntryFeeTokens(adjustedDisplay);
+      } catch (formatErr) {
+        console.warn('[templ] Failed to format adjusted entry fee', formatErr);
+      }
     }
     setSubmitting(true);
     pushMessage?.('Deploying templ…');
@@ -186,11 +261,11 @@ export function CreateTemplPage({
         ethers,
         signer,
         walletAddress,
-        factoryAddress,
+        factoryAddress: trimmedFactory,
         factoryArtifact: templFactoryArtifact,
         templArtifact,
-        tokenAddress,
-        entryFee,
+        tokenAddress: trimmedToken,
+        entryFee: parsedEntryFee.toString(),
         burnPercent,
         treasuryPercent,
         memberPoolPercent: memberPercent,
@@ -198,14 +273,13 @@ export function CreateTemplPage({
         quorumPercent,
         maxMembers,
         priestIsDictator: dictatorship,
-        telegramChatId: telegramChatId || undefined,
         templHomeLink: homeLink || undefined
       });
       pushMessage?.(`Templ deployed at ${result.templAddress}`);
       setBindingInfo({
         templAddress: result.templAddress,
         bindingCode: result.registration?.bindingCode || null,
-        telegramChatId: result.registration?.templ?.telegramChatId || telegramChatId || null,
+        telegramChatId: result.registration?.templ?.telegramChatId || null,
         templHomeLink: result.registration?.templ?.templHomeLink || homeLink || '',
         priest: result.registration?.templ?.priest || walletAddress
       });
@@ -222,17 +296,24 @@ export function CreateTemplPage({
       <header className={layout.header}>
         <h1 className="text-3xl font-semibold tracking-tight">Create a Templ</h1>
       </header>
-      <form className={`${layout.card} flex flex-col gap-4`} onSubmit={handleSubmit}>
-        <label className={form.label}>
-          Factory address
-          <input
-            type="text"
-            className={form.input}
-            value={factoryAddress}
-            onChange={(e) => setFactoryAddress(e.target.value.trim())}
-            required
-          />
-        </label>
+      <form className={`${layout.card} flex flex-col gap-5`} onSubmit={handleSubmit}>
+        {showFactoryInput ? (
+          <label className={form.label}>
+            Factory address
+            <input
+              type="text"
+              className={form.input}
+              value={factoryAddress}
+              onChange={(e) => setFactoryAddress(e.target.value.trim())}
+              required
+            />
+          </label>
+        ) : (
+          <p className={text.hint}>
+            Using factory <code className={`${text.mono} text-xs`}>{trimmedFactoryAddress || '—'}</code>. Open Advanced mode to
+            change it.
+          </p>
+        )}
         <label className={form.label}>
           Access token address
           <input
@@ -245,134 +326,145 @@ export function CreateTemplPage({
           />
         </label>
         <label className={form.label}>
-          Entry fee (wei)
+          Entry fee (token amount)
           <input
             type="text"
             className={form.input}
-            value={entryFee}
-            onChange={(e) => setEntryFee(e.target.value.trim())}
+            value={entryFeeTokens}
+            onChange={(e) => setEntryFeeTokens(e.target.value)}
+            placeholder="e.g. 1.5"
             required
           />
         </label>
-        <div className={layout.grid}>
-          <label className={form.label}>
-            Burn %
-            <input
-              type="number"
-              min="0"
-              max="100"
-              className={form.input}
-              value={burnPercent}
-              onChange={handlePercentChange('burn')}
-            />
-          </label>
-          <label className={form.label}>
-            Treasury %
-            <input
-              type="number"
-              min="0"
-              max="100"
-              className={form.input}
-              value={treasuryPercent}
-              onChange={handlePercentChange('treasury')}
-            />
-          </label>
-          <label className={form.label}>
-            Member pool %
-            <input
-              type="number"
-              min="0"
-              max="100"
-              className={form.input}
-              value={memberPercent}
-              onChange={handleMemberPercentChange}
-              disabled={autoBalanceSplit}
-            />
-            {autoBalanceSplit ? (
-              <span className={text.hint}>
-                Auto-balanced to allocate the remaining {feeSplitTarget}% after burn and treasury splits.
-              </span>
-            ) : null}
-          </label>
-          <label className={form.label}>
-            Protocol %
-            <input
-              type="number"
-              min="0"
-              max="100"
-              className={form.input}
-              value={protocolPercent}
-              onChange={(e) => setProtocolPercent(e.target.value)}
-              disabled={protocolPercentLocked}
-            />
-            {protocolPercentLocked ? (
-              <span className={text.hint}>Locked to factory protocol fee</span>
-            ) : null}
-          </label>
-          <label className={form.label}>
-            Quorum %
-            <input
-              type="number"
-              min="1"
-              max="100"
-              className={form.input}
-              value={quorumPercent}
-              onChange={(e) => setQuorumPercent(e.target.value)}
-            />
-            <span className={text.hint}>Percentage of eligible voters required to pass proposals</span>
-          </label>
+        <div className="flex flex-col gap-1">
+          <span className={text.hint}>
+            Converted with {resolvedTokenDecimals} decimals and rounded up to 10-wei increments to satisfy templ requirements.
+          </span>
+          {tokenDecimalsHint ? <span className={text.hint}>{tokenDecimalsHint}</span> : null}
         </div>
-        <label className={form.checkbox}>
-          <input
-            type="checkbox"
-            className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-            checked={autoBalanceSplit}
-            onChange={(event) => setAutoBalanceSplit(event.target.checked)}
-          />
-          Auto-balance fee splits
-        </label>
-        <p className={text.hint}>
-          Protocol receives {protocolPercentValue}% by default, leaving {feeSplitTarget}% to divide between burn, treasury, and
-          member rewards.
-        </p>
-        <label className={form.label}>
-          Max members (0 = unlimited)
-          <input
-            type="text"
-            className={form.input}
-            value={maxMembers}
-            onChange={(e) => setMaxMembers(e.target.value.trim())}
-          />
-        </label>
-        <label className={form.checkbox}>
-          <input
-            type="checkbox"
-            className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-            checked={dictatorship}
-            onChange={(e) => setDictatorship(e.target.checked)}
-          />
-          Priest starts with dictatorship powers
-        </label>
-        <label className={form.label}>
-          Telegram chat id
-          <input
-            type="text"
-            className={form.input}
-            value={telegramChatId}
-            onChange={(e) => setTelegramChatId(e.target.value)}
-            placeholder="e.g. -100123456"
-          />
-        </label>
-        <label className={form.label}>
-          Templ home link
-          <input
-            type="text"
-            className={form.input}
-            value={homeLink}
-            onChange={(e) => setHomeLink(e.target.value)}
-            placeholder="https://t.me/your-group"
-          />
-        </label>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <button
+            type="button"
+            className={button.base}
+            onClick={() => setShowAdvanced((prev) => !prev)}
+          >
+            {showAdvanced ? 'Hide advanced' : 'Advanced mode'}
+          </button>
+        </div>
+        {showAdvanced ? (
+          <div className="flex flex-col gap-4">
+            <div className={layout.grid}>
+              <label className={form.label}>
+                Burn %
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  className={form.input}
+                  value={burnPercent}
+                  onChange={handlePercentChange('burn')}
+                />
+              </label>
+              <label className={form.label}>
+                Treasury %
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  className={form.input}
+                  value={treasuryPercent}
+                  onChange={handlePercentChange('treasury')}
+                />
+              </label>
+              <label className={form.label}>
+                Member pool %
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  className={form.input}
+                  value={memberPercent}
+                  onChange={handleMemberPercentChange}
+                  disabled={autoBalanceSplit}
+                />
+                {autoBalanceSplit ? (
+                  <span className={text.hint}>
+                    Auto-balanced to allocate the remaining {feeSplitTarget}% after burn and treasury splits.
+                  </span>
+                ) : null}
+              </label>
+              <label className={form.label}>
+                Protocol %
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  className={form.input}
+                  value={protocolPercent}
+                  onChange={(e) => setProtocolPercent(e.target.value)}
+                  disabled={protocolPercentLocked}
+                />
+                {protocolPercentLocked ? <span className={text.hint}>Locked to factory protocol fee</span> : null}
+              </label>
+              <label className={form.label}>
+                Quorum %
+                <input
+                  type="number"
+                  min="1"
+                  max="100"
+                  className={form.input}
+                  value={quorumPercent}
+                  onChange={(e) => setQuorumPercent(e.target.value)}
+                />
+                <span className={text.hint}>Percentage of eligible voters required to pass proposals</span>
+              </label>
+            </div>
+            <label className={form.checkbox}>
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                checked={autoBalanceSplit}
+                onChange={(event) => setAutoBalanceSplit(event.target.checked)}
+              />
+              Auto-balance fee splits
+            </label>
+            <p className={text.hint}>
+              Protocol receives {protocolPercentValue}% by default, leaving {feeSplitTarget}% to divide between burn, treasury,
+              and member rewards.
+            </p>
+            <label className={form.label}>
+              Max members (0 = unlimited)
+              <input
+                type="text"
+                className={form.input}
+                value={maxMembers}
+                onChange={(e) => setMaxMembers(e.target.value.trim())}
+              />
+            </label>
+            <label className={form.checkbox}>
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                checked={dictatorship}
+                onChange={(e) => setDictatorship(e.target.checked)}
+              />
+              Priest starts with dictatorship powers
+            </label>
+            <label className={form.label}>
+              Templ home link
+              <input
+                type="text"
+                className={form.input}
+                value={homeLink}
+                onChange={(e) => setHomeLink(e.target.value)}
+                placeholder="https://t.me/your-group"
+              />
+            </label>
+            <p className={text.hint}>
+              Optional, but helps members discover your public group from templ.fun once the templ is live.
+            </p>
+          </div>
+        ) : null}
         <button type="submit" className={button.primary} disabled={submitting}>
           {submitting ? 'Deploying…' : 'Deploy templ'}
         </button>
