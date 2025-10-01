@@ -58,13 +58,15 @@ async function bootstrapTempl({ page, provider, wallets, extraWallets = [], entr
   await expect(page).toHaveURL(/\/templs\/create$/);
 
   const tokenAddress = await token.getAddress();
-  const entryFeeRaw = entryFee.toString();
+  const entryFeeTokenAmount = ethers.formatUnits(entryFee, 18);
+
+  const advancedToggle = page.getByRole('button', { name: /Advanced mode/i });
+  await advancedToggle.click();
 
   await expect(page.getByLabel('Factory address')).toHaveValue(templFactoryAddress);
   await page.getByLabel('Access token address').fill(tokenAddress);
-  await page.getByLabel('Entry fee (wei)').fill(entryFeeRaw);
+  await page.getByLabel('Entry fee (token amount)').fill(entryFeeTokenAmount);
   await page.getByLabel('Quorum %').fill('33');
-  await page.getByLabel('Telegram chat id').fill('-100700600500');
   await page.getByLabel('Templ home link').fill('https://t.me/templ-governance-e2e');
 
   await page.getByRole('button', { name: 'Deploy templ' }).click();
