@@ -173,6 +173,12 @@ export function CreateTemplPage({
       pushMessage?.('Entry fee must be divisible by 10 wei');
       return;
     }
+    const sanitizedInputHomeLink = sanitizeLink(homeLink);
+    if (sanitizedInputHomeLink.text && !sanitizedInputHomeLink.isSafe) {
+      pushMessage?.('Templ home link must use http(s) or tg:// protocols.');
+      return;
+    }
+
     setSubmitting(true);
     pushMessage?.('Deploying templ…');
     try {
@@ -193,14 +199,14 @@ export function CreateTemplPage({
         maxMembers,
         priestIsDictator: dictatorship,
         telegramChatId: telegramChatId || undefined,
-        templHomeLink: homeLink || undefined
+        templHomeLink: sanitizedInputHomeLink.href || undefined
       });
       pushMessage?.(`Templ deployed at ${result.templAddress}`);
       setBindingInfo({
         templAddress: result.templAddress,
         bindingCode: result.registration?.bindingCode || null,
         telegramChatId: result.registration?.templ?.telegramChatId || telegramChatId || null,
-        templHomeLink: result.registration?.templ?.templHomeLink || homeLink || '',
+        templHomeLink: result.registration?.templ?.templHomeLink || sanitizedInputHomeLink.href || '',
         priest: result.registration?.templ?.priest || walletAddress
       });
       refreshTempls?.();

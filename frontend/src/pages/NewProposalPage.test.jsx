@@ -46,4 +46,16 @@ describe('buildActionConfig', () => {
     expect(result.params.newTreasuryPercent).toBe(3000);
     expect(result.params.newMemberPoolPercent).toBe(3000);
   });
+
+  it('builds update home link action with sanitized link', () => {
+    const result = buildActionConfig('updateHomeLink', { homeLink: ' https://templ.fun ' });
+
+    expect(result.action).toBe('setHomeLink');
+    expect(result.params.newHomeLink).toBe('https://templ.fun');
+  });
+
+  it('rejects unsafe home link protocols', () => {
+    expect(() => buildActionConfig('updateHomeLink', { homeLink: 'javascript:alert(1)' }))
+      .toThrow('Home link must use http(s) or tg:// protocols');
+  });
 });

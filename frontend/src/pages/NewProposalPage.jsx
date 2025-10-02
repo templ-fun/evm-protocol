@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { sanitizeLink } from '../../../shared/linkSanitizer.js';
 import templArtifact from '../contracts/TEMPL.json';
 import { fetchGovernanceParameters, proposeVote } from '../services/governance.js';
 import { fetchTemplStats } from '../services/templs.js';
@@ -148,9 +149,16 @@ export function buildActionConfig(kind, params, helpers = {}) {
       }
       return { action: 'updateConfig', params: nextParams };
     }
-    case 'updateHomeLink':
-      if (!params.homeLink) throw new Error('Home link is required');
-      return { action: 'setHomeLink', params: { newHomeLink: params.homeLink } };
+    case 'updateHomeLink': {
+      const sanitized = sanitizeLink(params.homeLink);
+      if (!sanitized.text) {
+        throw new Error('Home link is required');
+      }
+      if (!sanitized.isSafe) {
+        throw new Error('Home link must use http(s) or tg:// protocols');
+      }
+      return { action: 'setHomeLink', params: { newHomeLink: sanitized.href } };
+    }
     default:
       throw new Error('Unsupported proposal type');
   }
