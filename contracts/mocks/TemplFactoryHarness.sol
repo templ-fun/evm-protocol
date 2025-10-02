@@ -9,6 +9,9 @@ contract TemplFactoryHarness is TemplFactory {
     {}
 
     function exposeInitPointer() external view returns (address) {
-        return templInitCodePointer;
+        if (templInitCodePointers.length == 0) {
+            return address(0);
+        }
+        return templInitCodePointers[0];
     }
 }
