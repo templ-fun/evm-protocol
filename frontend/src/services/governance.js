@@ -93,6 +93,43 @@ export async function proposeVote({
         tx = await contract.createProposalSetMaxMembers(limitBigInt, votingPeriod, proposalTitle, proposalDescription, txOptions);
         break;
       }
+      case 'setFeeCurve': {
+        const rawFormula = p.formula ?? p.feeCurveFormula ?? 0;
+        const formula = Number(rawFormula);
+        if (!Number.isFinite(formula) || formula < 0 || formula > 255) {
+          throw new Error('Invalid fee curve formula');
+        }
+        let slopeBigInt = 0n;
+        let scaleBigInt = 0n;
+        try {
+          const rawSlope = p.slope ?? p.newFeeCurveSlope ?? 0;
+          slopeBigInt = rawSlope === '' || rawSlope === null || rawSlope === undefined ? 0n : BigInt(rawSlope);
+        } catch {
+          throw new Error('Invalid fee curve slope');
+        }
+        try {
+          const rawScale = p.scale ?? p.newFeeCurveScale ?? 0;
+          scaleBigInt = rawScale === '' || rawScale === null || rawScale === undefined ? 0n : BigInt(rawScale);
+        } catch {
+          throw new Error('Invalid fee curve scale');
+        }
+        if (scaleBigInt <= 0n) {
+          throw new Error('Fee curve scale must be greater than zero');
+        }
+        if (formula === 0 && slopeBigInt !== 0n) {
+          throw new Error('Constant fee curves must use a zero slope');
+        }
+        tx = await contract.createProposalSetFeeCurve(
+          Math.trunc(formula),
+          slopeBigInt,
+          scaleBigInt,
+          votingPeriod,
+          proposalTitle,
+          proposalDescription,
+          txOptions
+        );
+        break;
+      }
       case 'disbandTreasury': {
         let tokenAddr;
         const provided = String(p.token ?? '').trim();
@@ -173,6 +210,19 @@ export async function proposeVote({
       if (fn?.name === 'setTemplHomeLinkDAO' && fn.inputs.length === 1) {
         const [link] = full.decodeFunctionData(fn, callData);
         const tx = await contract.createProposalSetHomeLink(link, votingPeriod, proposalTitle, proposalDescription, txOptions);
+        return await waitForProposal(tx);
+      }
+      if (fn?.name === 'setFeeCurveDAO' && fn.inputs.length === 3) {
+        const [formula, slope, scale] = full.decodeFunctionData(fn, callData);
+        const tx = await contract.createProposalSetFeeCurve(
+          formula,
+          slope,
+          scale,
+          votingPeriod,
+          proposalTitle,
+          proposalDescription,
+          txOptions
+        );
         return await waitForProposal(tx);
       }
       if (fn?.name === 'disbandTreasuryDAO') {
@@ -384,6 +434,9 @@ export async function fetchTemplProposals({
         newBurnPercent: toNumber(rawProposal?.newBurnPercent),
         newTreasuryPercent: toNumber(rawProposal?.newTreasuryPercent),
         newMemberPoolPercent: toNumber(rawProposal?.newMemberPoolPercent),
+        newFeeCurveFormula: toNumber(rawProposal?.newFeeCurveFormula),
+        newFeeCurveSlope: toStringValue(rawProposal?.newFeeCurveSlope),
+        newFeeCurveScale: toStringValue(rawProposal?.newFeeCurveScale, '0'),
         newHomeLink: rawProposal?.newHomeLink || '',
         newMaxMembers: toStringValue(rawProposal?.newMaxMembers),
         yesVotes: toNumber(rawProposal?.yesVotes),

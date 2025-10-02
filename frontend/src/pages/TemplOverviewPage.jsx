@@ -24,7 +24,8 @@ const ACTION_LABELS = {
   4: 'Change priest',
   5: 'Set dictatorship',
   6: 'Set max members',
-  7: 'Set home link'
+  7: 'Set home link',
+  8: 'Set fee curve'
 };
 
 function formatTokenAmount(value, decimals) {
@@ -127,6 +128,30 @@ function describeProposalAction(proposal, templRecord) {
         label: 'Update home link',
         details: [`Set templ home link to ${proposal.newHomeLink || '—'}.`]
       };
+    case 8: {
+      const formula = Number(proposal.newFeeCurveFormula ?? 0);
+      const slope = proposal.newFeeCurveSlope || '0';
+      const scale = proposal.newFeeCurveScale || '0';
+      if (formula === 0) {
+        return {
+          label: 'Set fee curve',
+          details: ['Keep entry fees constant for all future joins.']
+        };
+      }
+      let slopeDisplay = slope;
+      try {
+        slopeDisplay = formatTokenAmount(slope, templDecimals);
+      } catch {
+        slopeDisplay = slope;
+      }
+      return {
+        label: 'Set fee curve',
+        details: [
+          `Use a linear fee curve with slope ${slopeDisplay} per ${scale} members.`,
+          'Future joins become progressively more expensive as the templ grows.'
+        ]
+      };
+    }
     default:
       return {
         label: ACTION_LABELS[proposal.action] || 'Unknown action',

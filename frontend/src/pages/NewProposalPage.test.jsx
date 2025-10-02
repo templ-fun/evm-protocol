@@ -46,4 +46,17 @@ describe('buildActionConfig', () => {
     expect(result.params.newTreasuryPercent).toBe(3000);
     expect(result.params.newMemberPoolPercent).toBe(3000);
   });
+
+  it('builds linear fee curve action', () => {
+    const result = buildActionConfig('setFeeCurve', {
+      feeCurveFormula: 'linear',
+      feeCurveSlope: '1000000000000000',
+      feeCurveScale: '1000000000000000000'
+    }, { ethers });
+
+    expect(result.action).toBe('setFeeCurve');
+    expect(result.params.formula).toBe(1);
+    expect(result.params.slope).toBe(1000000000000000n);
+    expect(result.params.scale).toBe(1000000000000000000n);
+  });
 });

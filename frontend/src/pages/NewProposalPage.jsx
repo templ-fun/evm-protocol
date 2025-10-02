@@ -13,6 +13,7 @@ export const ACTIONS = [
   { value: 'unpause', label: 'Unpause templ' },
   { value: 'changePriest', label: 'Change priest' },
   { value: 'setMaxMembers', label: 'Set max members' },
+  { value: 'setFeeCurve', label: 'Set fee curve' },
   { value: 'enableDictatorship', label: 'Enable dictatorship' },
   { value: 'disableDictatorship', label: 'Disable dictatorship' },
   { value: 'withdrawTreasury', label: 'Withdraw treasury funds' },
@@ -84,6 +85,40 @@ export function buildActionConfig(kind, params, helpers = {}) {
     case 'setMaxMembers':
       if (!params.maxMembers) throw new Error('Max members value is required');
       return { action: 'setMaxMembers', params: { newMaxMembers: params.maxMembers } };
+    case 'setFeeCurve': {
+      const rawFormula = String(params.formula ?? params.feeCurveFormula ?? 'constant').toLowerCase();
+      let formula;
+      if (rawFormula === 'constant' || rawFormula === '0') {
+        formula = 0;
+      } else if (rawFormula === 'linear' || rawFormula === '1') {
+        formula = 1;
+      } else {
+        const parsed = Number(rawFormula);
+        if (!Number.isFinite(parsed) || parsed < 0) {
+          throw new Error('Unsupported fee curve formula');
+        }
+        formula = Math.trunc(parsed);
+      }
+      const slopeValue = parseBigInt(params.slope ?? params.feeCurveSlope ?? '0', 'fee curve slope', { allowZero: true });
+      const scaleValue = parseBigInt(params.scale ?? params.feeCurveScale ?? '0', 'fee curve scale');
+      if (scaleValue <= 0n) {
+        throw new Error('Fee curve scale must be greater than zero');
+      }
+      if (formula === 0 && slopeValue !== 0n) {
+        throw new Error('Constant fee curves must use a zero slope');
+      }
+      if (formula !== 0 && slopeValue <= 0n) {
+        throw new Error('Fee curve slope must be positive');
+      }
+      return {
+        action: 'setFeeCurve',
+        params: {
+          formula,
+          slope: slopeValue,
+          scale: scaleValue
+        }
+      };
+    }
     case 'enableDictatorship':
       return { action: 'setDictatorship', params: { enable: true } };
     case 'disableDictatorship':
@@ -184,6 +219,9 @@ export function NewProposalPage({
   const [updateBurnPercent, setUpdateBurnPercent] = useState('');
   const [updateTreasuryPercent, setUpdateTreasuryPercent] = useState('');
   const [updateMemberPercent, setUpdateMemberPercent] = useState('');
+  const [feeCurveFormula, setFeeCurveFormula] = useState('constant');
+  const [feeCurveSlope, setFeeCurveSlope] = useState('0');
+  const [feeCurveScale, setFeeCurveScale] = useState('1000000000000000000');
   const [submitting, setSubmitting] = useState(false);
   const [protocolPercent, setProtocolPercent] = useState(null);
   const [treasurySnapshot, setTreasurySnapshot] = useState({
@@ -207,6 +245,7 @@ export function NewProposalPage({
   const requiresWithdrawal = useMemo(() => proposalType === 'withdrawTreasury', [proposalType]);
   const requiresDisband = useMemo(() => proposalType === 'disbandTreasury', [proposalType]);
   const requiresConfigUpdate = useMemo(() => proposalType === 'updateConfig', [proposalType]);
+  const requiresFeeCurve = useMemo(() => proposalType === 'setFeeCurve', [proposalType]);
   const protocolPercentNumber = useMemo(() => {
     if (protocolPercent === null || protocolPercent === undefined) {
       return null;
@@ -394,7 +433,10 @@ export function NewProposalPage({
         updateFeeSplit,
         burnPercent: updateBurnPercent,
         treasuryPercent: updateTreasuryPercent,
-        memberPercent: updateMemberPercent
+        memberPercent: updateMemberPercent,
+        feeCurveFormula,
+        feeCurveSlope,
+        feeCurveScale
       }, { ethers, protocolPercent: protocolPercentNumber });
       const votingPeriodValue = Number(votingPeriod || '0');
       const result = await proposeVote({
@@ -504,6 +546,50 @@ export function NewProposalPage({
               placeholder="0 for unlimited"
             />
           </label>
+        )}
+        {requiresFeeCurve && (
+          <>
+            <label className={form.label}>
+              Fee curve formula
+              <select
+                className={`${form.input} appearance-none`}
+                value={feeCurveFormula}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setFeeCurveFormula(value);
+                  if (value === 'constant') {
+                    setFeeCurveSlope('0');
+                  } else if (value === 'linear' && (!feeCurveSlope || feeCurveSlope === '0')) {
+                    setFeeCurveSlope('1000000000000000000');
+                  }
+                }}
+              >
+                <option value="constant">Constant</option>
+                <option value="linear">Linear</option>
+              </select>
+            </label>
+            <label className={form.label}>
+              {feeCurveFormula === 'constant' ? 'Slope (must stay 0 for constant curves)' : 'Linear slope (wei increase per scale unit)'}
+              <input
+                type="text"
+                className={form.input}
+                value={feeCurveSlope}
+                onChange={(e) => setFeeCurveSlope(e.target.value.trim())}
+                placeholder={feeCurveFormula === 'constant' ? '0' : 'e.g. 10000000000000000'}
+                disabled={feeCurveFormula === 'constant'}
+              />
+            </label>
+            <label className={form.label}>
+              Scale (denominator applied to slope)
+              <input
+                type="text"
+                className={form.input}
+                value={feeCurveScale}
+                onChange={(e) => setFeeCurveScale(e.target.value.trim())}
+                placeholder="1e18"
+              />
+            </label>
+          </>
         )}
         {requiresHomeLink && (
           <label className={form.label}>

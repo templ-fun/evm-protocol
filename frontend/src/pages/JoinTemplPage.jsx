@@ -146,10 +146,34 @@ export function JoinTemplPage({
 
   const handleApprove = async () => {
     if (!ensureWallet()) return;
-    if (!tokenAddress || !entryFeeWei) {
+
+    let effectiveToken = tokenAddress;
+    let effectiveEntryFee = entryFeeWei;
+
+    if (!effectiveToken || !effectiveEntryFee) {
+      try {
+        const info = await loadEntryRequirements({
+          ethers,
+          templAddress,
+          templArtifact,
+          signer,
+          provider: readProvider,
+          walletAddress
+        });
+        effectiveToken = info.tokenAddress;
+        effectiveEntryFee = info.entryFeeWei;
+        setEntryInfo(info);
+      } catch (err) {
+        pushMessage?.(`Failed to resolve templ entry requirements: ${err?.message || err}`);
+        return;
+      }
+    }
+
+    if (!effectiveToken || !effectiveEntryFee) {
       pushMessage?.('Templ configuration missing token or entry fee.');
       return;
     }
+
     setApprovePending(true);
     pushMessage?.('Approving entry fee…');
     try {
@@ -157,8 +181,8 @@ export function JoinTemplPage({
         ethers,
         signer,
         templAddress,
-        tokenAddress,
-        amount: entryFeeWei,
+        tokenAddress: effectiveToken,
+        amount: effectiveEntryFee,
         walletAddress
       });
       pushMessage?.('Allowance approved.');
