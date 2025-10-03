@@ -2,14 +2,30 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Client } from '@xmtp/browser-sdk';
 import templArtifact from '../contracts/TEMPL.json';
 import { BACKEND_URL } from '../config.js';
-import { waitForConversation } from '../../../shared/xmtp.js';
+import { syncXMTP, waitForConversation } from '../../../shared/xmtp.js';
 import { sanitizeLink } from '../../../shared/linkSanitizer.js';
 import { verifyMembership, fetchMemberPoolStats, claimMemberPool } from '../services/membership.js';
 import { proposeVote, voteOnProposal, executeProposal, watchProposals } from '../services/governance.js';
 import { fetchTemplStats } from '../services/templs.js';
 import { button, form, layout, surface, text } from '../ui/theme.js';
 
-const XMTP_ENV = import.meta.env?.VITE_XMTP_ENV || globalThis?.process?.env?.XMTP_ENV || 'dev';
+const XMTP_ENV = import.meta.env?.VITE_XMTP_ENV || globalThis?.process?.env?.XMTP_ENV || 'production';
+
+function resolveXmtpEnv() {
+  try {
+    const forced = import.meta.env?.VITE_XMTP_ENV;
+    if (typeof forced === 'string' && forced.trim()) {
+      return forced.trim();
+    }
+  } catch {}
+  if (typeof window !== 'undefined') {
+    const host = window.location?.hostname || '';
+    if (host === 'localhost' || host === '127.0.0.1') {
+      return 'dev';
+    }
+  }
+  return 'production';
+}
 
 const PROPOSAL_ACTIONS = [
   { value: 'setJoinPaused', label: 'Pause / Resume Joins' },
@@ -92,12 +108,30 @@ export function ChatPage({
   const [claimInfo, setClaimInfo] = useState(null);
   const [claimLoading, setClaimLoading] = useState(false);
   const [claimError, setClaimError] = useState('');
+  const [chainTimeMs, setChainTimeMs] = useState(() => Date.now());
+  const [debugSteps, setDebugSteps] = useState([]);
 
   const messageIdsRef = useRef(new Set());
   const streamAbortRef = useRef(null);
   const messagesEndRef = useRef(null);
+  const creatingXmtpPromiseRef = useRef(null);
+  const identityReadyRef = useRef(false);
+  const identityReadyPromiseRef = useRef(null);
 
   const templStatsKey = `${templAddressLower}-${walletAddressLower}`;
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = Date.now();
+      setChainTimeMs(now);
+      setDebugSteps((prev) => [...prev, `heartbeat:${now}`].slice(-20));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const recordDebug = useCallback((step) => {
+    setDebugSteps((prev) => [...prev, step].slice(-20));
+  }, []);
 
   const appendMessage = useCallback((entry) => {
     setMessages((prev) => {
@@ -147,10 +181,161 @@ export function ChatPage({
         });
         return next;
       });
+
+      // Ensure proposal appears in the conversation even before XMTP sync finishes.
+      const syntheticId = `proposal-${proposalId}`;
+      setMessages((prev) => {
+        if (messageIdsRef.current.has(syntheticId)) return prev;
+        const next = [...prev, {
+          id: syntheticId,
+          proposalId,
+          senderAddress: templAddressLower,
+          sentAt: new Date(),
+          kind: 'proposal',
+          payload: { id: proposalId },
+          synthetic: true
+        }];
+        messageIdsRef.current.add(syntheticId);
+        next.sort((a, b) => a.sentAt.getTime() - b.sentAt.getTime());
+        return next;
+      });
+
+      if (walletAddressLower) {
+        try {
+          const [hasVoted, support] = await contract.hasVoted(proposalId, walletAddressLower);
+          setVotedChoices((prev) => {
+            if (!hasVoted) {
+              if (!prev.has(proposalId)) return prev;
+              const next = new Map(prev);
+              next.delete(proposalId);
+              return next;
+            }
+            const normalizedSupport = Boolean(support);
+            if (prev.get(proposalId) === normalizedSupport) {
+              return prev;
+            }
+            const next = new Map(prev);
+            next.set(proposalId, normalizedSupport);
+            return next;
+          });
+        } catch (voteErr) {
+          console.warn('[templ] Failed to read vote status', proposalId, voteErr);
+        }
+      }
     } catch (err) {
       console.warn('[templ] Failed to refresh proposal details', proposalId, err);
     }
-  }, [ethers, readProvider, templAddressLower]);
+  }, [ethers, readProvider, templAddressLower, walletAddressLower]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    window.templTestHooks = window.templTestHooks || {};
+    window.templTestHooks.refreshProposal = (id) => {
+      const numericId = Number(id);
+      if (Number.isNaN(numericId)) return Promise.resolve();
+      return refreshProposalDetails(numericId);
+    };
+    window.templTestHooks.setChainTime = (timestampMs) => {
+      const parsed = Number(timestampMs);
+      if (!Number.isFinite(parsed)) return;
+      setChainTimeMs(parsed);
+    };
+    return () => {
+      if (window.templTestHooks) {
+        delete window.templTestHooks.refreshProposal;
+        delete window.templTestHooks.setChainTime;
+      }
+    };
+  }, [refreshProposalDetails, setChainTimeMs]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const env = resolveXmtpEnv();
+    window.templTestHooks = window.templTestHooks || {};
+    window.templTestHooks.getGroupId = () => groupId;
+    window.templTestHooks.isConversationReady = () => Boolean(conversation);
+    window.templTestHooks.getDebugSteps = () => [...debugSteps];
+    window.templTestHooks.getChatError = () => error;
+    window.templTestHooks.getXmtpEnv = () => env;
+    window.templTestHooks.getMemberInboxId = () => xmtpClient?.inboxId || '';
+    window.templTestHooks.listMemberConversations = async () => {
+      if (!xmtpClient?.conversations?.list) return [];
+      try {
+        const convs = await xmtpClient.conversations.list({ consentStates: ['allowed', 'unknown', 'denied'], conversationType: 1 });
+        return (convs || []).map((c) => c?.id).filter(Boolean);
+      } catch {
+        return [];
+      }
+    };
+    window.templTestHooks.getRenderedMessages = () => {
+      const toText = (entry) => {
+        if (!entry) return null;
+        if (entry.synthetic && entry.kind === 'proposal') return entry.payload?.description || null;
+        if (typeof entry.payload === 'string') return entry.payload;
+        if (entry.payload && typeof entry.payload === 'object') {
+          if (typeof entry.payload.text === 'string') return entry.payload.text;
+          if (typeof entry.payload.content === 'string') return entry.payload.content;
+        }
+        return null;
+      };
+      return messages.map((entry) => ({ id: entry.id, text: toText(entry) })).filter((item) => item.text);
+    };
+    window.templTestHooks.getConversationSnapshot = async (wantedId) => {
+      try {
+        const normalize = (value) => (value || '').toString().replace(/^0x/i, '').toLowerCase();
+        const target = normalize(wantedId);
+        if (!target) return { id: '', messages: [] };
+        let conv = null;
+        if (conversation && normalize(conversation.id) === target) {
+          conv = conversation;
+        } else if (typeof xmtpClient?.conversations?.getConversationById === 'function') {
+          const direct = await xmtpClient.conversations.getConversationById(target);
+          if (direct && normalize(direct.id) === target) conv = direct;
+          if (!conv && target && typeof xmtpClient.conversations.getConversationById === 'function') {
+            const alt = await xmtpClient.conversations.getConversationById(`0x${target}`);
+            if (alt && normalize(alt.id) === target) conv = alt;
+          }
+        }
+        if (!conv) return { id: '', messages: [] };
+        const XMTP_LIMIT = 20;
+        const history = await conv.messages({ direction: 'descending', limit: XMTP_LIMIT });
+        const toText = (msg) => {
+          if (!msg) return null;
+          if (typeof msg.content === 'string') return msg.content;
+          if (msg.content && typeof msg.content === 'object') {
+            if (typeof msg.content.text === 'string') return msg.content.text;
+            if (typeof msg.content.content === 'string') return msg.content.content;
+            if (Array.isArray(msg.content.parts)) {
+              const part = msg.content.parts.find((entry) => typeof entry === 'string' || typeof entry?.text === 'string');
+              if (typeof part === 'string') return part;
+              if (part?.text) return part.text;
+            }
+          }
+          if (typeof msg.fallback === 'string') return msg.fallback;
+          const asString = msg.content?.toString?.();
+          if (asString && asString !== '[object Object]') return asString;
+          return null;
+        };
+        const messages = history.map((msg) => ({ id: msg.id, sentAt: msg.sentAt?.toISOString?.() || null, text: toText(msg) })).filter((entry) => entry.text);
+      return { id: conv.id, messages };
+    } catch {
+      return { id: '', messages: [] };
+    }
+  };
+    return () => {
+      if (window.templTestHooks) {
+        delete window.templTestHooks.getGroupId;
+        delete window.templTestHooks.isConversationReady;
+        delete window.templTestHooks.getDebugSteps;
+        delete window.templTestHooks.getChatError;
+        delete window.templTestHooks.getXmtpEnv;
+        delete window.templTestHooks.getMemberInboxId;
+        delete window.templTestHooks.listMemberConversations;
+        delete window.templTestHooks.getRenderedMessages;
+        delete window.templTestHooks.getConversationSnapshot;
+      }
+    };
+  }, [groupId, conversation, debugSteps, error, xmtpClient, messages]);
 
   const interpretMessage = useCallback((msg) => {
     const sender = msg.senderAddress ? String(msg.senderAddress).toLowerCase() : '';
@@ -216,68 +401,267 @@ export function ChatPage({
 
   useEffect(() => {
     if (!signer || !walletAddress) {
+      try { xmtpClient?.close?.(); } catch {}
       setXmtpClient(null);
       setConversation(null);
       setGroupId('');
       setMessages([]);
       messageIdsRef.current.clear();
+      identityReadyRef.current = false;
+      creatingXmtpPromiseRef.current = null;
+      identityReadyPromiseRef.current = null;
       return;
     }
+
     let cancelled = false;
     setError('');
     setLoading(true);
-    Client.create(signer, { env: XMTP_ENV })
-      .then((client) => {
+    setConversation(null);
+    setGroupId('');
+    setMessages([]);
+    messageIdsRef.current.clear();
+    identityReadyRef.current = false;
+
+    try { xmtpClient?.close?.(); } catch {}
+    setXmtpClient(null);
+
+    const xmtpEnv = resolveXmtpEnv();
+
+    const createClient = async () => {
+      const address = await signer.getAddress();
+      const normalized = (address || '').toLowerCase();
+      recordDebug(`xmtp:create:start:${normalized}`);
+
+      const storageKey = `xmtp:nonce:${normalized}`;
+      let stableNonce = 1;
+      if (typeof window !== 'undefined') {
+        try {
+          const saved = Number.parseInt(window.localStorage?.getItem(storageKey) || '1', 10);
+          if (Number.isFinite(saved) && saved > 0) stableNonce = saved;
+        } catch {}
+      }
+
+      const buildSigner = (nonce) => ({
+        type: 'EOA',
+        getAddress: () => address,
+        getIdentifier: () => ({
+          identifier: normalized,
+          identifierKind: 'Ethereum',
+          nonce
+        }),
+        signMessage: async (message) => {
+          let toSign = message;
+          if (message instanceof Uint8Array) {
+            try { toSign = ethers.toUtf8String(message); }
+            catch { toSign = ethers.hexlify(message); }
+          } else if (typeof message !== 'string') {
+            toSign = String(message);
+          }
+          const signature = await signer.signMessage(toSign);
+          return ethers.getBytes(signature);
+        }
+      });
+
+      let attemptNonce = stableNonce;
+      let lastError = null;
+      for (let attempt = 0; attempt < 8; attempt += 1) {
+        recordDebug(`xmtp:create:attempt:${attemptNonce}`);
+        try {
+          const client = await Client.create(buildSigner(attemptNonce), {
+            env: xmtpEnv,
+            appVersion: 'templ/0.0.1'
+          });
+          if (typeof window !== 'undefined') {
+            try { window.localStorage?.setItem(storageKey, String(attemptNonce)); } catch {}
+          }
+          return client;
+        } catch (err) {
+          lastError = err;
+          const message = String(err?.message || err || '');
+          recordDebug(`xmtp:create:error:${message.slice(0, 80)}`);
+          if (message.includes('already registered 10/10 installations')) {
+            attemptNonce += 1;
+            continue;
+          }
+          throw err;
+        }
+      }
+      throw lastError || new Error('Failed to initialise XMTP client.');
+    };
+
+    const ensureIdentityReady = async (client) => {
+      if (!client) return false;
+      const fastMode = import.meta.env?.VITE_E2E_DEBUG === '1';
+      const attempts = xmtpEnv === 'local' ? 20 : fastMode ? 120 : 90;
+      const delay = xmtpEnv === 'local' ? 200 : fastMode ? 250 : 1000;
+      for (let i = 0; i < attempts; i += 1) {
+        try { await client.preferences?.inboxState?.(true); } catch (prefErr) {
+          recordDebug(`xmtp:identity:pref-error:${prefErr?.message || prefErr}`);
+        }
+        try { await syncXMTP(client, 1, Math.min(delay, 500)); } catch (syncErr) {
+          recordDebug(`xmtp:identity:sync-error:${syncErr?.message || syncErr}`);
+        }
+        try { await client.contacts?.sync?.(); } catch (contactsErr) {
+          recordDebug(`xmtp:identity:contacts-error:${contactsErr?.message || contactsErr}`);
+        }
+        let aggregateReady = false;
+        try {
+          const aggregate = await client.debugInformation?.apiAggregateStatistics?.();
+          if (typeof aggregate === 'string') {
+            recordDebug(`xmtp:identity:agg:${aggregate.slice(0, 80)}`);
+            if (!aggregate.includes('UploadKeyPackage')) {
+              aggregateReady = true;
+            } else {
+              const match = aggregate.match(/UploadKeyPackage\s+(\d+)/);
+              const uploads = match ? Number(match[1]) : 0;
+              if (Number.isFinite(uploads) && uploads >= 1) {
+                aggregateReady = true;
+              }
+            }
+          }
+        } catch (aggErr) {
+          recordDebug(`xmtp:identity:agg-error:${aggErr?.message || aggErr}`);
+        }
+        if (aggregateReady || client?.inboxId) {
+          recordDebug('xmtp:identity:ready');
+          return true;
+        }
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+      recordDebug('xmtp:identity:timeout');
+      return Boolean(client?.inboxId);
+    };
+
+    const launch = async () => {
+      if (creatingXmtpPromiseRef.current) {
+        return creatingXmtpPromiseRef.current;
+      }
+      const promise = (async () => {
+        const client = await createClient();
+        if (cancelled) {
+          try { client?.close?.(); } catch {}
+          throw new Error('XMTP init cancelled');
+        }
+        recordDebug(`xmtp:create:ready:${client?.inboxId || ''}`);
+        identityReadyRef.current = false;
+        const ready = await ensureIdentityReady(client);
+        identityReadyRef.current = ready;
+        return client;
+      })()
+        .finally(() => {
+          creatingXmtpPromiseRef.current = null;
+        });
+      creatingXmtpPromiseRef.current = promise;
+      return promise;
+    };
+
+    const run = async () => {
+      try {
+        const client = await launch();
         if (cancelled) {
           try { client?.close?.(); } catch {}
           return;
         }
+        if (!identityReadyRef.current) {
+          throw new Error('XMTP identity not ready');
+        }
         setXmtpClient(client);
-      })
-      .catch((err) => {
+        setLoading(false);
+      } catch (err) {
         if (!cancelled) {
           setError(err?.message || 'Failed to initialise XMTP client.');
           setLoading(false);
         }
-      });
+      }
+    };
+
+    identityReadyPromiseRef.current = (async () => {
+      try {
+        await launch();
+        return identityReadyRef.current;
+      } catch {
+        return false;
+      }
+    })();
+
+    run();
+
     return () => {
       cancelled = true;
-      try { xmtpClient?.close?.(); } catch {}
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [signer, walletAddress]);
+  }, [signer, walletAddress, recordDebug]);
 
   useEffect(() => {
     if (!xmtpClient || !templAddressLower || !signer) return;
     let cancelled = false;
+    const xmtpEnv = resolveXmtpEnv();
 
     async function connectConversation() {
       setLoading(true);
       setError('');
       try {
-        const membership = await verifyMembership({
-          signer,
-          templAddress: templAddressLower,
-          walletAddress,
-          backendUrl: BACKEND_URL,
-          ethers,
-          templArtifact,
-          readProvider
-        });
-        if (cancelled) return;
-        if (!membership.groupId) {
-          throw new Error('Chat group is not ready yet. Try again shortly.');
+        setDebugSteps((prev) => [...prev, 'verify:start'].slice(-20));
+        let identityOk = identityReadyRef.current;
+        if (!identityOk) {
+          const waitPromise = identityReadyPromiseRef.current;
+          if (waitPromise) {
+            try { identityOk = await waitPromise; } catch { identityOk = false; }
+          }
         }
+        if (!identityOk) {
+          throw new Error('XMTP identity not ready. Please retry.');
+        }
+        setDebugSteps((prev) => [...prev, 'identity:ready'].slice(-20));
+
+        let membership = null;
+        let lastMembershipError = null;
+        const membershipAttempts = xmtpEnv === 'local' ? 8 : 24;
+        for (let attempt = 0; attempt < membershipAttempts; attempt += 1) {
+          try {
+            membership = await verifyMembership({
+              signer,
+              templAddress: templAddressLower,
+              walletAddress,
+              backendUrl: BACKEND_URL,
+              ethers,
+              templArtifact,
+              readProvider
+            });
+            if (membership?.groupId) break;
+            lastMembershipError = new Error('Chat group is not ready yet. Try again shortly.');
+          } catch (verifyErr) {
+            lastMembershipError = verifyErr;
+          }
+          if (cancelled) return;
+          recordDebug(`verify:retry:${attempt + 1}`);
+          await new Promise((resolve) => setTimeout(resolve, xmtpEnv === 'local' ? 200 : 1000));
+        }
+        if (!membership?.groupId) {
+          throw lastMembershipError || new Error('Chat group is not ready yet. Try again shortly.');
+        }
+        setDebugSteps((prev) => [...prev, `verify:group:${membership.groupId}`].slice(-20));
         setGroupId(membership.groupId);
-        const convo = await waitForConversation({ xmtp: xmtpClient, groupId: membership.groupId, retries: 12, delayMs: 500 });
+        try { await syncXMTP(xmtpClient, 2, 500); } catch (syncErr) {
+          recordDebug(`conversation:sync-error:${syncErr?.message || syncErr}`);
+        }
+        const convo = await waitForConversation({
+          xmtp: xmtpClient,
+          groupId: membership.groupId,
+          retries: 120,
+          delayMs: 500
+        });
         if (!convo) {
           throw new Error('Unable to locate chat conversation. Please retry soon.');
         }
         if (cancelled) return;
+        setDebugSteps((prev) => [...prev, `conversation-found:${convo.id}`].slice(-20));
         setConversation(convo);
+        setDebugSteps((prev) => [...prev, `conversation-ready:${convo.id}`].slice(-20));
         setStats((prev) => ({ ...prev, priest: membership.templ?.priest || '', templHomeLink: membership.templ?.templHomeLink || '' }));
         setLoading(false);
       } catch (err) {
+        setDebugSteps((prev) => [...prev, `error:${err?.message || err}`].slice(-20));
         if (!cancelled) {
           setError(err?.message || 'Failed to join chat.');
           setLoading(false);
@@ -289,7 +673,7 @@ export function ChatPage({
     return () => {
       cancelled = true;
     };
-  }, [xmtpClient, templAddressLower, signer, walletAddress, ethers, readProvider]);
+  }, [xmtpClient, templAddressLower, signer, walletAddress, ethers, readProvider, recordDebug]);
 
   useEffect(() => {
     if (!conversation) return;
@@ -312,7 +696,7 @@ export function ChatPage({
 
     async function streamMessages() {
       try {
-        const stream = await conversation.streamMessages();
+        const stream = await conversation.stream();
         streamAbortRef.current = stream;
         for await (const msg of stream) {
           if (cancelled) break;
@@ -591,11 +975,12 @@ export function ChatPage({
       const yesVotes = record?.yesVotes ?? 0;
       const noVotes = record?.noVotes ?? 0;
       const endTime = record?.endTime ? new Date(record.endTime * 1000) : null;
-      const expired = endTime ? endTime.getTime() <= Date.now() : false;
+      const nowMs = chainTimeMs;
+      const expired = endTime ? endTime.getTime() <= nowMs : false;
       const executed = record?.executed;
       const voted = votedChoices.get(proposalId);
       return (
-        <div key={message.id} className="mb-4">
+        <div key={message.id} className="mb-4" data-testid={`proposal-card-${proposalId}`}>
           <div className="flex items-center justify-between text-xs text-slate-500">
             <span className="font-semibold text-slate-300">{shortAddress(message.senderAddress)}</span>
             <span>{formatTimestamp(message.sentAt)}</span>

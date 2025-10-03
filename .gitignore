@@ -51,6 +51,7 @@ frontend/.vite-cache/
 frontend/npm-cache/
 frontend/pw-dist/
 frontend/pw-results/
+frontend/pw-xmtp.db*
 
 # Root coverage artifact
 coverage.json
