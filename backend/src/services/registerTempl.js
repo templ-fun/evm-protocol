@@ -198,14 +198,23 @@ export async function registerTempl(body, context) {
       lastDigestAt: 0,
       templHomeLink: '',
       bindingCode: persisted?.bindingCode ?? null,
-      contractAddress: contract
+      contractAddress: contract,
+      memberSet: new Set()
     };
     if (persisted?.priest) {
       existing.priest = String(persisted.priest).toLowerCase();
     }
   }
-  if (!existing.proposalsMeta || typeof existing.proposalsMeta.set !== 'function') {
+  if (!(existing.proposalsMeta instanceof Map)) {
     existing.proposalsMeta = new Map();
+  }
+  if (!(existing.memberSet instanceof Set)) {
+    try {
+      const restored = Array.isArray(existing.memberSet) ? existing.memberSet : [];
+      existing.memberSet = new Set(restored.map((value) => String(value || '').toLowerCase()));
+    } catch {
+      existing.memberSet = new Set();
+    }
   }
   existing.priest = priest;
   existing.contractAddress = contract;

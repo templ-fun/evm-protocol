@@ -14,9 +14,9 @@ function isValidEnv(value) {
  * @returns {'local'|'dev'|'production'}
  */
 function normalizeEnv(value) {
-  if (!value) return 'dev';
+  if (!value) return 'production';
   const lower = String(value).toLowerCase();
-  return isValidEnv(lower) ? lower : 'dev';
+  return isValidEnv(lower) ? lower : 'production';
 }
 
 export function resolveXmtpEnv() {

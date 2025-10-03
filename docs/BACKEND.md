@@ -60,7 +60,7 @@ Running the server requires a JSON-RPC endpoint and aligned frontend/server IDs.
 | `BACKEND_SERVER_ID` | Identifier embedded in EIP-712 typed data. Must match the frontend’s `VITE_BACKEND_SERVER_ID`. | – |
 | `APP_BASE_URL` | Base URL used when generating links inside Telegram messages. | unset |
 | `TELEGRAM_BOT_TOKEN` | Bot token used to post templ updates and poll binding codes. Leave unset to disable Telegram delivery. | unset |
-| `XMTP_ENV` | XMTP environment (`local`, `dev`, or `production`). Controls which network the backend (and chat UI) connects to. | `dev` |
+| `XMTP_ENV` | XMTP environment (`local`, `dev`, or `production`). Controls which network the backend (and chat UI) connects to. | `production` |
 | `BOT_PRIVATE_KEY` | Optional EOA private key used for the server’s XMTP identity. When omitted the backend generates and persists one in SQLite. | auto-generated |
 | `BACKEND_DB_ENC_KEY` | 32-byte hex key for XMTP SQLite encryption. Required in production; defaults to zeroed key in local/test environments. | unset |
 | `XMTP_BOOT_MAX_TRIES` | Maximum attempts when registering the backend XMTP client on startup. | `30` |

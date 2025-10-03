@@ -1,9 +1,30 @@
 /* eslint-env node */
 /* global process */
+import { randomBytes } from 'crypto';
+import path from 'path';
 import { defineConfig, devices } from '@playwright/test';
 
+const XMTP_ENV = (() => {
+  const forced = process.env.E2E_XMTP_ENV;
+  if (forced && ['local', 'dev', 'production'].includes(forced)) return forced;
+  return 'dev';
+})();
+
+const sqlitePath = path.join(process.cwd(), 'pw-xmtp.db');
+
+const N = BigInt('0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141');
+function randomPrivKeyHex() {
+  let d = 0n;
+  do {
+    d = BigInt('0x' + randomBytes(32).toString('hex'));
+  } while (d === 0n || d >= N);
+  return `0x${d.toString(16).padStart(64, '0')}`;
+}
+
+const BOT_PRIVATE_KEY = process.env.E2E_BOT_PRIVATE_KEY || randomPrivKeyHex();
+
 export default defineConfig({
-  timeout: 240 * 1000,
+  timeout: 180 * 1000,
   outputDir: './pw-results',
   testDir: './e2e',
   testMatch: /.*\.pw\.spec\.js/,
@@ -54,7 +75,7 @@ export default defineConfig({
       port: 8545,
       cwd: '..',
       reuseExistingServer: false,
-      timeout: 120 * 1000,
+      timeout: 60 * 1000,
     },
     {
       command: 'npm start',
@@ -65,11 +86,16 @@ export default defineConfig({
         PORT: '3001',
         ALLOWED_ORIGINS: 'http://localhost:5179',
         BACKEND_SERVER_ID: 'templ-dev',
+        XMTP_ENV,
         LOG_LEVEL: 'info',
         NODE_ENV: 'test',
+        BOT_PRIVATE_KEY,
+        SQLITE_DB_PATH: sqlitePath,
+        CLEAR_DB: '1',
+        ENABLE_DEBUG_ENDPOINTS: '1',
       },
       reuseExistingServer: false,
-      timeout: 120 * 1000,
+      timeout: 60 * 1000,
     },
     {
       command: 'npm run build -- --outDir pw-dist && npm run preview -- --port 5179 --outDir pw-dist',
@@ -79,10 +105,11 @@ export default defineConfig({
         VITE_BACKEND_SERVER_ID: 'templ-dev',
         VITE_ENABLE_BACKEND_FALLBACK: '0',
         VITE_BACKEND_URL: 'http://localhost:3001',
-        VITE_RPC_URL: 'http://127.0.0.1:8545'
+        VITE_RPC_URL: 'http://127.0.0.1:8545',
+        VITE_XMTP_ENV: XMTP_ENV
       },
       reuseExistingServer: false,
-      timeout: 180 * 1000,
+      timeout: 90 * 1000,
     },
   ],
 });

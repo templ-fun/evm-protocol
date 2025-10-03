@@ -67,7 +67,7 @@ frontend/
 │   ├── pages/             # HomePage, JoinTemplPage, ChatPage
 │   ├── services/          # membership + governance helpers shared with chat
 │   └── ui/, hooks/, etc.
-├── e2e/                   # Playwright fixtures + chat-focused spec
+├── e2e/                   # Playwright chat flow (`basic-flows.pw.spec.js`)
 ├── vite.config.js
 └── package.json
 ```

@@ -42,6 +42,7 @@ const ERC20_METADATA_ABI = [
  * @property {string} totalProtocolFees
  * @property {string} templHomeLink
  * @property {{ overview: string, homeLink?: string }} links
+ * @property {number} executionDelaySeconds
  * @property {number} protocolPercent
  * @property {number} burnPercent
  * @property {number} treasuryPercent
@@ -133,18 +134,27 @@ export async function fetchTemplStats({
   let joinPaused = metaInfo.joinPaused !== undefined && metaInfo.joinPaused !== null
     ? Boolean(metaInfo.joinPaused)
     : false;
+  let executionDelaySeconds = 0;
 
   try {
-    [config, treasuryInfo, homeLink, memberCount, priestAddress, totalJoinsValue] = await Promise.all([
+    [config, treasuryInfo, homeLink, memberCount, priestAddress, totalJoinsValue, executionDelaySeconds] = await Promise.all([
       templ.getConfig().catch(() => null),
       templ.getTreasuryInfo().catch(() => null),
       templ.templHomeLink().catch(() => ''),
       templ.getMemberCount?.().catch(() => 0n),
       templ.priest?.().catch(() => metaInfo.priest || ''),
-      templ.totalJoins?.().catch(() => null)
+      templ.totalJoins?.().catch(() => null),
+      templ.executionDelayAfterQuorum?.().catch(() => 0)
     ]);
   } catch (err) {
     console.warn('[templ] Failed to load templ summary', templAddress, err);
+  }
+
+  if (executionDelaySeconds !== undefined && executionDelaySeconds !== null) {
+    const parsedDelay = Number(executionDelaySeconds);
+    executionDelaySeconds = Number.isFinite(parsedDelay) && parsedDelay >= 0 ? parsedDelay : 0;
+  } else {
+    executionDelaySeconds = 0;
   }
 
   let tokenAddress = metaInfo.tokenAddress || '';
@@ -273,7 +283,8 @@ export async function fetchTemplStats({
     links: {
       overview: `/templs/${normalizedAddress.toLowerCase()}`,
       homeLink: normalizedHomeLink || undefined
-    }
+    },
+    executionDelaySeconds
   };
 }
 

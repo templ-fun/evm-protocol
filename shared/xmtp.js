@@ -18,8 +18,8 @@ const dlog = (...args) => { if (__isDebug) { try { console.log(...args); } catch
 export async function syncXMTP(xmtp, retries = 1, delayMs = 1000) {
   // In e2e fast mode, avoid long retries
   if (isTemplE2EDebug()) {
-    retries = Math.min(retries, 2);
-    delayMs = Math.min(delayMs, 200);
+    retries = Math.max(retries, 4);
+    delayMs = Math.max(delayMs, 200);
   }
   for (let i = 0; i < retries; i++) {
     try { await xmtp?.conversations?.sync?.(); } catch (err) {
@@ -47,24 +47,37 @@ export async function syncXMTP(xmtp, retries = 1, delayMs = 1000) {
 export async function waitForConversation({ xmtp, groupId, retries = 60, delayMs = 1000 }) {
   // Fast mode for tests/dev
   if (isTemplE2EDebug()) {
-    retries = Math.min(retries, 5);
-    delayMs = Math.min(delayMs, 200);
+    retries = Math.max(retries, 15);
+    delayMs = Math.max(delayMs, 500);
   }
   const norm = (id) => (id || '').toString();
   const wantedRaw = norm(groupId);
   const wantedNo0x = wantedRaw.replace(/^0x/i, '');
   const wanted0x = wantedRaw.startsWith('0x') ? wantedRaw : `0x${wantedNo0x}`;
+  const wantedLower = wantedRaw.toLowerCase();
+  const wantedNo0xLower = wantedNo0x.toLowerCase();
+  const wanted0xLower = wanted0x.toLowerCase();
+  const matches = (candidate) => {
+    const cid = String(candidate || '');
+    const cidLower = cid.toLowerCase();
+    if (cidLower === wantedLower || cidLower === wantedNo0xLower || cidLower === wanted0xLower) return true;
+    if (cidLower.replace(/^0x/i, '') === wantedNo0xLower) return true;
+    return false;
+  };
   const group = await waitFor({
     tries: retries,
     delayMs,
     check: async () => {
-      await syncXMTP(xmtp);
+      await syncXMTP(xmtp, 2, Math.min(delayMs, 500));
       let conv = null;
       // Try with exact, 0x-prefixed, and non-0x forms for maximum compatibility
       for (const candidate of [wantedRaw, wanted0x, wantedNo0x]) {
         if (conv) break;
         try {
-          conv = await xmtp?.conversations?.getConversationById?.(candidate);
+          const maybe = await xmtp?.conversations?.getConversationById?.(candidate);
+          if (maybe && matches(maybe.id)) {
+            conv = maybe;
+          }
         } catch (err) {
           dlog('getConversationById failed:', err?.message || String(err));
         }
@@ -73,10 +86,12 @@ export async function waitForConversation({ xmtp, groupId, retries = 60, delayMs
         try {
           const conversations = await xmtp?.conversations?.list?.({ consentStates: ['allowed','unknown','denied'], conversationType: 1 /* Group */ }) || [];
           dlog(`Sync attempt: Found ${conversations.length} conversations; firstIds=`, conversations.slice(0,3).map(c => c.id));
-          conv = conversations.find(c => {
-            const cid = String(c.id);
-            return cid === wantedRaw || cid === wanted0x || cid === wantedNo0x || `0x${cid}` === wanted0x || cid.replace(/^0x/i,'') === wantedNo0x;
-          }) || null;
+          conv = conversations.find((c) => matches(c?.id)) || null;
+          if (!conv && typeof xmtp?.conversations?.listGroups === 'function') {
+            const groups = await xmtp.conversations.listGroups({ consentStates: ['allowed','unknown','denied'] }) || [];
+            dlog(`Sync attempt (groups): Found ${groups.length} groups; firstIds=`, groups.slice(0,3).map(c => c.id));
+            conv = groups.find((c) => matches(c?.id)) || null;
+          }
         } catch (err) {
           dlog('list conversations failed:', err?.message || String(err));
         }

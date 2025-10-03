@@ -80,6 +80,15 @@ async function createSQLitePersistence({ sqlitePath, retentionMs = DEFAULT_SIGNA
     CREATE INDEX IF NOT EXISTS idx_leader_election_expires ON leader_election(expiresAt);
   `);
 
+  try {
+    db.exec('ALTER TABLE templ_bindings ADD COLUMN priest TEXT');
+  } catch (err) {
+    const message = String(err?.message || '');
+    if (!message.includes('duplicate column name')) {
+      throw err;
+    }
+  }
+
   const insertBinding = db.prepare(
     'INSERT INTO templ_bindings (contract, telegramChatId, priest, xmtpGroupId, bindingCode) VALUES (?, ?, ?, ?, ?) ' +
       'ON CONFLICT(contract) DO UPDATE SET telegramChatId = excluded.telegramChatId, priest = excluded.priest, xmtpGroupId = excluded.xmtpGroupId, bindingCode = excluded.bindingCode'
