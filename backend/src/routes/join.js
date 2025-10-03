@@ -5,7 +5,7 @@ import { logger } from '../logger.js';
 import { joinTempl } from '../services/joinTempl.js';
 import { extractTypedRequestParams } from './typed.js';
 
-export default function joinRouter({ hasJoined, templs, signatureStore }) {
+export default function joinRouter({ hasJoined, templs, signatureStore, xmtp, ensureGroup, provider }) {
   const router = express.Router();
 
   router.post(
@@ -25,6 +25,9 @@ export default function joinRouter({ hasJoined, templs, signatureStore }) {
           hasJoined,
           templs,
           logger,
+          xmtp,
+          ensureGroup,
+          provider
         });
         res.json(result);
       } catch (err) {

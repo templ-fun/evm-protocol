@@ -1,12 +1,14 @@
 // @ts-check
 import express from 'express';
 import dotenv from 'dotenv';
+import fs from 'fs';
 import { ethers } from 'ethers';
 import helmet from 'helmet';
 import rateLimit, { MemoryStore } from 'express-rate-limit';
 import { createRateLimitStore } from './config.js';
 import cors from 'cors';
 import { randomUUID } from 'crypto';
+import Database from 'better-sqlite3';
 
 import templsRouter from './routes/templs.js';
 import joinRouter from './routes/join.js';
@@ -19,6 +21,8 @@ import { createFactoryIndexer } from './services/factoryIndexer.js';
 import { registerTempl } from './services/registerTempl.js';
 
 import { createPersistence } from './persistence/index.js';
+import { createXmtpWithRotation, waitForXmtpClientReady } from './xmtp/index.js';
+import { waitForConversation } from '../../shared/xmtp.js';
 
 /**
  * @typedef {{
@@ -271,7 +275,7 @@ async function fetchBalances(record, logger) {
   return result;
 }
 
-function createContractWatcher({ connectContract, templs, persist, notifier, logger }) {
+function createContractWatcher({ connectContract, templs, persist, notifier, logger, ensureGroup }) {
   if (!connectContract) {
     return {
       watchContract: () => {},
@@ -281,6 +285,19 @@ function createContractWatcher({ connectContract, templs, persist, notifier, log
   }
   const listenerRegistry = new Map();
   const trackedRecords = new Map();
+
+  const sendToXmtp = async (record, payload) => {
+    if (!ensureGroup || !record) return;
+    try {
+      const group = await ensureGroup(record);
+      if (!group || typeof group.send !== 'function') {
+        return;
+      }
+      await group.send(JSON.stringify(payload));
+    } catch (err) {
+      logger?.warn?.({ err: String(err?.message || err), contract: record.contractAddress || record.contract }, 'Failed to relay XMTP message');
+    }
+  };
 
   const backfillActiveProposals = async ({ contract, record, contractAddress }) => {
     if (!record) return;
@@ -478,6 +495,14 @@ function createContractWatcher({ connectContract, templs, persist, notifier, log
           await maybeNotifyQuorum({ record, contractAddress: key, proposalId, meta, notifier, logger });
         }
       } catch {/* ignore cache errors */}
+      await sendToXmtp(record, {
+        type: 'proposal',
+        id: toNumber(proposalId),
+        proposer,
+        endTime: toNumber(endTime),
+        title: title ?? '',
+        description: description ?? ''
+      });
       if (!record.telegramChatId || !notifier?.notifyProposalCreated) return;
       await notifier.notifyProposalCreated({
         chatId: record.telegramChatId,
@@ -492,7 +517,6 @@ function createContractWatcher({ connectContract, templs, persist, notifier, log
     });
 
     const handleVote = wrapListener('Contract listener error', async (proposalId, voter, support, timestamp) => {
-      if (!record.telegramChatId || !notifier?.notifyVoteCast) return;
       const idKey = toProposalKey(proposalId);
       const meta = ensureProposalMeta(record, idKey);
       let proposalTitle = '';
@@ -507,6 +531,14 @@ function createContractWatcher({ connectContract, templs, persist, notifier, log
       } catch (err) {
         logger?.warn?.({ err: String(err?.message || err), contract: key }, 'Failed to load proposal metadata for vote notification');
       }
+      await sendToXmtp(record, {
+        type: 'vote',
+        id: toNumber(proposalId),
+        voter,
+        support: Boolean(support),
+        timestamp: toNumber(timestamp)
+      });
+      if (!record.telegramChatId || !notifier?.notifyVoteCast) return;
       await notifier.notifyVoteCast({
         chatId: record.telegramChatId,
         contractAddress: key,
@@ -530,6 +562,12 @@ function createContractWatcher({ connectContract, templs, persist, notifier, log
       await persist(key, record);
       logger?.info?.({ contract: key, oldPriest: oldKey, newPriest: nextKey }, 'Priest updated from contract event');
 
+      await sendToXmtp(record, {
+        type: 'priest-changed',
+        oldPriest: oldKey,
+        newPriest: nextKey
+      });
+
       if (!record.telegramChatId || !notifier?.notifyPriestChanged) return;
       await notifier.notifyPriestChanged({
         chatId: record.telegramChatId,
@@ -547,6 +585,12 @@ function createContractWatcher({ connectContract, templs, persist, notifier, log
         meta.executed = true;
         meta.passed = Boolean(success);
       }
+      await sendToXmtp(record, {
+        type: 'proposal-executed',
+        id: toNumber(proposalId),
+        success: Boolean(success),
+        returnData: returnData?.toString?.() ?? returnData
+      });
       if (record.telegramChatId && notifier?.notifyProposalExecuted) {
         await notifier.notifyProposalExecuted({
           chatId: record.telegramChatId,
@@ -814,12 +858,16 @@ async function restoreGroupsFromPersistence({ listBindings, templs, watchContrac
       const record = {
         telegramChatId: row?.telegramChatId ? String(row.telegramChatId) : null,
         priest: row?.priest ? String(row.priest).toLowerCase() : null,
+        xmtpGroupId: row?.xmtpGroupId ? String(row.xmtpGroupId) : null,
         proposalsMeta: new Map(),
         lastDigestAt: 0,
         contractAddress: key,
         templHomeLink: '',
         bindingCode: row?.bindingCode ? String(row.bindingCode) : null
       };
+      if (record.xmtpGroupId) {
+        record.groupId = record.xmtpGroupId;
+      }
       templs.set(key, record);
       if (watchContract) {
         try {
@@ -987,7 +1035,8 @@ export async function createApp(opts) {
     enableBackgroundTasks = process.env.NODE_ENV !== 'test',
     signatureStore: providedSignatureStore,
     persistence,
-    signatureRetentionMs
+    signatureRetentionMs,
+    xmtp
   } = opts || {};
 
   const notifier = telegram?.notifier ?? createTelegramNotifier({
@@ -1026,11 +1075,41 @@ export async function createApp(opts) {
   const templs = new Map();
   app.locals.templs = templs;
 
+  async function ensureGroup(record) {
+    if (!xmtp || !record) return null;
+    if (record.group && typeof record.group.send === 'function') {
+      return record.group;
+    }
+    const groupId = record.xmtpGroupId || record.groupId;
+    if (!groupId) return null;
+    try {
+      const conversation = await waitForConversation({ xmtp, groupId, retries: 6, delayMs: 500 });
+      if (conversation) {
+        record.group = conversation;
+        record.groupId = conversation.id;
+        record.xmtpGroupId = conversation.id;
+        templs.set(String(record.contractAddress || record.contract || conversation.id).toLowerCase(), record);
+        return conversation;
+      }
+    } catch (err) {
+      logger?.warn?.({ err: String(err?.message || err), contract: record.contractAddress || record.contract }, 'Failed to ensure XMTP group');
+    }
+    return null;
+  }
+
   const sqlitePath = process.env.SQLITE_DB_PATH?.trim() || null;
   /** @type {import('./persistence/index.js').PersistenceAdapter} */
   const persistenceAdapter = await initializePersistence({ persistence, retentionMs: signatureRetentionMs, sqlitePath });
   const persist = persistenceAdapter?.persistBinding
-    ? async (contract, record) => persistenceAdapter.persistBinding(contract, record)
+    ? async (contract, record) => {
+        if (!contract) return;
+        await persistenceAdapter.persistBinding(contract, {
+          telegramChatId: record?.telegramChatId ?? null,
+          priest: record?.priest ?? null,
+          xmtpGroupId: record?.xmtpGroupId ?? record?.groupId ?? null,
+          bindingCode: record?.bindingCode ?? null
+        });
+      }
     : async () => {};
   const listBindings = persistenceAdapter?.listBindings
     ? async () => persistenceAdapter.listBindings()
@@ -1047,7 +1126,7 @@ export async function createApp(opts) {
 
   const trustedFactoryAddress = process.env.TRUSTED_FACTORY_ADDRESS?.trim() || null;
 
-  const contractWatcher = createContractWatcher({ connectContract, templs, persist, notifier, logger });
+  const contractWatcher = createContractWatcher({ connectContract, templs, persist, notifier, logger, ensureGroup });
   contractWatcher.pauseWatching();
   const watchContract = contractWatcher.watchContract;
   app.locals.backgroundTasks = null;
@@ -1096,7 +1175,10 @@ export async function createApp(opts) {
             persist,
             watchContract,
             findBinding,
-            skipFactoryValidation: true
+            skipFactoryValidation: true,
+            xmtp,
+            ensureGroup,
+            createXmtpWithRotation
           }
         );
       } catch (err) {
@@ -1262,7 +1344,10 @@ export async function createApp(opts) {
     notifier,
     signatureStore,
     findBinding,
-    listBindings
+    listBindings,
+    ensureGroup,
+    xmtp,
+    createXmtpWithRotation
   };
 
   app.use(waitForRestoration);
@@ -1308,6 +1393,63 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   }
   const provider = new ethers.JsonRpcProvider(RPC_URL);
 
+  const sqlitePath = process.env.SQLITE_DB_PATH?.trim() || new URL('../groups.db', import.meta.url).pathname;
+  if (sqlitePath && process.env.CLEAR_DB === '1') {
+    try { fs.rmSync(sqlitePath, { force: true }); } catch (err) {
+      logger.warn({ err: String(err?.message || err) }, 'Failed clearing SQLite path');
+    }
+  }
+
+  let botPrivateKey = process.env.BOT_PRIVATE_KEY;
+  if (!botPrivateKey) {
+    let db;
+    try {
+      db = new Database(sqlitePath);
+      db.exec('CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT)');
+      const row = db.prepare('SELECT value FROM kv WHERE key = ?').get('bot_private_key');
+      if (row?.value) {
+        botPrivateKey = String(row.value);
+      }
+      if (!botPrivateKey) {
+        const wallet = ethers.Wallet.createRandom();
+        botPrivateKey = wallet.privateKey;
+        db.prepare('INSERT OR REPLACE INTO kv (key, value) VALUES (?, ?)').run('bot_private_key', botPrivateKey);
+        logger.info('Generated new XMTP invite bot key');
+      }
+    } catch (err) {
+      logger.warn({ err: String(err?.message || err) }, 'Failed loading bot private key from SQLite');
+      if (!botPrivateKey) {
+        const wallet = ethers.Wallet.createRandom();
+        botPrivateKey = wallet.privateKey;
+        logger.warn('Using ephemeral XMTP bot key; set BOT_PRIVATE_KEY or SQLite DB for persistence');
+      }
+    } finally {
+      try { db?.close(); } catch {/* ignore */}
+    }
+  }
+
+  const wallet = new ethers.Wallet(botPrivateKey, provider);
+
+  let xmtp = null;
+  const bootTriesRaw = Number(process.env.XMTP_BOOT_MAX_TRIES);
+  const bootTries = Number.isFinite(bootTriesRaw) && bootTriesRaw > 0 ? Math.floor(bootTriesRaw) : 30;
+  for (let attempt = 1; attempt <= bootTries; attempt += 1) {
+    try {
+      xmtp = await createXmtpWithRotation(wallet);
+      const ready = await waitForXmtpClientReady(xmtp, 30, 500);
+      if (!ready) {
+        throw new Error('XMTP client not ready');
+      }
+      break;
+    } catch (err) {
+      logger.warn({ attempt, err: String(err?.message || err) }, 'XMTP boot attempt failed; retrying');
+      if (attempt === bootTries) {
+        throw err;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1_000));
+    }
+  }
+
   const hasJoined = async (contractAddress, memberAddress) => {
     const contract = new ethers.Contract(
       contractAddress,
@@ -1323,7 +1465,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     linkBaseUrl: process.env.APP_BASE_URL,
     logger
   });
-  const app = await createApp({ hasJoined, rateLimitStore, provider, telegram: { notifier } });
+  const app = await createApp({ hasJoined, rateLimitStore, provider, telegram: { notifier }, xmtp });
   const port = process.env.PORT || 3001;
   app.listen(port, () => {
     logger.info({ port }, 'TEMPL backend listening');

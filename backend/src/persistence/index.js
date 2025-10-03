@@ -5,6 +5,7 @@ const DEFAULT_SIGNATURE_RETENTION_MS = 6 * 60 * 60 * 1000; // 6 hours
 /**
  * @typedef {{
  *   telegramChatId: string | null,
+ *   xmtpGroupId: string | null,
  *   bindingCode: string | null,
  *   priest?: string | null
  * }} BindingRecord
@@ -14,6 +15,7 @@ const DEFAULT_SIGNATURE_RETENTION_MS = 6 * 60 * 60 * 1000; // 6 hours
  * @typedef {{
  *   contract: string,
  *   telegramChatId: string | null,
+ *   xmtpGroupId: string | null,
  *   bindingCode: string | null,
  *   priest?: string | null
  * }} BindingRow
@@ -63,6 +65,7 @@ async function createSQLitePersistence({ sqlitePath, retentionMs = DEFAULT_SIGNA
     CREATE TABLE IF NOT EXISTS templ_bindings (
       contract TEXT PRIMARY KEY,
       telegramChatId TEXT,
+      xmtpGroupId TEXT,
       bindingCode TEXT
     );
     CREATE TABLE IF NOT EXISTS used_signatures (
@@ -78,14 +81,14 @@ async function createSQLitePersistence({ sqlitePath, retentionMs = DEFAULT_SIGNA
   `);
 
   const insertBinding = db.prepare(
-    'INSERT INTO templ_bindings (contract, telegramChatId, bindingCode) VALUES (?, ?, ?) ' +
-      'ON CONFLICT(contract) DO UPDATE SET telegramChatId = excluded.telegramChatId, bindingCode = excluded.bindingCode'
+    'INSERT INTO templ_bindings (contract, telegramChatId, priest, xmtpGroupId, bindingCode) VALUES (?, ?, ?, ?, ?) ' +
+      'ON CONFLICT(contract) DO UPDATE SET telegramChatId = excluded.telegramChatId, priest = excluded.priest, xmtpGroupId = excluded.xmtpGroupId, bindingCode = excluded.bindingCode'
   );
   const listBindingsStmt = db.prepare(
-    'SELECT contract, telegramChatId, bindingCode FROM templ_bindings ORDER BY contract'
+    'SELECT contract, telegramChatId, priest, xmtpGroupId, bindingCode FROM templ_bindings ORDER BY contract'
   );
   const findBindingStmt = db.prepare(
-    'SELECT contract, telegramChatId, bindingCode FROM templ_bindings WHERE contract = ?'
+    'SELECT contract, telegramChatId, priest, xmtpGroupId, bindingCode FROM templ_bindings WHERE contract = ?'
   );
   const pruneSignaturesStmt = db.prepare('DELETE FROM used_signatures WHERE expiresAt <= ?');
   const insertSignatureStmt = db.prepare(
@@ -106,9 +109,10 @@ async function createSQLitePersistence({ sqlitePath, retentionMs = DEFAULT_SIGNA
     const key = contract ? String(contract).toLowerCase() : '';
     if (!key) return;
     const chatId = record?.telegramChatId != null ? String(record.telegramChatId) : null;
+    const xmtpGroupId = record?.xmtpGroupId != null ? String(record.xmtpGroupId) : null;
     const bindingCode = record?.bindingCode != null ? String(record.bindingCode) : null;
     try {
-      insertBinding.run(key, chatId, bindingCode);
+      insertBinding.run(key, chatId, record?.priest ? String(record.priest).toLowerCase() : null, xmtpGroupId, bindingCode);
     } catch (err) {
       const message = String(err?.message || '');
       if (message.includes('UNIQUE constraint failed: templ_bindings.telegramChatId')) {
@@ -126,6 +130,8 @@ async function createSQLitePersistence({ sqlitePath, retentionMs = DEFAULT_SIGNA
       .map(/** @returns {BindingRow} */ (row) => ({
         contract: String(row.contract || '').toLowerCase(),
         telegramChatId: row.telegramChatId != null ? String(row.telegramChatId) : null,
+        priest: row.priest != null ? String(row.priest).toLowerCase() : null,
+        xmtpGroupId: row.xmtpGroupId != null ? String(row.xmtpGroupId) : null,
         bindingCode: row.bindingCode != null ? String(row.bindingCode) : null
       }));
   };
@@ -138,6 +144,8 @@ async function createSQLitePersistence({ sqlitePath, retentionMs = DEFAULT_SIGNA
     return {
       contract: key,
       telegramChatId: row.telegramChatId != null ? String(row.telegramChatId) : null,
+      priest: row.priest != null ? String(row.priest).toLowerCase() : null,
+      xmtpGroupId: row.xmtpGroupId != null ? String(row.xmtpGroupId) : null,
       bindingCode: row.bindingCode != null ? String(row.bindingCode) : null
     };
   };
@@ -217,7 +225,7 @@ async function createSQLitePersistence({ sqlitePath, retentionMs = DEFAULT_SIGNA
  * @returns {PersistenceAdapter}
  */
 export function createMemoryPersistence({ retentionMs = DEFAULT_SIGNATURE_RETENTION_MS } = {}) {
-  /** @type {Map<string, { telegramChatId: string | null, priest: string | null, bindingCode: string | null }>} */
+  /** @type {Map<string, { telegramChatId: string | null, xmtpGroupId: string | null, priest: string | null, bindingCode: string | null }>} */
   const bindings = new Map();
   /** @type {Map<string, number>} */
   const signatures = new Map();
@@ -227,6 +235,7 @@ export function createMemoryPersistence({ retentionMs = DEFAULT_SIGNATURE_RETENT
     if (!key) return;
     bindings.set(key, {
       telegramChatId: record?.telegramChatId != null ? String(record.telegramChatId) : null,
+      xmtpGroupId: record?.xmtpGroupId != null ? String(record.xmtpGroupId) : null,
       priest: record?.priest ? normaliseKey(record.priest) : null,
       bindingCode: record?.bindingCode != null ? String(record.bindingCode) : null
     });
@@ -236,6 +245,7 @@ export function createMemoryPersistence({ retentionMs = DEFAULT_SIGNATURE_RETENT
     return Array.from(bindings.entries()).map(([contract, value]) => ({
       contract,
       telegramChatId: value.telegramChatId,
+      xmtpGroupId: value.xmtpGroupId ?? null,
       priest: value.priest,
       bindingCode: value.bindingCode
     }));

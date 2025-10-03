@@ -21,6 +21,7 @@
     "test:e2e:record": "playwright test"
   },
   "dependencies": {
+    "@xmtp/browser-sdk": "^2.2.1",
     "ethers": "^6.15.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"

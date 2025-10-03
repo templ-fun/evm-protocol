@@ -448,6 +448,22 @@ export async function fetchMemberPoolStats({
   };
 }
 
+export async function claimMemberPool({
+  ethers,
+  signer,
+  templAddress,
+  templArtifact
+}) {
+  if (!ethers || !signer || !templAddress || !templArtifact?.abi) {
+    throw new Error('claimMemberPool requires signer and templ configuration');
+  }
+  const normalizedTempl = ethers.getAddress?.(templAddress) ?? templAddress;
+  const contract = new ethers.Contract(normalizedTempl, templArtifact.abi, signer);
+  const tx = await contract.claimMemberRewards();
+  await tx.wait();
+  return true;
+}
+
 export async function claimMemberRewards({
   ethers,
   signer,

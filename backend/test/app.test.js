@@ -9,6 +9,8 @@ import { createMemoryPersistence } from '../src/persistence/index.js';
 process.env.NODE_ENV = 'test';
 process.env.BACKEND_SERVER_ID = 'test-server';
 process.env.APP_BASE_URL = 'http://localhost:5173';
+process.env.TRUSTED_FACTORY_ADDRESS = '';
+process.env.TRUSTED_FACTORY_DEPLOYMENT_BLOCK = '';
 
 
 function createTestNotifier(notifications) {
@@ -250,7 +252,7 @@ test('register templ persists record and wires contract listeners', async (t) =>
   assert.equal(response.contract, contractAddress);
   assert.equal(response.priest, wallet.address.toLowerCase());
   assert.equal(response.telegramChatId, '-1000000000001');
-  assert.equal(response.groupId, '-1000000000001');
+  assert.equal(response.groupId, null);
   assert.equal(response.templHomeLink, '');
   assert.equal(response.bindingCode, null);
 
@@ -459,6 +461,8 @@ test('register templ without chat id issues binding code', async (t) => {
   const mappingRow = bindings.find((row) => row.contract === contractAddress);
   assert.ok(mappingRow, 'templ persisted without chat');
   assert.equal(mappingRow.telegramChatId, null);
+  assert.equal(mappingRow.xmtpGroupId, null);
+  assert.equal(mappingRow.priest, wallet.address.toLowerCase());
   assert.equal(mappingRow.bindingCode, response.bindingCode);
 });
 
@@ -485,6 +489,7 @@ test('auto registration persists templ without requiring signature', async (t) =
   const bindings = await persistence.listBindings();
   const row = bindings.find((item) => item.contract === contractKey);
   assert.ok(row, 'templ persisted after auto registration');
+  assert.equal(row.priest, contractKey);
 });
 
 test('signature replay rejected after restart with shared store', async (t) => {

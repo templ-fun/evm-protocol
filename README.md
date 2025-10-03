@@ -1,6 +1,6 @@
 # templ.fun
 
-Templ lets any ERC-20 community spin up a gated club with transparent economics, one-member/one-vote governance, and optional Telegram alerts. A single factory mints templs, each templ tracks its own members and fee splits, and the surrounding tooling keeps every surface in sync.
+Templ lets any ERC-20 community spin up a gated club with transparent economics, one-member/one-vote governance, and an XMTP-powered private chat. A single factory mints templs, each templ tracks its own members and fee splits, and the surrounding tooling keeps every surface in sync—with Telegram notifications remaining available as an optional add-on.
 
 ---
 
@@ -9,8 +9,8 @@ Templ lets any ERC-20 community spin up a gated club with transparent economics,
 | Area | What ships |
 | --- | --- |
 | On-chain | `TemplFactory` deployments with configurable priest, entry fee, burn/treasury/member splits, quorum, execution delay, optional caps, and home links. Each templ wires membership, treasury, and typed-governance modules together so communities can join, vote, withdraw, or disband without bespoke code. |
-| Frontend | Static Vite + React SPA that handles templ creation, join + gifting flows, proposal creation/voting/execution, reward claims, and Telegram rebinding. |
-| Backend | Node 22 Express service that verifies typed signatures, persists templ ↔ Telegram bindings in SQLite, streams contract events, and emits MarkdownV2 Telegram notifications. Designed to run as a long-lived process (Fly, Render, Railway, bare metal) with optional Redis-backed rate limiting. |
+| Frontend | Static Vite + React SPA that handles templ creation, join + gifting flows, reward claims, and an XMTP group chat experience where proposals appear as live polls members can vote on without leaving the conversation. Telegram rebinding controls remain available for communities opting into alerts. |
+| Backend | Node 22 Express service that verifies typed signatures, orchestrates XMTP group creation and membership, persists templ metadata in SQLite, streams contract events, and (optionally) emits MarkdownV2 Telegram notifications. Designed to run as a long-lived process (Fly, Render, Railway, bare metal) with optional Redis-backed rate limiting. |
 | Shared utilities | Signing helpers, factories for typed data, and Hardhat/Vitest/Playwright harnesses that keep the stack coherent. |
 
 ## Architecture snapshot
@@ -21,7 +21,9 @@ flowchart LR
   frontend -->|Factory calls + templ reads| contracts[Solidity Contracts]
   frontend -->|Typed API calls| backend[Express API]
   backend -->|Membership checks / metadata| contracts
-  backend -->|Notifications| telegram[Telegram Bot]
+  frontend <-->|Group chat| xmtp[XMTP Network]
+  backend -->|Invite / sync| xmtp
+  backend -->|Optional alerts| telegram[Telegram Bot]
 ```
 
 More detailed diagrams and sequence charts live in [`docs/CORE_FLOW_DOCS.MD`](docs/CORE_FLOW_DOCS.MD).

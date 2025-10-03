@@ -8,167 +8,134 @@ const templArtifact = JSON.parse(
   readFileSync(path.join(process.cwd(), 'src/contracts/TEMPL.json'), 'utf8')
 );
 
+const BACKEND_URL = process.env.E2E_BACKEND_URL || 'http://localhost:3001';
 const WEEK_IN_SECONDS = 7 * 24 * 60 * 60;
 
-test.describe('Templ core workflows', () => {
-  test('create, join, claim, govern, and execute via UI flows', async ({ page, provider, wallets }) => {
-    const protocolRecipient = await wallets.priest.getAddress();
+async function registerTemplWithBackend(contractAddress) {
+  const res = await fetch(`${BACKEND_URL}/templs/auto`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ contractAddress })
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to register templ with backend: ${res.status}`);
+  }
+  return res.json();
+}
+
+test.describe('Chat-centric templ flow', () => {
+  test('member joins and governs from chat UI', async ({ page, provider, wallets }) => {
+    const priestAddress = await wallets.priest.getAddress();
+
+    // Deploy factory
     const factoryDeployer = await provider.getSigner(1);
     const factoryFactory = new ethers.ContractFactory(TemplFactory.abi, TemplFactory.bytecode, factoryDeployer);
-    const templFactory = await factoryFactory.deploy(protocolRecipient, 1000);
+    const templFactory = await factoryFactory.deploy(priestAddress, 1000);
     await templFactory.waitForDeployment();
     const templFactoryAddress = await templFactory.getAddress();
     await templFactory.connect(factoryDeployer).setPermissionless(true);
 
+    // Deploy access token and fund members
     const tokenDeployer = await provider.getSigner(2);
     const tokenFactory = new ethers.ContractFactory(TestToken.abi, TestToken.bytecode, tokenDeployer);
-    const token = await tokenFactory.deploy('Test Token', 'TEST', 18);
+    const token = await tokenFactory.deploy('Templ Token', 'TMPL', 18);
     await token.waitForDeployment();
     const tokenAddress = await token.getAddress();
 
     const entryFee = ethers.parseUnits('1', 18);
-    const updatedEntryFee = ethers.parseUnits('2', 18);
     const memberAddress = await wallets.member.getAddress();
     const secondMember = await provider.getSigner(4);
     const secondMemberAddress = await secondMember.getAddress();
-    const mintMemberTx = await token.connect(tokenDeployer).mint(memberAddress, entryFee * 10n);
-    await mintMemberTx.wait();
-    const mintSecondTx = await token.connect(tokenDeployer).mint(secondMemberAddress, entryFee * 10n);
-    await mintSecondTx.wait();
 
-    const walletBridge = await setupWalletBridge({ page, provider, wallets });
+    await (await token.connect(tokenDeployer).mint(memberAddress, entryFee * 10n)).wait();
+    await (await token.connect(tokenDeployer).mint(secondMemberAddress, entryFee * 10n)).wait();
 
+    // Deploy templ through the factory with default config
+    const createTx = await templFactory.connect(wallets.priest).createTemplFor(priestAddress, tokenAddress, entryFee);
+    const receipt = await createTx.wait();
+    const templCreatedLog = receipt.logs.map((log) => {
+      try {
+        return templFactory.interface.parseLog(log);
+      } catch {
+        return null;
+      }
+    }).find(Boolean);
+    if (!templCreatedLog) throw new Error('TemplCreated log missing');
+    const templAddress = templCreatedLog.args.templ.toLowerCase();
+
+    await registerTemplWithBackend(templAddress);
+
+    const templForMember = new ethers.Contract(templAddress, templArtifact.abi, wallets.member);
+    const templReadOnly = new ethers.Contract(templAddress, templArtifact.abi, provider);
+
+    // Prepare wallet bridge (MetaMask stub)
+    await setupWalletBridge({ page, provider, wallets });
+
+    // Seed factory address for the frontend
     await page.addInitScript((factoryAddress) => {
       window.TEMPL_FACTORY_ADDRESS = factoryAddress;
     }, templFactoryAddress);
 
     await page.goto('/');
-    await expect(page.getByRole('heading', { name: 'TEMPL Control Center' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Templs' })).toBeVisible();
 
     const connectButton = page.getByRole('navigation').getByRole('button', { name: 'Connect Wallet' });
-    await expect(connectButton).toBeVisible();
     await connectButton.click();
-    await expect(page.getByText(/Wallet connected:/)).toBeVisible();
+    await expect(page.getByRole('navigation').getByText(/Connected:/)).toBeVisible();
 
-    await page.getByRole('button', { name: 'Create a Templ' }).click();
-    await expect(page).toHaveURL(/\/templs\/create$/);
-    await expect(page.getByRole('heading', { name: 'Create a Templ' })).toBeVisible();
+    // Templ listing shows symbol and entry fee
+    const templRow = page.locator('tbody tr').filter({ hasText: templAddress.slice(2, 8) });
+    await expect(templRow).toBeVisible();
+    await expect(templRow.locator('td').nth(1)).toContainText('TMPL');
 
-    const advancedToggle = page.getByRole('button', { name: /Advanced mode/i });
-    await advancedToggle.click();
-
-    const factoryInput = page.getByLabel('Factory address');
-    await expect(factoryInput).toHaveValue(templFactoryAddress);
-    await page.getByLabel('Access token address').fill(tokenAddress);
-    const entryFeeTokenAmount = ethers.formatUnits(entryFee, 18);
-    await page.getByLabel('Entry fee (token amount)').fill(entryFeeTokenAmount);
-    await page.getByLabel('Quorum %').fill('33');
-    await page.getByLabel('Templ home link').fill('https://t.me/templ-e2e-demo');
-
-    await page.getByRole('button', { name: 'Deploy templ' }).click();
-    await expect(page.getByText(/Deploying templ/)).toBeVisible();
-    await expect(page.getByText(/Templ deployed at/)).toBeVisible();
-
-    const templAddressHandle = await page.waitForFunction(() => {
-      const raw = localStorage.getItem('templ:test:deploys');
-      if (!raw) return null;
-      const items = JSON.parse(raw);
-      if (!Array.isArray(items) || items.length === 0) return null;
-      return items[items.length - 1];
-    });
-    const templAddress = (await templAddressHandle.jsonValue()).toLowerCase();
-    const templForMember = new ethers.Contract(templAddress, templArtifact.abi, wallets.member);
-    const templReadOnly = new ethers.Contract(templAddress, templArtifact.abi, provider);
-
-    await expect(page.getByRole('heading', { name: 'Connect Telegram notifications' })).toBeVisible();
-    await page.getByRole('button', { name: 'Open templ overview' }).click();
-    await expect(page).toHaveURL(new RegExp(`/templs/${templAddress}`, 'i'));
-    await expect(page.getByRole('heading', { name: 'Templ Overview' })).toBeVisible();
-
-    await walletBridge.switchAccount('member');
-    await page.goto(`/templs/join?address=${templAddress}`);
-    await expect(page.getByRole('heading', { name: 'Join a Templ' })).toBeVisible();
+    await templRow.getByRole('button', { name: 'Join' }).click();
+    await expect(page).toHaveURL(/\/templs\/join/);
     await expect(page.getByLabel('Templ address')).toHaveValue(templAddress);
 
-    const approveButton = page.getByRole('button', { name: 'Approve entry fee' });
-    await expect(approveButton).toBeEnabled();
-    await approveButton.click();
-    await expect(page.getByText('Approving entry fee…')).toBeVisible();
+    await page.getByRole('button', { name: 'Approve entry fee' }).click();
+    await expect(page.getByText(/Approving entry fee/)).toBeVisible();
     await expect(page.getByText(/Allowance approved/)).toBeVisible();
 
-    const joinButton = page.getByRole('button', { name: 'Join templ' });
-    await expect(joinButton).toBeEnabled();
-    await joinButton.click();
-    await expect(page.getByText('Joining templ…')).toBeVisible();
-    await expect(page.getByText(/Join complete/)).toBeVisible();
+    await page.getByRole('button', { name: 'Join templ' }).click();
+    await expect(page.getByText(/Joining templ/)).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`/templs/${templAddress}/chat`, 'i'));
 
-    await page.getByRole('button', { name: 'Verify Membership' }).click();
-    await expect(page.getByText(/Verifying membership/)).toBeVisible();
-    await expect(page.getByText(/Membership verified/)).toBeVisible();
+    // Chat renders and loads history
+    await expect(page.getByRole('heading', { name: 'Templ Chat' })).toBeVisible();
     await expect(await templForMember.isMember(memberAddress)).toBe(true);
 
-    const secondApproveTx = await token.connect(secondMember).approve(templAddress, entryFee);
-    await secondApproveTx.wait();
-    const templForSecondMember = new ethers.Contract(templAddress, templArtifact.abi, secondMember);
-    const secondJoinTx = await templForSecondMember.join();
-    await secondJoinTx.wait();
-    await provider.send('evm_mine', []);
-
-    await page.goto(`/templs/${templAddress}/claim`);
-    await expect(page.getByRole('heading', { name: 'Claim Member Rewards' })).toBeVisible();
-    const memberBalanceBefore = await token.balanceOf(memberAddress);
-    const claimableBefore = await templForMember.getClaimableMemberRewards(memberAddress);
-    await expect(claimableBefore).not.toBe(0n);
-    const claimButton = page.getByRole('button', { name: 'Claim rewards' });
-    await claimButton.click();
-    await expect(page.getByText(/Claiming member pool rewards/)).toBeVisible();
-    await expect(page.getByText(/Rewards claimed successfully/)).toBeVisible();
-    const memberBalanceAfter = await token.balanceOf(memberAddress);
-    const claimableAfter = await templForMember.getClaimableMemberRewards(memberAddress);
-    const balanceDelta = memberBalanceAfter - memberBalanceBefore;
-    await expect(balanceDelta).toBe(claimableBefore);
-    await expect(claimableAfter).toBe(0n);
-
-    await page.goto(`/templs/${templAddress}`);
-    await expect(page.getByRole('heading', { name: 'Templ Overview' })).toBeVisible();
-    const membersRow = page.locator('div.space-y-1').filter({ has: page.locator('dt', { hasText: 'Members' }) });
-    await expect(membersRow.locator('dd')).toContainText('3');
-
+    // New proposal via chat composer
     await page.getByRole('button', { name: 'New proposal' }).click();
-    await expect(page).toHaveURL(new RegExp(`/templs/${templAddress}/proposals/new`));
-    await page.getByLabel('Title').fill('Raise entry fee to 2 TEST');
-    await page.getByLabel('Description').fill('Increase entry fee to strengthen treasury.');
-    await page.getByLabel('Proposal type').selectOption('updateConfig');
-    await page.getByLabel('New entry fee (wei)').fill(updatedEntryFee.toString());
-    await page.getByLabel('Voting period (seconds)').fill(String(WEEK_IN_SECONDS));
-    await page.getByRole('button', { name: 'Create proposal' }).click();
-    await expect(page.getByText(/Submitting proposal/)).toBeVisible();
-    await expect(page.getByText(/Proposal created/)).toBeVisible();
-    await expect(page).toHaveURL(new RegExp(`/templs/${templAddress}/proposals/0/vote`));
+    await page.getByLabel('Title').fill('Pause joins temporarily');
+    await page.getByLabel('Description').fill('Pause membership intake for maintenance.');
+    await page.getByLabel('Pause joins?').selectOption('true');
+    await page.getByRole('button', { name: 'Submit proposal' }).click();
+    await expect(page.getByText(/Proposal submitted/)).toBeVisible();
 
-    await page.getByRole('button', { name: 'Submit vote' }).click();
-    await expect(page.getByText(/Casting vote/)).toBeVisible();
+    const proposalCard = page.locator('h3').filter({ hasText: '#0' }).locator('..').locator('..');
+    await expect(proposalCard).toBeVisible();
+
+    // Vote in chat poll
+    await proposalCard.getByRole('button', { name: 'Vote Yes' }).click();
     await expect(page.getByText(/Vote submitted/)).toBeVisible();
 
-    await provider.send('evm_increaseTime', [WEEK_IN_SECONDS + 60]);
+    // Fast-forward voting period and execute
+    await provider.send('evm_increaseTime', [WEEK_IN_SECONDS + 120]);
     await provider.send('evm_mine', []);
+    await proposalCard.getByRole('button', { name: 'Execute' }).click();
+    await expect(page.getByText(/Execution submitted/)).toBeVisible();
 
-    const execTx = await templForMember.executeProposal(0);
-    await execTx.wait();
-    await provider.send('evm_mine', []);
+    await expect(async () => {
+      const executed = await templReadOnly.joinPaused();
+      expect(executed).toBe(true);
+    }).toPass({ timeout: 15000, intervals: [250, 500, 1000] });
 
-    await page.goto(`/templs/${templAddress}`);
-    await expect(page.getByRole('heading', { name: 'Templ Overview' })).toBeVisible();
-    await page.getByRole('button', { name: 'Refresh proposals' }).click();
-    const proposalItem = page.locator('li').filter({ hasText: '#0' });
-    await expect(proposalItem.locator('span').filter({ hasText: 'Executed' })).toBeVisible();
-
-    const entryFeeRow = page.locator('div.space-y-1').filter({ has: page.locator('dt', { hasText: 'Entry fee' }) });
-    await expect(entryFeeRow.locator('dd')).toContainText('2');
-    const entryFeeOnChain = await templReadOnly.entryFee();
-    await expect(entryFeeOnChain).toBe(updatedEntryFee);
-
-    await page.getByRole('navigation').getByRole('button', { name: 'Disconnect' }).click();
-    await expect(page.getByRole('navigation').getByRole('button', { name: 'Connect Wallet' })).toBeVisible();
+    // Programmatically join second member so chat has another participant
+    const approveSecond = await token.connect(secondMember).approve(templAddress, entryFee);
+    await approveSecond.wait();
+    const templForSecond = new ethers.Contract(templAddress, templArtifact.abi, secondMember);
+    const secondJoin = await templForSecond.join();
+    await secondJoin.wait();
+    await expect(await templReadOnly.memberCount()).toBe(2n);
   });
 });

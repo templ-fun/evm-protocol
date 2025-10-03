@@ -13,7 +13,8 @@ export function JoinTemplPage({
   query,
   templs: knownTempls = [],
   readProvider,
-  refreshTempls
+  refreshTempls,
+  onNavigate
 }) {
   const [templAddress, setTemplAddress] = useState('');
   const [joinPending, setJoinPending] = useState(false);
@@ -195,8 +196,14 @@ export function JoinTemplPage({
         } else {
           pushMessage?.('Join complete');
         }
+        if (templAddress) {
+          onNavigate?.(`/templs/${templAddress.toLowerCase()}/chat`);
+        }
       } else {
         pushMessage?.('Recipient already has membership');
+        if (templAddress) {
+          onNavigate?.(`/templs/${templAddress.toLowerCase()}/chat`);
+        }
       }
       await refreshEntryInfo();
       await refreshTempls?.();
@@ -225,6 +232,9 @@ export function JoinTemplPage({
         pushMessage?.('Membership verified. Telegram updates activate after the priest generates a binding code.');
       } else {
         pushMessage?.('Membership verified');
+      }
+      if (templAddress && data?.groupId) {
+        onNavigate?.(`/templs/${templAddress.toLowerCase()}/chat`);
       }
     } catch (err) {
       pushMessage?.(`Verification failed: ${err?.message || err}`);
@@ -352,6 +362,12 @@ export function JoinTemplPage({
               <dd className={`${text.mono} text-xs`}>{verification.templ?.priest || 'Unknown'}</dd>
             </div>
             <div className="space-y-1">
+              <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">XMTP group</dt>
+              <dd className={`${text.mono} text-xs`}>
+                {verification.groupId ? verification.groupId : 'Pending registration'}
+              </dd>
+            </div>
+            <div className="space-y-1">
               <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Telegram chat id</dt>
               <dd className={text.subtle}>
                 {verification.templ?.telegramChatId
@@ -385,6 +401,17 @@ export function JoinTemplPage({
                 </li>
               ))}
             </ul>
+          )}
+          {verification.groupId && templAddress && (
+            <div className="mt-4 flex justify-end">
+              <button
+                type="button"
+                className={button.primary}
+                onClick={() => onNavigate?.(`/templs/${templAddress.toLowerCase()}/chat`)}
+              >
+                Open chat
+              </button>
+            </div>
           )}
         </section>
       )}

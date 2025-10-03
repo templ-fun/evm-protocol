@@ -6,10 +6,15 @@ import { registerTempl } from '../src/services/registerTempl.js';
 import { joinTempl } from '../src/services/joinTempl.js';
 import { requestTemplRebind } from '../src/services/requestTemplRebind.js';
 
+process.env.TRUSTED_FACTORY_ADDRESS = '';
+process.env.TRUSTED_FACTORY_DEPLOYMENT_BLOCK = '';
+
 const noopContext = {
   templs: new Map(),
   persist: () => {},
-  logger: { info: () => {}, warn: () => {}, error: () => {} }
+  logger: { info: () => {}, warn: () => {}, error: () => {} },
+  skipFactoryValidation: true,
+  xmtp: null
 };
 
 function expectStatus(err, code) {
@@ -30,7 +35,9 @@ test('registerTempl rejects invalid telegram chat ids', async () => {
     templs,
     persist: async () => {},
     watchContract: async () => {},
-    logger: { info: () => {}, warn: () => {}, error: () => {} }
+    logger: { info: () => {}, warn: () => {}, error: () => {} },
+    skipFactoryValidation: true,
+    xmtp: null
   };
 
   await assert.rejects(
@@ -52,7 +59,9 @@ test('registerTempl accepts numeric telegram chat ids', async () => {
     templs,
     persist: async () => {},
     watchContract: async () => {},
-    logger: { info: () => {}, warn: () => {}, error: () => {} }
+    logger: { info: () => {}, warn: () => {}, error: () => {} },
+    skipFactoryValidation: true,
+    xmtp: null
   };
 
   await registerTempl(
@@ -75,7 +84,9 @@ test('registerTempl allows multiple templs to reuse the same chat id', async () 
     templs,
     persist: async () => {},
     watchContract: async () => {},
-    logger: { info: () => {}, warn: () => {}, error: () => {} }
+    logger: { info: () => {}, warn: () => {}, error: () => {} },
+    skipFactoryValidation: true,
+    xmtp: null
   };
 
   await registerTempl(
@@ -121,7 +132,9 @@ test('registerTempl seeds lastDigestAt to zero for new templs', async () => {
     templs,
     persist: async () => {},
     watchContract: async () => {},
-    logger: { info: () => {}, warn: () => {}, error: () => {} }
+    logger: { info: () => {}, warn: () => {}, error: () => {} },
+    skipFactoryValidation: true,
+    xmtp: null
   };
 
   await registerTempl(
@@ -161,7 +174,9 @@ test('requestTemplRebind restores templs with zeroed lastDigestAt by default', a
         if (!decoded) return '0x';
         return iface.encodeFunctionResult('priest', [priest]);
       }
-    }
+    },
+    skipFactoryValidation: true,
+    xmtp: null
   };
 
   await requestTemplRebind(

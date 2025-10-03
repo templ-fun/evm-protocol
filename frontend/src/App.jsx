@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { ethers } from 'ethers';
 import { useAppLocation } from './hooks/useAppLocation.js';
 import { BACKEND_URL, FACTORY_CONFIG, RPC_URL } from './config.js';
@@ -6,12 +6,8 @@ import { fetchTemplStats, loadFactoryTempls } from './services/templs.js';
 import { button, layout, surface } from './ui/theme.js';
 
 const HomePage = lazy(() => import('./pages/HomePage.jsx').then((mod) => ({ default: mod.HomePage })));
-const CreateTemplPage = lazy(() => import('./pages/CreateTemplPage.jsx').then((mod) => ({ default: mod.CreateTemplPage })));
 const JoinTemplPage = lazy(() => import('./pages/JoinTemplPage.jsx').then((mod) => ({ default: mod.JoinTemplPage })));
-const NewProposalPage = lazy(() => import('./pages/NewProposalPage.jsx').then((mod) => ({ default: mod.NewProposalPage })));
-const VoteProposalPage = lazy(() => import('./pages/VoteProposalPage.jsx').then((mod) => ({ default: mod.VoteProposalPage })));
-const TemplOverviewPage = lazy(() => import('./pages/TemplOverviewPage.jsx').then((mod) => ({ default: mod.TemplOverviewPage })));
-const ClaimRewardsPage = lazy(() => import('./pages/ClaimRewardsPage.jsx').then((mod) => ({ default: mod.ClaimRewardsPage })));
+const ChatPage = lazy(() => import('./pages/ChatPage.jsx').then((mod) => ({ default: mod.ChatPage })));
 
 export default function App() {
   const { path, query, navigate } = useAppLocation();
@@ -224,25 +220,19 @@ export default function App() {
     refreshTempls();
   }, [refreshTempls]);
 
-  const templMap = useMemo(() => {
-    const map = new Map();
-    for (const row of templs) {
-      map.set(String(row.contract).toLowerCase(), row);
-    }
-    return map;
-  }, [templs]);
-
   const renderRoute = () => {
-    if (path === '/templs/create') {
+    const chatMatch = path.match(/^\/templs\/(0x[0-9a-fA-F]{40})\/chat$/);
+    if (chatMatch) {
+      const address = chatMatch[1].toLowerCase();
       return (
-        <CreateTemplPage
+        <ChatPage
           ethers={ethers}
           signer={signer}
           walletAddress={walletAddress}
           onConnectWallet={connectWallet}
+          templAddress={address}
+          navigate={navigate}
           pushMessage={pushMessage}
-          onNavigate={navigate}
-          refreshTempls={refreshTempls}
           readProvider={readProvider}
         />
       );
@@ -259,69 +249,7 @@ export default function App() {
           templs={templs}
           readProvider={readProvider}
           refreshTempls={refreshTempls}
-        />
-      );
-    }
-    const newProposalMatch = path.match(/^\/templs\/(0x[0-9a-fA-F]{40})\/proposals\/new$/);
-    if (newProposalMatch) {
-      const address = newProposalMatch[1].toLowerCase();
-      return (
-        <NewProposalPage
-          ethers={ethers}
-          signer={signer}
-          walletAddress={walletAddress}
-          templAddress={address}
-          readProvider={readProvider}
-          onConnectWallet={connectWallet}
-          pushMessage={pushMessage}
           onNavigate={navigate}
-        />
-      );
-    }
-    const voteMatch = path.match(/^\/templs\/(0x[0-9a-fA-F]{40})\/proposals\/([^/]+)\/vote$/);
-    if (voteMatch) {
-      const address = voteMatch[1].toLowerCase();
-      const proposalId = voteMatch[2];
-      return (
-        <VoteProposalPage
-          ethers={ethers}
-          signer={signer}
-          templAddress={address}
-          proposalId={proposalId}
-          onConnectWallet={connectWallet}
-          pushMessage={pushMessage}
-        />
-      );
-    }
-    const claimMatch = path.match(/^\/templs\/(0x[0-9a-fA-F]{40})\/claim$/);
-    if (claimMatch) {
-      const address = claimMatch[1].toLowerCase();
-      return (
-        <ClaimRewardsPage
-          ethers={ethers}
-          signer={signer}
-          walletAddress={walletAddress}
-          templAddress={address}
-          onConnectWallet={connectWallet}
-          pushMessage={pushMessage}
-        />
-      );
-    }
-    const overviewMatch = path.match(/^\/templs\/(0x[0-9a-fA-F]{40})$/);
-    if (overviewMatch) {
-      const address = overviewMatch[1].toLowerCase();
-      const templRecord = templMap.get(address) || { contract: address };
-      return (
-        <TemplOverviewPage
-          templAddress={address}
-          templRecord={templRecord}
-          onNavigate={navigate}
-          signer={signer}
-          readProvider={readProvider}
-          walletAddress={walletAddress}
-          onConnectWallet={connectWallet}
-          pushMessage={pushMessage}
-          refreshTempls={refreshTempls}
         />
       );
     }
@@ -343,7 +271,6 @@ export default function App() {
       <nav className="flex flex-wrap items-center gap-3 bg-slate-900 px-6 py-3">
         <div className="flex flex-wrap items-center gap-3">
           <button type="button" className={button.nav} onClick={() => navigate('/')}>Home</button>
-          <button type="button" className={button.nav} onClick={() => navigate('/templs/create')}>Create</button>
           <button type="button" className={button.nav} onClick={() => navigate('/templs/join')}>Join</button>
         </div>
         <div className="ml-auto flex items-center gap-3">

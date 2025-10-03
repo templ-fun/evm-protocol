@@ -1,22 +1,16 @@
 # Frontend SPA
 
-Use this doc to navigate the Vite + React app in `frontend/` and understand the routes that power templ lifecycle management:
+The Vite + React app in `frontend/` now revolves around a single chat-centric experience. Every route either lists templs, walks a member through joining, or lands them in the XMTP conversation itself.
 
 | Route | Purpose |
 | --- | --- |
-| `/` | Dashboard, wallet connection, and a templ directory sourced from the configured factory (enriched with backend Telegram metadata). |
-| `/templs/create` | Deploy a templ contract and register it with the backend (optional Telegram chat id). |
-| `/templs/join` | Purchase access and request backend verification. |
-| `/templs/:address` | Overview page with priest info, Telegram chat id, and quick actions. |
-| `/templs/:address/proposals/new` | Guided form to create proposals (collects on-chain title + description). |
-| `/templs/:address/proposals/:id/vote` | YES/NO voting form. |
-| `/templs/:address/claim` | Claim member pool rewards and inspect raw balances. |
+| `/` | Lists discovered templs (factory scan + backend registry) with their token symbol, entry fee, and a Join button. |
+| `/templs/join` | Handles allowance + membership flows. Accepts an `address` query param to prefill the target templ, and automatically redirects to chat after a successful join. |
+| `/templs/:address/chat` | Wallet-authenticated XMTP chat where members send messages, compose proposals, vote via poll cards, execute decisions, and claim rewards without leaving the conversation. |
 
-After deploying, the UI surfaces a one-time Telegram binding code. Invite `@templfunbot` to your group and either tap the generated `https://t.me/templfunbot?startgroup=<bindingCode>` link or send `/templ <bindingCode>` in the chat so the backend can link the templ without requesting admin privileges.
+Telegram notifications remain optional; inviting `@templfunbot` with the binding code returned by the backend continues to work, but day-to-day governance happens inside the chat.
 
-The app focuses on templ lifecycle flows while Telegram handles coordination through backend-triggered notifications.
-
-Because the build output is static, production runs deploy cleanly to [Cloudflare Pages](https://pages.cloudflare.com/) (edge-cached, zero-idle hosting). Pair Pages with your Node-hosted backend (Render/Fly/Railway/etc.) so the entire stack stays inexpensive while keeping the UI globally cached.
+Because the build output is static, you can still deploy it to [Cloudflare Pages](https://pages.cloudflare.com/) or any other static host. Pair it with the Node backend (Fly, Render, Railway, etc.) for the API/XMTP orchestration.
 
 ## Local development
 
@@ -25,7 +19,7 @@ npm --prefix frontend ci
 npm --prefix frontend run dev
 ```
 
-By default the SPA expects the backend at `http://localhost:3001`. Override with `VITE_BACKEND_URL` when necessary.
+The dev server talks to `http://localhost:3001` by default. Override `VITE_BACKEND_URL` if your backend runs elsewhere.
 
 ### Environment variables
 
@@ -33,85 +27,49 @@ By default the SPA expects the backend at `http://localhost:3001`. Override with
 | --- | --- | --- |
 | `VITE_BACKEND_URL` | Base URL for API requests. | `http://localhost:3001` |
 | `VITE_BACKEND_SERVER_ID` | Must match the backend’s `BACKEND_SERVER_ID` so EIP-712 signatures verify. | unset |
-| `VITE_TEMPL_FACTORY_ADDRESS` | Optional override for the templ factory used during deploy. | unset |
-| `VITE_TEMPL_FACTORY_PROTOCOL_RECIPIENT` | Optional override for the protocol fee recipient shown in the UI. | unset |
-| `VITE_TEMPL_FACTORY_PROTOCOL_PERCENT` | Optional override for the protocol fee percent shown in the UI. | unset |
-| `VITE_TEMPL_FACTORY_DEPLOYMENT_BLOCK` | Optional block height that seeds the factory log scan when listing templs on the landing page. | unset |
-| `VITE_RPC_URL` | Optional read provider used to enumerate templs on the landing page (falls back to the active wallet provider). | unset |
-| `VITE_E2E_DEBUG` | Enables additional UI affordances when set to `1` (used by Playwright). | `0` |
+| `VITE_TEMPL_FACTORY_ADDRESS` | Optional factory override; helps the home page seed templ discovery from on-chain events. | unset |
+| `VITE_TEMPL_FACTORY_DEPLOYMENT_BLOCK` | Optional starting block for the factory log scan. | unset |
+| `VITE_RPC_URL` | Optional read provider for templ stats when no wallet is connected. | unset |
+| `VITE_XMTP_ENV` | XMTP environment (`local`, `dev`, or `production`) used by the browser client. | inherits backend/defaults |
+| `VITE_E2E_DEBUG` | Enables additional UI affordances for Playwright. | `0` |
 
 ### Wallet connection
 
-The app uses `ethers.BrowserProvider` and the injected `window.ethereum`. Connecting in development automatically picks up Hardhat accounts when you run `npx hardhat node`.
+The SPA relies on `ethers.BrowserProvider` and the injected `window.ethereum`. When developing against Hardhat, running `npx hardhat node` exposes deterministic private keys that the Playwright harness also consumes.
 
-### Deployment flow
+### Deployment & registration
 
-1. User connects a wallet and navigates to `/templs/create`.
-2. The UI validates fee splits and calls `factory.createTemplWithConfig`. When the form detects a deployed factory address it automatically locks the protocol percent input to the factory’s on-chain share so deployments stay in sync with backend enforcement.
-3. After the transaction confirms, the app signs the EIP-712 registration payload and POSTs it to the backend (including an optional Telegram chat id).
-
-### Production build & Pages deploy
-
-- Build with the production API URL and factory settings:
-
-  ```bash
-  VITE_BACKEND_URL=https://templ-backend.example.workers.dev \
-  VITE_BACKEND_SERVER_ID=templ-prod \
-  VITE_TEMPL_FACTORY_ADDRESS=0x... \
-  npm --prefix frontend run build
-  ```
-
-- Deploy `frontend/dist/` to Cloudflare Pages:
-
-  ```bash
-  wrangler pages deploy frontend/dist --project-name templ-frontend --branch production
-  ```
-
-- Or reuse the top-level `npm run deploy:cloudflare` helper to apply the database schema and publish the Pages site in one command (see `scripts/cloudflare.deploy.example.env`).
+UI-driven deployment has been retired. Deploy templs via scripts or the backend API (`POST /templs` or `/templs/auto`), then refresh the home page to see them alongside their entry fee. Once registered, everything else happens in the chat.
 
 ### Join flow
 
-1. User enters a templ address on `/templs/join`.
-2. If necessary, the `joinTempl` helper approves the entry fee and calls `join()` (or `joinFor(recipient)` when gifting) on the contract.
-3. The app signs a `join` typed message and asks the backend to verify membership.
-4. The UI surfaces templ metadata, including Telegram chat id and quick links.
+1. Open `/` and click **Join** (or hit `/templs/join?address=<templ>` directly).
+2. Approve the entry fee when prompted, then submit the join transaction (supports gifting via `joinFor(recipient)`).
+3. After the transaction settles, the app signs the typed `/join` payload so the backend can confirm membership and hand back the XMTP `groupId`.
+4. The UI immediately navigates to `/templs/:address/chat`, streams history, and surfaces governance tools right inside the conversation.
 
-### Governance tools
+### Governance in chat
 
-The proposal form collects a title and description (persisted on-chain) and offers a curated set of actions:
-
-- Pause / unpause templ
-- Change priest
-- Update max members
-- Toggle dictatorship mode
-- Update templ home link (mirrors the on-chain `templHomeLink` string used by the backend and notifications)
-
-`voteOnProposal` casts votes; `executeProposal` remains available in `services/governance.js` for scripts.
-
-The rewards page (`/templs/:address/claim`) lets connected members see the current member pool balance and trigger `claimMemberRewards()` directly.
-
-The templ overview shows the current Telegram chat id (if any) and lets the connected priest request a signed rebind code that immediately invalidates the previous binding.
+The chat composer collects a title + optional description and offers the curated governance actions (pause joins, change priest, adjust fee splits, update home link, etc.). Submitted proposals appear as poll cards with YES/NO tallies, an Execute button (enabled once the voting window ends), and contextual metadata. Claiming member rewards happens from the same screen via the **Claim rewards** modal.
 
 ## Testing
 
-- `npm --prefix frontend run test` – vitest + jsdom. Use `frontend/vitest.setup.js` to tweak global behavior.
-- `npm --prefix frontend run coverage` – coverage for React components and services.
-- `npm --prefix frontend run test:e2e` – Playwright smoke tests. The harness boots Hardhat, the backend, and a preview build. Telegram delivery is effectively disabled because the env omits `TELEGRAM_BOT_TOKEN`; you can point to a real bot by populating the env in `playwright.config.js`. Install the Chromium bundle once per machine with `npm --prefix frontend exec playwright install --with-deps chromium` (the root `npm run test:all` script handles this automatically unless `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1`).
+- `npm --prefix frontend run test` – Vitest + jsdom.
+- `npm --prefix frontend run coverage` – Coverage for components/services.
+- `npm --prefix frontend run test:e2e` – Playwright smoke test that deploys a templ, joins it, proposes/votes/executes from chat, and asserts the on-chain side effects.
 
 ## Structure overview
 
 ```
 frontend/
 ├── src/
-│   ├── App.jsx            # entry point, mini router
-│   ├── config.js          # VITE_* constants
-│   ├── hooks/
-│   ├── pages/             # route-level components
-│   ├── services/          # deployment, membership, governance helpers
-│   └── assets/, main.jsx, styles, etc.
-├── e2e/                   # Playwright specs
+│   ├── App.jsx            # minimal router (Home → Join → Chat)
+│   ├── pages/             # HomePage, JoinTemplPage, ChatPage
+│   ├── services/          # membership + governance helpers shared with chat
+│   └── ui/, hooks/, etc.
+├── e2e/                   # Playwright fixtures + chat-focused spec
 ├── vite.config.js
 └── package.json
 ```
 
-Component styling is intentionally minimal (see `App.css`) to keep focus on flows until a refreshed design lands.
+Styling stays intentionally lightweight (see `App.css`) so teams can layer on design systems later.
