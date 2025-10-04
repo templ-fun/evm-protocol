@@ -220,6 +220,13 @@ export default function App() {
     refreshTempls();
   }, [refreshTempls]);
 
+  useEffect(() => {
+    const directChat = path.match(/^\/templs\/(0x[0-9a-fA-F]{40})$/);
+    if (directChat) {
+      navigate(`/templs/${directChat[1]}/chat`);
+    }
+  }, [path, navigate]);
+
   const renderRoute = () => {
     const chatMatch = path.match(/^\/templs\/(0x[0-9a-fA-F]{40})\/chat$/);
     if (chatMatch) {
@@ -231,7 +238,6 @@ export default function App() {
           walletAddress={walletAddress}
           onConnectWallet={connectWallet}
           templAddress={address}
-          navigate={navigate}
           pushMessage={pushMessage}
           readProvider={readProvider}
         />

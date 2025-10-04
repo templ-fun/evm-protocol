@@ -82,7 +82,6 @@ export function ChatPage({
   walletAddress,
   onConnectWallet,
   templAddress,
-  navigate,
   pushMessage,
   readProvider
 }) {
@@ -1424,9 +1423,6 @@ export function ChatPage({
             <div>
               <h1 className={text.pageTitle}>Templ Chat</h1>
               <p className="text-sm text-slate-300">{shortAddress(templAddressLower)}</p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <button type="button" className={button.base} onClick={() => navigate?.(`/templs/${templAddressLower}`)}>Overview</button>
             </div>
           </div>
           {statsItems.length ? (

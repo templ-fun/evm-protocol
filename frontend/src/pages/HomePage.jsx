@@ -50,13 +50,22 @@ export function HomePage({ walletAddress, onConnectWallet, onDisconnectWallet, o
                     <td className={table.cell}>{templ.tokenSymbol || '—'}</td>
                     <td className={table.cell}>{templ.entryFeeFormatted || templ.entryFeeRaw || '—'}</td>
                     <td className={table.cell}>
-                      <button
-                        type="button"
-                        className={button.primary}
-                        onClick={() => onNavigate(`/templs/join?address=${templ.contract}`)}
-                      >
-                        Join
-                      </button>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          className={button.primary}
+                          onClick={() => onNavigate(`/templs/${templ.contract}/chat`)}
+                        >
+                          Open chat
+                        </button>
+                        <button
+                          type="button"
+                          className={button.base}
+                          onClick={() => onNavigate(`/templs/join?address=${templ.contract}`)}
+                        >
+                          Join
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
