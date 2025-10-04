@@ -1,6 +1,7 @@
 import { randomBytes } from 'crypto';
 import { ethers, getAddress } from 'ethers';
 import { generateInboxId, getInboxIdForIdentifier } from '@xmtp/node-sdk';
+import { IdentifierKind } from '@xmtp/node-bindings';
 import { syncXMTP } from '../../../shared/xmtp.js';
 import {
   resolveXmtpEnv,
@@ -49,7 +50,10 @@ function normaliseGroupId(value) {
 async function resolvePriestInboxIds({ priestAddress, xmtp, logger }) {
   const identifiers = [];
   if (!priestAddress) return identifiers;
-  const identifier = { identifier: priestAddress.toLowerCase(), identifierKind: 0 };
+  const identifier = {
+    identifier: priestAddress.toLowerCase(),
+    identifierKind: IdentifierKind.Ethereum
+  };
   const envOpt = resolveXmtpEnv();
   const skipNetwork = shouldSkipNetworkResolution();
   if (!skipNetwork) {
