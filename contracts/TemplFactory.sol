@@ -26,19 +26,33 @@ contract TemplFactory {
     uint32 internal constant DEFAULT_CURVE_EXP_RATE_BPS = 11_000;
 
     struct CreateConfig {
+        /// @notice Wallet installed as the templ priest immediately after deployment.
         address priest;
+        /// @notice ERC-20 token required for membership; must be non-zero.
         address token;
+        /// @notice Entry fee denominated in `token` (must be a multiple of ten and >= 10).
         uint256 entryFee;
+        /// @notice Burn allocation in basis points or `USE_DEFAULT_PERCENT` to apply the default split.
         int256 burnPercent;
+        /// @notice Treasury allocation in basis points or `USE_DEFAULT_PERCENT` to apply the default split.
         int256 treasuryPercent;
+        /// @notice Member pool allocation in basis points or `USE_DEFAULT_PERCENT` to apply the default split.
         int256 memberPoolPercent;
+        /// @notice Quorum requirement in basis points (0 applies the default quorum percent).
         uint256 quorumPercent;
+        /// @notice Seconds governance must wait after quorum before execution (0 applies the default delay).
         uint256 executionDelaySeconds;
+        /// @notice Address that receives burn allocations (zero defaults to `DEFAULT_BURN_ADDRESS`).
         address burnAddress;
+        /// @notice Whether the templ boots with priest-only governance enabled.
         bool priestIsDictator;
+        /// @notice Membership cap applied on deployment (0 leaves the templ uncapped).
         uint256 maxMembers;
+        /// @notice When false the factory injects its default curve configuration instead of `curve`.
         bool curveProvided;
+        /// @notice Pricing curve settings applied when `curveProvided` is true or no default is requested.
         CurveConfig curve;
+        /// @notice Canonical home link stored on-chain for downstream UIs.
         string homeLink;
     }
 

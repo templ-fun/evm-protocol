@@ -96,38 +96,71 @@ abstract contract TemplBase is ReentrancyGuard {
     }
 
     struct Proposal {
+        /// @notice Monotonically assigned proposal identifier.
         uint256 id;
+        /// @notice Account that created the proposal.
         address proposer;
+        /// @notice Action to execute when the proposal passes.
         Action action;
+        /// @notice Token parameter carried to treasury-related actions (access token, ERC-20, or ETH).
         address token;
+        /// @notice Recipient parameter forwarded to change priest or treasury withdrawals.
         address recipient;
+        /// @notice Amount parameter forwarded to treasury withdrawals and similar actions.
         uint256 amount;
+        /// @notice On-chain title surfaced to indexers and UIs.
         string title;
+        /// @notice On-chain description surfaced to indexers and UIs.
         string description;
+        /// @notice Free-form reason emitted for treasury withdrawals.
         string reason;
+        /// @notice Desired join pause state for SetJoinPaused proposals.
         bool joinPaused;
+        /// @notice Optional entry fee override for UpdateConfig proposals.
         uint256 newEntryFee;
+        /// @notice Optional burn percent override for UpdateConfig proposals.
         uint256 newBurnPercent;
+        /// @notice Optional treasury percent override for UpdateConfig proposals.
         uint256 newTreasuryPercent;
+        /// @notice Optional member pool percent override for UpdateConfig proposals.
         uint256 newMemberPoolPercent;
+        /// @notice Replacement templ home link for SetHomeLink proposals.
         string newHomeLink;
+        /// @notice Replacement membership cap for SetMaxMembers proposals (0 uncaps).
         uint256 newMaxMembers;
+        /// @notice Curve configuration payload for SetEntryFeeCurve proposals.
         CurveConfig curveConfig;
+        /// @notice Base entry fee anchor supplied alongside curve updates (0 keeps existing base).
         uint256 curveBaseEntryFee;
+        /// @notice YES vote count recorded for the proposal.
         uint256 yesVotes;
+        /// @notice NO vote count recorded for the proposal.
         uint256 noVotes;
+        /// @notice Timestamp when the voting or execution window closes.
         uint256 endTime;
+        /// @notice Timestamp when the proposal was created.
         uint256 createdAt;
+        /// @notice Tracks whether the proposal has already been executed.
         bool executed;
+        /// @notice Per-member flag indicating whether a vote has been cast.
         mapping(address => bool) hasVoted;
+        /// @notice Per-member record of the submitted vote choice.
         mapping(address => bool) voteChoice;
+        /// @notice Member count at creation, used as the pre-quorum denominator.
         uint256 eligibleVoters;
+        /// @notice Member count at quorum reach time, used for post-quorum checks.
         uint256 postQuorumEligibleVoters;
+        /// @notice Timestamp when quorum was first satisfied (0 when never reached).
         uint256 quorumReachedAt;
+        /// @notice Block number captured when quorum was reached for post-quorum eligibility checks.
         uint256 quorumSnapshotBlock;
+        /// @notice True when the proposal bypasses quorum checks (e.g. priest fast-path).
         bool quorumExempt;
+        /// @notice True when the proposal should apply the provided fee split overrides.
         bool updateFeeSplit;
+        /// @notice Block number captured at creation for pre-quorum eligibility checks.
         uint256 preQuorumSnapshotBlock;
+        /// @notice Target dictatorship state requested for SetDictatorship proposals.
         bool setDictatorship;
     }
 
@@ -231,10 +264,15 @@ abstract contract TemplBase is ReentrancyGuard {
     event TemplHomeLinkUpdated(string previousLink, string newLink);
 
     struct ExternalRewardState {
+        /// @notice Balance reserved for members but not yet claimed.
         uint256 poolBalance;
+        /// @notice Aggregate rewards-per-member used for snapshot comparisons.
         uint256 cumulativeRewards;
+        /// @notice Remainder carried forward when distributions do not divide evenly.
         uint256 rewardRemainder;
+        /// @notice Indicates whether the external reward token is registered for enumeration.
         bool exists;
+        /// @notice Historical checkpoints that anchor member snapshots to cumulative rewards.
         RewardCheckpoint[] checkpoints;
     }
 
