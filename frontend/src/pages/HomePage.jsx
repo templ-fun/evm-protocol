@@ -4,7 +4,7 @@ export function HomePage({ walletAddress, onConnectWallet, onDisconnectWallet, o
   return (
     <div className={layout.page}>
       <header className={layout.header}>
-        <h1 className="text-3xl font-semibold tracking-tight">Templs</h1>
+        <h1 className={text.pageTitle}>Templs</h1>
         <div className="flex items-center gap-3">
           {walletAddress ? (
             <>
@@ -25,7 +25,7 @@ export function HomePage({ walletAddress, onConnectWallet, onDisconnectWallet, o
 
       <section className={layout.card}>
         <div className={layout.sectionHeader}>
-          <h2 className="text-xl font-semibold text-slate-900">Available templs</h2>
+          <h2 className={text.sectionHeading}>Available templs</h2>
           <button type="button" className={button.base} onClick={refreshTempls} disabled={loadingTempls}>
             {loadingTempls ? 'Refreshing…' : 'Refresh'}
           </button>
@@ -43,9 +43,9 @@ export function HomePage({ walletAddress, onConnectWallet, onDisconnectWallet, o
                   <th className={table.headCell}>Action</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-200">
+              <tbody>
                 {templs.map((templ) => (
-                  <tr key={templ.contract} className="bg-white">
+                  <tr key={templ.contract} className={table.row}>
                     <td className={`${table.cell} ${text.mono}`}>{templ.contract}</td>
                     <td className={table.cell}>{templ.tokenSymbol || '—'}</td>
                     <td className={table.cell}>{templ.entryFeeFormatted || templ.entryFeeRaw || '—'}</td>

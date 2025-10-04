@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { sanitizeLink } from '../../../shared/linkSanitizer.js';
 import templArtifact from '../contracts/TEMPL.json';
 import { approveEntryFee, loadEntryRequirements, joinTempl, verifyMembership } from '../services/membership.js';
-import { button, form, layout, text } from '../ui/theme.js';
+import { button, colorTokens, form, layout, text } from '../ui/theme.js';
 
 export function JoinTemplPage({
   ethers,
@@ -246,7 +246,7 @@ export function JoinTemplPage({
   return (
     <div className={layout.page}>
       <header className={layout.header}>
-        <h1 className="text-3xl font-semibold tracking-tight">Join a Templ</h1>
+        <h1 className={text.pageTitle}>Join a Templ</h1>
       </header>
       <section className={`${layout.card} flex flex-col gap-4`}>
         <label className={form.label}>
@@ -264,7 +264,7 @@ export function JoinTemplPage({
             <label className={form.label}>
               Or pick a discovered templ
               <select
-                className={form.input}
+                className={form.select}
                 value={templSelectValue}
                 onChange={(event) => {
                   const value = event.target.value;
@@ -322,27 +322,27 @@ export function JoinTemplPage({
           </button>
         </div>
         {(templRecord || entryInfo) && (
-          <dl className="grid gap-2 rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-700">
+          <dl className={`grid gap-2 rounded-xl border ${colorTokens.border} ${colorTokens.surfaceBg} px-4 py-3 text-sm ${colorTokens.textSecondary}`}>
             <div className="flex items-center justify-between gap-4">
-              <dt className="font-medium text-slate-600">Access token</dt>
-              <dd className="font-mono text-xs text-slate-800">{tokenAddress || 'Unknown'}</dd>
+              <dt className={`${text.body} font-medium`}>Access token</dt>
+              <dd className={`${text.mono} text-xs`}>{tokenAddress || 'Unknown'}</dd>
             </div>
             <div className="flex items-center justify-between gap-4">
-              <dt className="font-medium text-slate-600">Entry fee</dt>
-              <dd className="font-mono text-xs text-slate-800">{entryFeeDisplay}</dd>
+              <dt className={`${text.body} font-medium`}>Entry fee</dt>
+              <dd className={`${text.mono} text-xs`}>{entryFeeDisplay}</dd>
             </div>
             {allowanceDisplay && (
               <div className="flex items-center justify-between gap-4">
-                <dt className="font-medium text-slate-600">Current allowance</dt>
-                <dd className={`font-mono text-xs ${allowanceSatisfied ? 'text-emerald-600' : 'text-amber-600'}`}>
+                <dt className={`${text.body} font-medium`}>Current allowance</dt>
+                <dd className={`${text.mono} text-xs ${allowanceSatisfied ? colorTokens.link : colorTokens.textMuted}`}>
                   {allowanceDisplay}
                 </dd>
               </div>
             )}
             {balanceDisplay && (
               <div className="flex items-center justify-between gap-4">
-                <dt className="font-medium text-slate-600">Wallet balance</dt>
-                <dd className="font-mono text-xs text-slate-800">{balanceDisplay}</dd>
+                <dt className={`${text.body} font-medium`}>Wallet balance</dt>
+                <dd className={`${text.mono} text-xs`}>{balanceDisplay}</dd>
               </div>
             )}
           </dl>
@@ -351,24 +351,24 @@ export function JoinTemplPage({
       </section>
       {verification && (
         <section className={layout.card}>
-          <h2 className="text-xl font-semibold text-slate-900">Membership Details</h2>
+          <h2 className={text.sectionHeading}>Membership Details</h2>
           <dl className="mt-4 grid gap-4">
             <div className="space-y-1">
-              <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Member address</dt>
+              <dt className={text.meta}>Member address</dt>
               <dd className={`${text.mono} text-xs`}>{verification.member?.address || 'Unknown'}</dd>
             </div>
             <div className="space-y-1">
-              <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Priest</dt>
+              <dt className={text.meta}>Priest</dt>
               <dd className={`${text.mono} text-xs`}>{verification.templ?.priest || 'Unknown'}</dd>
             </div>
             <div className="space-y-1">
-              <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">XMTP group</dt>
+              <dt className={text.meta}>XMTP group</dt>
               <dd className={`${text.mono} text-xs`}>
                 {verification.groupId ? verification.groupId : 'Pending registration'}
               </dd>
             </div>
             <div className="space-y-1">
-              <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Telegram chat id</dt>
+              <dt className={text.meta}>Telegram chat id</dt>
               <dd className={text.subtle}>
                 {verification.templ?.telegramChatId
                   ? verification.templ.telegramChatId
@@ -378,14 +378,14 @@ export function JoinTemplPage({
               </dd>
             </div>
             <div className="space-y-1">
-              <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Home link</dt>
+              <dt className={text.meta}>Home link</dt>
               <dd>
                 {(() => {
                   const { href, text: displayText } = sanitizeLink(verification.templ?.templHomeLink);
                   if (!displayText) return '—';
                   if (!href) return displayText;
                   return (
-                    <a className="text-primary underline" href={href} target="_blank" rel="noreferrer">
+                    <a className={text.link} href={href} target="_blank" rel="noreferrer">
                       {displayText}
                     </a>
                   );
@@ -394,10 +394,10 @@ export function JoinTemplPage({
             </div>
           </dl>
           {verification.links && (
-            <ul className="mt-4 list-disc space-y-2 pl-6 text-sm text-slate-700">
+            <ul className={`mt-4 list-disc space-y-2 pl-6 ${text.body}`}>
               {Object.entries(verification.links).map(([key, value]) => (
                 <li key={key}>
-                  <a className="text-primary underline" href={value} target="_blank" rel="noreferrer">{key}</a>
+                  <a className={text.link} href={value} target="_blank" rel="noreferrer">{key}</a>
                 </li>
               ))}
             </ul>

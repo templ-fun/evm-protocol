@@ -52,6 +52,8 @@ UI-driven deployment has been retired. Deploy templs via scripts or the backend 
 
 The chat composer collects a title + optional description and offers the curated governance actions (pause joins, change priest, adjust fee splits, update home link, etc.). Submitted proposals appear as poll cards with YES/NO tallies, an Execute button (enabled after the voting window ends), and contextual metadata. Claiming member rewards happens from the same screen via the **Claim rewards** modal.
 
+The conversation view mirrors modern messaging clients: member messages land in responsive bubbles (right-aligned for you, left-aligned for everyone else), the viewport auto-tracks live activity when you are at the bottom, and a floating “new messages” pill appears whenever you scroll up so you can jump back to the latest discussion on desktop or mobile.
+
 ## Testing
 
 - `npm --prefix frontend run test` – Vitest + jsdom.
@@ -74,4 +76,4 @@ frontend/
 └── package.json
 ```
 
-Styling stays intentionally lightweight (see `App.css`) so teams can layer on design systems later.
+Styling stays intentionally lightweight (centralized in `src/ui/theme.js`) so teams can layer on design systems later.

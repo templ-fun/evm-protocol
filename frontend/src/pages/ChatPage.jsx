@@ -7,7 +7,9 @@ import { sanitizeLink } from '../../../shared/linkSanitizer.js';
 import { verifyMembership, fetchMemberPoolStats, claimMemberPool } from '../services/membership.js';
 import { proposeVote, voteOnProposal, executeProposal, watchProposals } from '../services/governance.js';
 import { fetchTemplStats } from '../services/templs.js';
-import { button, form, layout, surface, text } from '../ui/theme.js';
+import { button, colorTokens, form, layout, palette, surface, text } from '../ui/theme.js';
+
+const sortBySentAt = (a, b) => a.sentAt.getTime() - b.sentAt.getTime();
 
 const XMTP_ENV = import.meta.env?.VITE_XMTP_ENV || globalThis?.process?.env?.XMTP_ENV || 'production';
 
@@ -69,9 +71,9 @@ function renderStat(label, primary, secondary) {
   if (!primary) return null;
   return (
     <div className="flex flex-col">
-      <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</span>
-      <span className={`${text.mono} text-sm text-slate-100`}>{primary}</span>
-      {secondary ? <span className="text-xs text-slate-400">{secondary}</span> : null}
+      <span className={text.meta}>{label}</span>
+      <span className={`${text.mono} text-sm`}>{primary}</span>
+      {secondary ? <span className={text.hint}>{secondary}</span> : null}
     </div>
   );
 }
@@ -109,15 +111,30 @@ export function ChatPage({
   const [claimError, setClaimError] = useState('');
   const [chainTimeMs, setChainTimeMs] = useState(() => Date.now());
   const [debugSteps, setDebugSteps] = useState([]);
+  const [isAtBottom, setIsAtBottom] = useState(true);
+  const [pendingNewMessages, setPendingNewMessages] = useState(0);
 
   const messageIdsRef = useRef(new Set());
+  const proposalMessageRef = useRef(new Map());
   const streamAbortRef = useRef(null);
+  const messagesContainerRef = useRef(null);
   const messagesEndRef = useRef(null);
   const creatingXmtpPromiseRef = useRef(null);
   const identityReadyRef = useRef(false);
   const identityReadyPromiseRef = useRef(null);
 
   const templStatsKey = `${templAddressLower}-${walletAddressLower}`;
+
+  const scrollToLatest = useCallback((behavior = 'auto') => {
+    const anchor = messagesEndRef.current;
+    if (!anchor) return;
+    const execute = () => anchor.scrollIntoView({ behavior, block: 'end' });
+    if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+      window.requestAnimationFrame(execute);
+    } else {
+      execute();
+    }
+  }, []);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -136,7 +153,43 @@ export function ChatPage({
     setMessages((prev) => {
       if (messageIdsRef.current.has(entry.id)) return prev;
       messageIdsRef.current.add(entry.id);
-      return [...prev, entry].sort((a, b) => a.sentAt.getTime() - b.sentAt.getTime());
+
+      if (entry.kind === 'proposal' || entry.kind === 'proposal-meta') {
+        const proposalIdRaw = entry.payload?.id ?? entry.payload?.proposalId ?? entry.proposalId;
+        const proposalId = Number(proposalIdRaw ?? 0);
+        if (Number.isFinite(proposalId) && proposalId >= 0) {
+          const normalizedEntry = {
+            ...entry,
+            kind: 'proposal',
+            proposalId,
+            meta: entry.kind === 'proposal-meta'
+          };
+          const existing = proposalMessageRef.current.get(proposalId);
+          if (existing) {
+            if (existing.synthetic || existing.meta) {
+              const next = prev.map((message) => (message.id === existing.id ? normalizedEntry : message));
+              proposalMessageRef.current.set(proposalId, {
+                id: normalizedEntry.id,
+                synthetic: Boolean(normalizedEntry.synthetic),
+                meta: normalizedEntry.meta
+              });
+              return next.sort(sortBySentAt);
+            }
+            if (normalizedEntry.synthetic) {
+              return prev;
+            }
+            return prev;
+          }
+          proposalMessageRef.current.set(proposalId, {
+            id: normalizedEntry.id,
+            synthetic: Boolean(normalizedEntry.synthetic),
+            meta: normalizedEntry.meta
+          });
+          return [...prev, normalizedEntry].sort(sortBySentAt);
+        }
+      }
+
+      return [...prev, entry].sort(sortBySentAt);
     });
   }, []);
 
@@ -185,18 +238,19 @@ export function ChatPage({
       const syntheticId = `proposal-${proposalId}`;
       setMessages((prev) => {
         if (messageIdsRef.current.has(syntheticId)) return prev;
-        const next = [...prev, {
+        const syntheticEntry = {
           id: syntheticId,
           proposalId,
           senderAddress: templAddressLower,
           sentAt: new Date(),
           kind: 'proposal',
           payload: { id: proposalId },
-          synthetic: true
-        }];
+          synthetic: true,
+          meta: false
+        };
         messageIdsRef.current.add(syntheticId);
-        next.sort((a, b) => a.sentAt.getTime() - b.sentAt.getTime());
-        return next;
+        proposalMessageRef.current.set(proposalId, { id: syntheticId, synthetic: true, meta: false });
+        return [...prev, syntheticEntry].sort(sortBySentAt);
       });
 
       if (walletAddressLower) {
@@ -405,7 +459,10 @@ export function ChatPage({
       setConversation(null);
       setGroupId('');
       setMessages([]);
+      setPendingNewMessages(0);
+      setIsAtBottom(true);
       messageIdsRef.current.clear();
+      proposalMessageRef.current.clear();
       identityReadyRef.current = false;
       creatingXmtpPromiseRef.current = null;
       identityReadyPromiseRef.current = null;
@@ -418,7 +475,10 @@ export function ChatPage({
     setConversation(null);
     setGroupId('');
     setMessages([]);
+    setPendingNewMessages(0);
+    setIsAtBottom(true);
     messageIdsRef.current.clear();
+    proposalMessageRef.current.clear();
     identityReadyRef.current = false;
 
     try { xmtpClient?.close?.(); } catch {}
@@ -683,6 +743,8 @@ export function ChatPage({
     let cancelled = false;
     messageIdsRef.current.clear();
     setMessages([]);
+    setPendingNewMessages(0);
+    setIsAtBottom(true);
 
     async function loadHistory() {
       try {
@@ -779,10 +841,43 @@ export function ChatPage({
   }, [ethers, readProvider, templAddressLower, walletAddressLower, refreshProposalDetails]);
 
   useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    const container = messagesContainerRef.current;
+    if (!container) return undefined;
+    const handleScroll = () => {
+      const remaining = container.scrollHeight - container.scrollTop - container.clientHeight;
+      const nearBottom = remaining <= 80;
+      setIsAtBottom(nearBottom);
+      if (nearBottom) {
+        setPendingNewMessages(0);
+      }
+    };
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    handleScroll();
+    return () => {
+      container.removeEventListener('scroll', handleScroll);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!messages.length) return;
+    const latest = messages[messages.length - 1];
+    if (!latest) return;
+    const fromSelf = latest.senderAddress?.toLowerCase() === walletAddressLower;
+    if (isAtBottom || fromSelf) {
+      scrollToLatest(latest.synthetic ? 'auto' : 'smooth');
+      setPendingNewMessages(0);
+      return;
     }
-  }, [messages.length]);
+    if (!latest.synthetic) {
+      setPendingNewMessages((count) => Math.min(count + 1, 99));
+    }
+  }, [messages, walletAddressLower, isAtBottom, scrollToLatest]);
+
+  useEffect(() => {
+    if (conversation) {
+      scrollToLatest('auto');
+    }
+  }, [conversation, scrollToLatest]);
 
   const handleSendMessage = async (event) => {
     event.preventDefault();
@@ -982,33 +1077,36 @@ export function ChatPage({
       const expired = endTime ? endTime.getTime() <= nowMs : false;
       const executed = record?.executed;
       const voted = votedChoices.get(proposalId);
+      const voteOptionBase = `rounded-xl border ${colorTokens.border} ${colorTokens.surfaceBg} px-3 py-2`;
+      const voteOptionYesActive = `border-[${palette.accent}] ${colorTokens.accentSoftBg}`;
+      const voteOptionNoActive = `${colorTokens.surfaceTintBg} border-[${palette.borderStrong}]`;
       return (
         <div key={message.id} className="mb-4" data-testid={`proposal-card-${proposalId}`}>
-          <div className="flex items-center justify-between text-xs text-slate-500">
-            <span className="font-semibold text-slate-300">{shortAddress(message.senderAddress)}</span>
+          <div className={`flex items-center justify-between text-xs ${colorTokens.textMuted}`}>
+            <span className={`font-semibold ${colorTokens.textSecondary}`}>{shortAddress(message.senderAddress)}</span>
             <span>{formatTimestamp(message.sentAt)}</span>
           </div>
-          <div className="mt-2 rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
+          <div className={`${surface.card} mt-2 p-4`}>
             <div className="flex items-center justify-between gap-3">
-              <h3 className="text-base font-semibold text-slate-100">#{proposalId} {record?.title || 'Proposal'}</h3>
+              <h3 className={`text-base font-semibold ${colorTokens.textPrimary}`}>#{proposalId} {record?.title || 'Proposal'}</h3>
               {endTime ? (
-                <span className="text-xs text-slate-400">{expired ? 'Voting closed' : `Ends ${endTime.toLocaleString()}`}</span>
+                <span className={text.hint}>{expired ? 'Voting closed' : `Ends ${endTime.toLocaleString()}`}</span>
               ) : null}
             </div>
             {record?.description ? (
-              <p className="mt-2 whitespace-pre-wrap text-sm text-slate-200">{record.description}</p>
+              <p className={`mt-2 whitespace-pre-wrap text-sm ${colorTokens.textSecondary}`}>{record.description}</p>
             ) : null}
-            <div className="mt-3 grid gap-2 text-xs text-slate-300 sm:grid-cols-2">
-              <div className={`rounded-xl border px-3 py-2 ${voted === true ? 'border-emerald-500 bg-emerald-500/10' : 'border-slate-800 bg-slate-900/60'}`}>
+            <div className={`mt-3 grid gap-2 text-xs ${colorTokens.textSecondary} sm:grid-cols-2`}>
+              <div className={`${voteOptionBase} ${voted === true ? voteOptionYesActive : ''}`}>
                 <div className="flex items-center justify-between">
-                  <span className="font-semibold text-emerald-200">YES</span>
-                  <span className={`${text.mono} text-sm text-emerald-100`}>{yesVotes}</span>
+                  <span className={`font-semibold ${colorTokens.link}`}>YES</span>
+                  <span className={`${text.mono} text-sm`}>{yesVotes}</span>
                 </div>
               </div>
-              <div className={`rounded-xl border px-3 py-2 ${voted === false ? 'border-rose-500 bg-rose-500/10' : 'border-slate-800 bg-slate-900/60'}`}>
+              <div className={`${voteOptionBase} ${voted === false ? voteOptionNoActive : ''}`}>
                 <div className="flex items-center justify-between">
-                  <span className="font-semibold text-rose-200">NO</span>
-                  <span className={`${text.mono} text-sm text-rose-100`}>{noVotes}</span>
+                  <span className={`font-semibold ${colorTokens.textMuted}`}>NO</span>
+                  <span className={`${text.mono} text-sm`}>{noVotes}</span>
                 </div>
               </div>
             </div>
@@ -1023,7 +1121,7 @@ export function ChatPage({
               </button>
               <button
                 type="button"
-                className={button.secondary}
+                className={button.muted}
                 onClick={() => handleVote(proposalId, false)}
                 disabled={executed || expired || voted === false}
               >
@@ -1038,7 +1136,7 @@ export function ChatPage({
                 Execute
               </button>
             </div>
-            <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-slate-400">
+            <div className={`mt-3 flex flex-wrap items-center gap-3 text-xs ${colorTokens.textMuted}`}>
               <span>Proposer: {record?.proposer ? shortAddress(record.proposer) : 'unknown'}</span>
               <span>Status: {executed ? (record?.passed ? 'Executed ✅' : 'Executed ❌') : expired ? 'Awaiting execution' : 'Voting open'}</span>
             </div>
@@ -1049,17 +1147,16 @@ export function ChatPage({
 
     if (message.kind === 'vote') {
       return (
-        <div key={message.id} className="mb-3 text-xs text-amber-300">
-          <span className="font-semibold text-slate-200">{shortAddress(message.senderAddress)}</span>
-          {' voted '}
-          {message.payload?.support ? 'YES' : 'NO'} on proposal #{message.payload?.id}
+        <div key={message.id} className={`${surface.systemMessage} ${colorTokens.textSecondary} flex items-center gap-2`}>
+          <span className={`font-semibold ${colorTokens.textPrimary}`}>{shortAddress(message.senderAddress)}</span>
+          <span>voted {message.payload?.support ? 'YES' : 'NO'} on proposal #{message.payload?.id}</span>
         </div>
       );
     }
 
     if (message.kind === 'priest-changed') {
       return (
-        <div key={message.id} className="mb-3 text-sm text-purple-300">
+        <div key={message.id} className={`${surface.systemMessage} ${colorTokens.textSecondary}`}>
           Priest changed to {shortAddress(message.payload?.newPriest)}
         </div>
       );
@@ -1067,7 +1164,7 @@ export function ChatPage({
 
     if (message.kind === 'proposal-executed') {
       return (
-        <div key={message.id} className="mb-3 text-sm text-emerald-300">
+        <div key={message.id} className={`${surface.systemMessage} ${colorTokens.textSecondary}`}>
           Proposal #{message.payload?.id} executed ({message.payload?.success ? 'success' : 'failed'})
         </div>
       );
@@ -1075,29 +1172,46 @@ export function ChatPage({
 
     if (message.kind === 'member-joined') {
       return (
-        <div key={message.id} className="mb-3 text-sm text-slate-300">
+        <div key={message.id} className={`${surface.systemMessage} ${colorTokens.textSecondary}`}>
           {shortAddress(message.payload?.member)} joined the templ
         </div>
       );
     }
 
-    return (
-      <div key={message.id} className="mb-3">
-        <div className="text-xs text-slate-500">
-          <span className="font-semibold text-slate-300">{shortAddress(message.senderAddress)}</span>
-          {' · '}
-          {formatTimestamp(message.sentAt)}
+    const messageText = typeof message.payload === 'string'
+      ? message.payload
+      : message.payload?.toString?.() || '';
+    const isSelf = message.senderAddress?.toLowerCase() === walletAddressLower;
+    if (!messageText) {
+      return (
+        <div key={message.id} className={`${surface.systemMessage} ${colorTokens.textSecondary}`}>
+          (unsupported message)
         </div>
-        <div className="whitespace-pre-wrap text-sm text-slate-100">{typeof message.payload === 'string' ? message.payload : message.payload?.toString?.() || ''}</div>
+      );
+    }
+
+    return (
+      <div key={message.id} className={`flex w-full ${isSelf ? 'justify-end' : 'justify-start'}`}>
+        <div className="flex max-w-full flex-col gap-1">
+          <div className={`${text.hint} px-1 ${isSelf ? 'text-right' : ''}`}>
+            {isSelf ? 'You' : shortAddress(message.senderAddress)}
+          </div>
+          <div className={`${isSelf ? surface.bubbleOwn : surface.bubbleOther}`}>
+            <p className="whitespace-pre-wrap leading-relaxed">{messageText}</p>
+          </div>
+          <div className={`flex items-center gap-2 px-1 ${isSelf ? 'justify-end' : 'justify-start'} ${text.hint}`}>
+            <span>{formatTimestamp(message.sentAt)}</span>
+          </div>
+        </div>
       </div>
     );
   };
 
   const renderProposalComposer = () => (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/80 p-4">
-      <div className="w-full max-w-2xl rounded-3xl border border-slate-800 bg-slate-950 p-6 shadow-2xl">
+    <div className={`fixed inset-0 z-40 flex items-center justify-center ${surface.overlay} p-4`}>
+      <div className={`${surface.panel} w-full max-w-2xl p-6 shadow-2xl`}>
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-xl font-semibold text-slate-100">New Proposal</h2>
+          <h2 className={text.dialogTitle}>New Proposal</h2>
           <button type="button" className={button.link} onClick={() => setProposalComposerOpen(false)}>Close</button>
         </div>
         <form className="space-y-4" onSubmit={handlePropose}>
@@ -1349,28 +1463,28 @@ export function ChatPage({
   );
 
   const renderClaimModal = () => (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/80 p-4">
-      <div className="w-full max-w-md rounded-3xl border border-slate-800 bg-slate-950 p-6 shadow-2xl">
+    <div className={`fixed inset-0 z-40 flex items-center justify-center ${surface.overlay} p-4`}>
+      <div className={`${surface.panel} w-full max-w-md p-6 shadow-2xl`}>
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-xl font-semibold text-slate-100">Claim rewards</h2>
+          <h2 className={text.dialogTitle}>Claim rewards</h2>
           <button type="button" className={button.link} onClick={() => setClaimModalOpen(false)}>Close</button>
         </div>
         {claimLoading ? (
           <p className={text.subtle}>Loading claimable rewards…</p>
         ) : claimError ? (
-          <p className="text-sm text-rose-400">{claimError}</p>
+          <p className={`text-sm ${colorTokens.link}`}>{claimError}</p>
         ) : claimInfo ? (
-          <div className="space-y-2 text-sm text-slate-200">
+          <div className={`space-y-2 text-sm ${colorTokens.textSecondary}`}>
             <div>
-              <span className="text-slate-400">Member pool balance:</span>
+              <span className={text.hint}>Member pool balance:</span>
               <div className={`${text.mono} text-sm`}>{claimInfo.poolBalance?.toString?.() || claimInfo.poolBalanceFormatted || claimInfo.poolBalanceRaw || '0'}</div>
             </div>
             <div>
-              <span className="text-slate-400">Claimable:</span>
+              <span className={text.hint}>Claimable:</span>
               <div className={`${text.mono} text-sm`}>{claimInfo.claimable?.toString?.() || claimInfo.claimableFormatted || claimInfo.claimableWei || '0'}</div>
             </div>
             <div>
-              <span className="text-slate-400">Already claimed:</span>
+              <span className={text.hint}>Already claimed:</span>
               <div className={`${text.mono} text-sm`}>{claimInfo.memberClaimed?.toString?.() || claimInfo.memberClaimedFormatted || '0'}</div>
             </div>
           </div>
@@ -1398,7 +1512,7 @@ export function ChatPage({
       <div className={layout.page}>
         <div className={surface.panel}>
           <h2 className={text.sectionHeading}>Connect Wallet</h2>
-          <p className="mt-2 text-sm text-slate-300">Connect your member wallet to enter the templ chat.</p>
+          <p className={`mt-2 ${text.body}`}>Connect your member wallet to enter the templ chat.</p>
           <button type="button" className={`${button.primary} mt-4`} onClick={onConnectWallet}>
             Connect Wallet
           </button>
@@ -1418,11 +1532,11 @@ export function ChatPage({
   return (
     <div className={layout.page}>
       <div className="flex flex-col gap-6">
-        <div className="rounded-3xl border border-slate-800 bg-slate-950/80 p-6">
+        <div className={`${surface.panel} p-6`}>
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <h1 className={text.pageTitle}>Templ Chat</h1>
-              <p className="text-sm text-slate-300">{shortAddress(templAddressLower)}</p>
+              <p className={text.body}>{shortAddress(templAddressLower)}</p>
             </div>
           </div>
           {statsItems.length ? (
@@ -1435,10 +1549,10 @@ export function ChatPage({
             const { href, text: safeText } = sanitizeLink(stats.templHomeLink);
             if (!safeText) return null;
             return (
-              <div className="mt-3 text-xs text-slate-400">
+              <div className={`mt-3 ${text.hint}`}>
                 Home:{' '}
                 {href ? (
-                  <a className="text-primary underline" href={href} target="_blank" rel="noreferrer">{safeText}</a>
+                  <a className={text.link} href={href} target="_blank" rel="noreferrer">{safeText}</a>
                 ) : (
                   <span>{safeText}</span>
                 )}
@@ -1448,14 +1562,14 @@ export function ChatPage({
         </div>
 
         {error && (
-          <div className="rounded-3xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
-            {error}
+          <div className={`${surface.card} px-4 py-3 text-sm ${colorTokens.textPrimary}`}>
+            ⚠️ {error}
           </div>
         )}
 
-        <section className="rounded-3xl border border-slate-800 bg-slate-950/80">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 px-6 py-4">
-            <h2 className="text-lg font-semibold text-slate-100">Conversation</h2>
+        <section className={`${surface.panel} ${layout.conversation}`}>
+          <div className={`flex flex-wrap items-center justify-between gap-3 border-b ${colorTokens.border} px-4 py-4 sm:px-6`}>
+            <h2 className={text.sectionHeading}>Conversation</h2>
             <div className="flex flex-wrap items-center gap-2">
               <button type="button" className={button.base} onClick={() => setProposalComposerOpen(true)}>
                 New proposal
@@ -1465,25 +1579,43 @@ export function ChatPage({
               </button>
             </div>
           </div>
-          <div className="max-h-[520px] overflow-y-auto px-6 py-4">
-            {loading && !conversation ? (
-              <p className={text.subtle}>Connecting to chat…</p>
-            ) : messages.length === 0 ? (
-              <p className={text.subtle}>No messages yet. Say hello!</p>
-            ) : (
-              messages.map((message) => renderMessage(message))
-            )}
-            <div ref={messagesEndRef} />
+          <div className="relative flex-1">
+            <div
+              ref={messagesContainerRef}
+              className="flex h-full flex-col gap-3 overflow-y-auto px-4 py-4 sm:px-6"
+            >
+              {loading && !conversation ? (
+                <p className={text.subtle}>Connecting to chat…</p>
+              ) : messages.length === 0 ? (
+                <p className={text.subtle}>No messages yet. Say hello!</p>
+              ) : (
+                messages.map((message) => renderMessage(message))
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+            {pendingNewMessages > 0 ? (
+              <button
+                type="button"
+                className={`${button.pill} absolute bottom-24 right-4 shadow-lg sm:bottom-20`}
+                onClick={() => {
+                  scrollToLatest('smooth');
+                  setPendingNewMessages(0);
+                  setIsAtBottom(true);
+                }}
+              >
+                {pendingNewMessages} new message{pendingNewMessages > 1 ? 's' : ''}
+              </button>
+            ) : null}
           </div>
-          <form onSubmit={handleSendMessage} className="flex items-center gap-3 border-t border-slate-800 px-6 py-4">
+          <form onSubmit={handleSendMessage} className={`flex items-end gap-3 border-t ${colorTokens.border} px-4 py-4 sm:px-6`}>
             <input
-              className="flex-1 rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-slate-500"
+              className={`${surface.input} flex-1 rounded-full border ${colorTokens.border} bg-transparent px-5 py-3 text-sm ${colorTokens.textPrimary} placeholder:text-[#7087bb] focus:outline-none focus:ring-2 ${colorTokens.inputRing}`}
               value={messageInput}
               onChange={(e) => setMessageInput(e.target.value)}
               placeholder={conversation ? 'Message templ members…' : 'Waiting for chat…'}
               disabled={!conversation}
             />
-            <button type="submit" className={button.primary} disabled={!conversation || !messageInput.trim()}>
+            <button type="submit" className={`${button.primary} shrink-0 px-5 py-3`} disabled={!conversation || !messageInput.trim()}>
               Send
             </button>
           </form>
