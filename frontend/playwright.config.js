@@ -9,7 +9,7 @@ const XMTP_ENV = (() => {
   if (USE_LOCAL_XMTP) return 'local';
   const forced = process.env.E2E_XMTP_ENV;
   if (forced && ['local', 'dev', 'production'].includes(forced)) return forced;
-  return 'dev';
+  return 'production';
 })();
 
 const sqlitePath = path.join(process.cwd(), 'pw-xmtp.db');

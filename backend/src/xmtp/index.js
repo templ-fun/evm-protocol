@@ -3,19 +3,18 @@ import { ethers } from 'ethers';
 import { Client } from '@xmtp/node-sdk';
 import { waitFor } from '../../../shared/xmtp-wait.js';
 import { logger } from '../logger.js';
+import { resolveXmtpEnv, XMTP_ENV_VALUES } from './options.js';
 
-export const XMTP_ENV = process.env.XMTP_ENV || 'dev';
+export const XMTP_ENV = resolveXmtpEnv();
 
 // Linearize: wait until the target inbox is visible on the XMTP network
 export async function waitForInboxReady(inboxId, tries = 60) {
   const id = String(inboxId || '').replace(/^0x/i, '');
   if (!id) return false;
-  if (!['local', 'dev', 'production'].includes(XMTP_ENV)) return true;
+  if (!XMTP_ENV_VALUES.includes(XMTP_ENV)) return true;
   if (process.env.NODE_ENV === 'test' || process.env.DISABLE_XMTP_WAIT === '1') return true;
   if (typeof Client.inboxStateFromInboxIds !== 'function') return true;
-  const envOpt = /** @type {any} */ (
-    ['local', 'dev', 'production'].includes(XMTP_ENV) ? XMTP_ENV : 'dev'
-  );
+  const envOpt = /** @type {any} */ (XMTP_ENV_VALUES.includes(XMTP_ENV) ? XMTP_ENV : 'production');
   const result = await waitFor({
     tries,
     delayMs: 1000,
@@ -44,7 +43,7 @@ export async function createXmtpWithRotation(wallet, maxAttempts = 20) {
       const hex = explicit.startsWith('0x') ? explicit : `0x${explicit}`;
       dbEncryptionKey = ethers.getBytes(hex);
     } else if (wallet?.privateKey) {
-      const env = String(process.env.XMTP_ENV || 'dev');
+      const env = resolveXmtpEnv();
       const material = ethers.concat([ethers.getBytes(wallet.privateKey), ethers.toUtf8Bytes(`:${env}:templ-db-key`) ]);
       const keyHex = ethers.keccak256(material);
       dbEncryptionKey = ethers.getBytes(keyHex);
@@ -88,7 +87,7 @@ export async function createXmtpWithRotation(wallet, maxAttempts = 20) {
     };
     try {
       // @ts-ignore - Node SDK accepts EOA-like signers; our JS object matches at runtime
-      const env = process.env.XMTP_ENV || 'dev';
+      const env = resolveXmtpEnv();
       // @ts-ignore - TS cannot discriminate the 'EOA' literal on JS object; safe at runtime
       return await Client.create(xmtpSigner, {
         dbEncryptionKey,
@@ -110,7 +109,7 @@ export async function createXmtpWithRotation(wallet, maxAttempts = 20) {
 
 // Wait for the XMTP client to be able to talk to the network deterministically.
 export async function waitForXmtpClientReady(xmtp, tries = 30, delayMs = 500) {
-  const env = process.env.XMTP_ENV || 'dev';
+  const env = resolveXmtpEnv();
   return Boolean(await waitFor({
     tries,
     delayMs,
