@@ -29,6 +29,15 @@ const ACTION_CONFIG = {
       server
     })
   },
+  rebind: {
+    primaryType: 'Rebind',
+    types: { Rebind: BASE_FIELDS },
+    buildMessage: ({ contractAddress, server }) => ({
+      action: 'rebind',
+      contract: contractAddress,
+      server
+    })
+  },
   join: {
     primaryType: 'Join',
     types: { Join: BASE_FIELDS },
@@ -116,6 +125,14 @@ function buildTemplTypedData(kind, options) {
 export function buildCreateTypedData(options) {
   const { contractAddress } = options;
   return buildTemplTypedData('create', { ...options, contractAddress });
+}
+
+/**
+ * Build EIP-712 typed data for rebinding a Templ group.
+ */
+export function buildRebindTypedData(options) {
+  const { contractAddress } = options;
+  return buildTemplTypedData('rebind', { ...options, contractAddress });
 }
 
 /**
