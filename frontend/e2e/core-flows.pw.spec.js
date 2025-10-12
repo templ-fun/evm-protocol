@@ -224,6 +224,11 @@ test.describe('TEMPL E2E - All 7 Core Flows', () => {
       await page.fill('input[placeholder*="Factory address"]', factoryAddress);
     }
     await page.fill('input[placeholder*="Entry fee"]', '100');
+    // Use factory default values (30/30/30) which expect 10% protocol fee for 100% total
+    await page.fill('input[placeholder="Burn"]', '30');
+    await page.fill('input[placeholder="Treasury"]', '30');
+    await page.fill('input[placeholder="Member pool"]', '30');
+
     const entryFeeValue = await page.inputValue('input[placeholder*="Entry fee"]');
     const burnValue = await page.locator('input[placeholder="Burn"]').inputValue();
     const treasuryValue = await page.locator('input[placeholder="Treasury"]').inputValue();
@@ -233,6 +238,7 @@ test.describe('TEMPL E2E - All 7 Core Flows', () => {
     const treasuryPercentNum = Number(treasuryValue || '0');
     const memberPercentNum = Number(memberValue || '0');
 
+    // Factory defaults are 30/30/30 with 10% protocol fee = 100% total
     const defaultsRequested = burnPercentNum === 30 && treasuryPercentNum === 30 && memberPercentNum === 30;
     let predictedTempl;
     if (defaultsRequested) {
