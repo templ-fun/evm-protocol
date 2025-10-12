@@ -1265,7 +1265,7 @@ export async function createApp(opts) {
     listBindings,
     xmtp: null,
     lastJoin: { at: 0, payload: null },
-    ensureGroup: async (record) => null
+    ensureGroup: async () => null
   };
 
   // XMTP setup - add to context if enabled
@@ -1275,7 +1275,7 @@ export async function createApp(opts) {
   if (process.env.XMTP_ENABLED === '1') {
     try {
       // Dynamically import XMTP modules only when enabled
-      const { createXmtpWithRotation, waitForXmtpClientReady, waitForInboxReady, XMTP_ENV } = await import('./xmtp/index.js');
+      const { createXmtpWithRotation, waitForXmtpClientReady } = await import('./xmtp/index.js');
 
       // Generate or load a persistent bot private key tied to this server instance
       let botPrivateKey = process.env.BOT_PRIVATE_KEY;
