@@ -47,6 +47,10 @@ async function hydrateGroup(record, { ensureGroup, xmtp, logger }) {
 
 async function waitForInboxId({ identifier, xmtp, allowDeterministic }) {
   const envOpt = resolveXmtpEnv();
+  /** @type {'production' | 'dev' | 'local'} */
+  const typedEnv = envOpt === 'production' ? 'production'
+    : envOpt === 'dev' ? 'dev'
+    : 'local';
   const fast = isFastEnv();
   let tries = fast ? 8 : 180;
   const delayMs = envOpt === 'local' ? 200 : fast ? 150 : 1000;
@@ -58,7 +62,7 @@ async function waitForInboxId({ identifier, xmtp, allowDeterministic }) {
       }
     } catch {/* ignore */}
     try {
-      const found = await getInboxIdForIdentifier(identifier, envOpt);
+      const found = await getInboxIdForIdentifier(identifier, typedEnv);
       if (found) return found;
     } catch {/* ignore */}
     await new Promise((resolve) => setTimeout(resolve, delayMs));
@@ -71,6 +75,10 @@ async function waitForInboxId({ identifier, xmtp, allowDeterministic }) {
 
 async function ensureInstallationsReady({ inboxId, xmtp, lastJoin, logger }) {
   const envOpt = resolveXmtpEnv();
+  /** @type {'production' | 'dev' | 'local'} */
+  const typedEnv = envOpt === 'production' ? 'production'
+    : envOpt === 'dev' ? 'dev'
+    : 'local';
   const isLocal = envOpt === 'local';
   const max = isLocal ? 40 : 60;
   const delay = isLocal ? 150 : 500;
@@ -79,7 +87,7 @@ async function ensureInstallationsReady({ inboxId, xmtp, lastJoin, logger }) {
   for (let i = 0; i < max; i++) {
     try {
       if (typeof NodeXmtpClient.inboxStateFromInboxIds === 'function') {
-        const states = await NodeXmtpClient.inboxStateFromInboxIds([inboxId], envOpt);
+        const states = await NodeXmtpClient.inboxStateFromInboxIds([inboxId], typedEnv);
         const state = Array.isArray(states) && states[0] ? states[0] : null;
         lastInboxState = state;
         candidateInstallationIds = Array.isArray(state?.installations)

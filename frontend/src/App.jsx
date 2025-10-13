@@ -1,5 +1,5 @@
 // @ts-check
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { ethers } from 'ethers';
 import { Client } from '@xmtp/browser-sdk';
 import templArtifact from './contracts/TEMPL.json';
@@ -129,6 +129,44 @@ function App() {
   const [maxMembers, setMaxMembers] = useState('');
   const [createTokenDecimals, setCreateTokenDecimals] = useState(null);
   const [createTokenSymbol, setCreateTokenSymbol] = useState(null);
+  const [joinedTempls, setJoinedTempls] = useState(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const raw = JSON.parse(window.localStorage.getItem('templ:joined') || '[]');
+      if (Array.isArray(raw)) {
+        return raw
+          .map((a) => {
+            try { return ethers.getAddress(String(a)).toLowerCase(); }
+            catch { return String(a || '').toLowerCase(); }
+          })
+          .filter((a) => a && ethers.isAddress(a));
+      }
+    } catch {}
+    return [];
+  });
+  const rememberJoinedTempl = useCallback((address) => {
+    if (!address) return;
+    let normalized = '';
+    try {
+      normalized = ethers.getAddress(address);
+    } catch {
+      try {
+        normalized = ethers.getAddress(String(address || '').trim());
+      } catch {
+        normalized = String(address || '').trim();
+      }
+    }
+    if (!normalized) return;
+    const key = normalized.toLowerCase();
+    setJoinedTempls((prev) => {
+      if (prev.includes(key)) return prev;
+      const next = [...prev, key];
+      if (typeof window !== 'undefined') {
+        try { window.localStorage?.setItem('templ:joined', JSON.stringify(next)); } catch {}
+      }
+      return next;
+    });
+  }, []);
 
   // curve configuration
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -141,6 +179,13 @@ function App() {
       setShowAdvanced(true);
     }
   }, [FACTORY_CONFIG.address]);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const last = window.localStorage.getItem('templ:lastAddress');
+      if (last && ethers.isAddress(last)) rememberJoinedTempl(last);
+    } catch {}
+  }, [rememberJoinedTempl]);
   useEffect(() => {
     const trimmed = typeof tokenAddress === 'string' ? tokenAddress.trim() : '';
     if (!ethers.isAddress(trimmed)) {
@@ -236,6 +281,7 @@ function App() {
       return false;
     }
   })();
+  const joinedTemplSet = useMemo(() => new Set(joinedTempls), [joinedTempls]);
   const burnPercentNum = Number.isFinite(Number(burnPercent)) ? Number(burnPercent) : 0;
   const treasuryPercentNum = Number.isFinite(Number(treasuryPercent)) ? Number(treasuryPercent) : 0;
   const memberPoolPercentNum = Number.isFinite(Number(memberPoolPercent)) ? Number(memberPoolPercent) : 0;
@@ -272,6 +318,24 @@ function App() {
   const parsedTreasuryInput = Number.isFinite(Number(proposeTreasuryPercent)) ? Number(proposeTreasuryPercent) : 0;
   const parsedMemberInput = Number.isFinite(Number(proposeMemberPercent)) ? Number(proposeMemberPercent) : 0;
   const proposeSplitTotal = parsedBurnInput + parsedTreasuryInput + parsedMemberInput + (Number.isFinite(activeProtocolPercent) ? activeProtocolPercent : 0);
+  const templCards = useMemo(() => {
+    const current = String(templAddress || '').toLowerCase();
+    const items = templList.map((item) => {
+      const contract = String(item.contract || '').toLowerCase();
+      const joined = joinedTemplSet.has(contract) || (current && contract === current);
+      return {
+        ...item,
+        contract,
+        joined
+      };
+    });
+    items.sort((a, b) => {
+      if (a.joined && !b.joined) return -1;
+      if (!a.joined && b.joined) return 1;
+      return a.contract.localeCompare(b.contract);
+    });
+    return items;
+  }, [templList, joinedTemplSet, templAddress]);
   const maxMembersValue = currentMaxMembers === null ? null : String(currentMaxMembers);
   const memberCountValue = currentMemberCount === null ? null : String(currentMemberCount);
   const maxMembersLabel = maxMembersValue === null ? '…' : (maxMembersValue === '0' ? 'Unlimited' : maxMembersValue);
@@ -808,6 +872,13 @@ function App() {
         has0x: String(result.groupId).startsWith('0x'),
         len: String(result.groupId).length
       });
+      rememberJoinedTempl(result.contractAddress);
+      setTemplList((prev) => {
+        const key = String(result.contractAddress || '').toLowerCase();
+        if (!key) return prev;
+        if (prev.some((t) => String(t.contract || '').toLowerCase() === key)) return prev;
+        return [{ contract: key, priest: walletAddress ? walletAddress.toLowerCase() : null }, ...prev];
+      });
       updateTemplAddress(result.contractAddress);
       setGroup(result.group);
       setGroupId(result.groupId);
@@ -822,7 +893,7 @@ function App() {
       console.error('[app] deploy failed', err);
       alert(err.message);
     }
-  }, [signer, xmtp, tokenAddress, entryFee, burnPercent, treasuryPercent, memberPoolPercent, protocolPercent, factoryAddress, walletAddress, updateTemplAddress, pushStatus, navigate, maxMembers]);
+  }, [signer, xmtp, tokenAddress, entryFee, burnPercent, treasuryPercent, memberPoolPercent, protocolPercent, factoryAddress, walletAddress, updateTemplAddress, pushStatus, navigate, maxMembers, rememberJoinedTempl, setTemplList]);
 
   // In e2e debug mode, auto-trigger deploy once inputs are valid to deflake clicks
   useEffect(() => {
@@ -919,13 +990,19 @@ function App() {
           localStorage.setItem('templ:lastAddress', trimmedAddress);
           if (result.groupId) localStorage.setItem('templ:lastGroupId', String(result.groupId));
         } catch {}
-        navigate(`/chat?address=${templAddress}`);
-        navigate('/chat');
+        rememberJoinedTempl(trimmedAddress);
+        setTemplList((prev) => {
+          const key = String(trimmedAddress || '').toLowerCase();
+          if (!key) return prev;
+          if (prev.some((t) => String(t.contract || '').toLowerCase() === key)) return prev;
+          return [{ contract: key, priest: null }, ...prev];
+        });
+        navigate(`/chat?address=${trimmedAddress}`);
       }
     } catch (err) {
       alert(err.message);
     }
-  }, [signer, xmtp, templAddress, updateTemplAddress, walletAddress, pushStatus, navigate]);
+  }, [signer, xmtp, templAddress, updateTemplAddress, walletAddress, pushStatus, navigate, rememberJoinedTempl, setTemplList]);
 
   // Passive discovery: if a groupId is known (e.g., after deploy) try to
   // discover the conversation without requiring an explicit join.
@@ -1507,6 +1584,20 @@ function App() {
       if (addr && addr !== templAddress) updateTemplAddress(addr);
     }
   }, [path, query, templAddress, updateTemplAddress]);
+  useEffect(() => {
+    if (path !== '/chat') return;
+    const addr = String(query.get('address') || '').trim();
+    if (addr && addr !== templAddress) {
+      updateTemplAddress(addr);
+      return;
+    }
+    if (!addr && !templAddress) {
+      try {
+        const last = localStorage.getItem('templ:lastAddress');
+        if (last && ethers.isAddress(last)) updateTemplAddress(last);
+      } catch {}
+    }
+  }, [path, query, templAddress, updateTemplAddress]);
 
   // Fetch treasury and claimable stats when context is ready
   useEffect(() => {
@@ -1903,8 +1994,6 @@ function App() {
           <div className="flex gap-2">
             <button className="px-3 py-1 rounded border border-black/20" onClick={() => navigate('/')}>Home</button>
             <button className="px-3 py-1 rounded border border-black/20" onClick={() => navigate('/create')}>Create</button>
-            <button className="px-3 py-1 rounded border border-black/20" onClick={() => navigate('/join')}>Join</button>
-            <button className="px-3 py-1 rounded border border-black/20" onClick={() => navigate('/chat')}>Chat</button>
           </div>
           <div className="flex items-center gap-2">
             {walletAddress && (
@@ -1933,15 +2022,43 @@ function App() {
         {path === '/' && (
           <div data-testid="templ-list" className="space-y-3">
             <h2 className="text-xl font-semibold">Templs</h2>
-            {templList.length === 0 && <p>No templs yet</p>}
-            {templList.map((t) => (
-              <div key={t.contract} className="flex flex-col sm:flex-row sm:items-center gap-2">
-                <button type="button" title="Copy address" data-address={String(t.contract).toLowerCase()} className="text-left underline underline-offset-4 font-mono text-sm flex-1 break-words" onClick={() => copyToClipboard(t.contract)}>
-                  {shorten(t.contract)}
-                </button>
-                <button className="px-3 py-1 rounded bg-primary text-black font-semibold w-full sm:w-auto" onClick={() => navigate(`/join?address=${t.contract}`)}>Join</button>
-              </div>
-            ))}
+            {templCards.length === 0 && <p>No templs yet</p>}
+            {templCards.map((t) => {
+              const isJoined = Boolean(t.joined);
+              const contractLower = String(t.contract).toLowerCase();
+              const action = isJoined
+                ? () => navigate(`/chat?address=${contractLower}`)
+                : () => navigate(`/join?address=${contractLower}`);
+              return (
+                <div
+                  key={t.contract}
+                  className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border border-black/10 rounded px-3 py-2 ${
+                    isJoined ? 'bg-black/5 border-black/20' : ''
+                  }`}
+                >
+                  <div className="flex items-center gap-2 flex-1">
+                    <button
+                      type="button"
+                      title="Copy address"
+                      data-address={contractLower}
+                      className="text-left underline underline-offset-4 font-mono text-sm flex-1 break-words"
+                      onClick={() => copyToClipboard(t.contract)}
+                    >
+                      {shorten(t.contract)}
+                    </button>
+                    {isJoined && <span className="text-xs font-semibold uppercase tracking-wide text-primary">Joined</span>}
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      className="px-3 py-1 rounded bg-primary text-black font-semibold w-full sm:w-auto"
+                      onClick={action}
+                    >
+                      {isJoined ? 'Chat' : 'Join'}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
             <div className="pt-2">
               <button className="px-4 py-2 rounded bg-primary text-black font-semibold" onClick={() => navigate('/create')}>Create Templ</button>
             </div>
@@ -2150,7 +2267,8 @@ function App() {
         )}
 
         {path === '/chat' && (
-          <div className="chat-shell">
+          templAddress ? (
+            <div className="chat-shell">
             <div className="chat-header flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="avatar avatar--group" aria-hidden />
@@ -2564,6 +2682,17 @@ function App() {
               <button className="px-3 py-2 rounded bg-primary text-black font-semibold" data-testid="chat-send" onClick={handleSend} disabled={!group && !groupId}>Send</button>
             </div>
           </div>
+          ) : (
+            <div className="space-y-3 border border-black/10 rounded p-4">
+              <h2 className="text-lg font-semibold">Select a templ</h2>
+              <p className="text-sm text-black/60">
+                Visit the home tab and choose a templ you have joined to open its chat.
+              </p>
+              <button className="px-3 py-2 rounded bg-primary text-black font-semibold w-full sm:w-auto" onClick={() => navigate('/')}>
+                Back to Home
+              </button>
+            </div>
+          )
         )}
       </div>
 
