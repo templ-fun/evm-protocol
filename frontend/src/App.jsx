@@ -2032,9 +2032,7 @@ function App() {
               return (
                 <div
                   key={t.contract}
-                  className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border border-black/10 rounded px-3 py-2 ${
-                    isJoined ? 'bg-black/5 border-black/20' : ''
-                  }`}
+                  className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border border-black/10 rounded px-3 py-2"
                 >
                   <div className="flex items-center gap-2 flex-1">
                     <button
@@ -2119,7 +2117,7 @@ function App() {
                   <div>
                     <label className="block text-sm font-medium text-black/70 mb-1">TemplFactory address</label>
                     <input
-                      className={`w-full border border-black/20 rounded px-3 py-2 ${FACTORY_CONFIG.address ? 'bg-black/5' : ''}`}
+                      className="w-full border border-black/20 rounded px-3 py-2"
                       placeholder="Factory address"
                       value={factoryAddress}
                       readOnly={Boolean(FACTORY_CONFIG.address)}
@@ -2129,12 +2127,12 @@ function App() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <div>
                       <label className="block text-sm font-medium text-black/70 mb-1">Protocol fee recipient (fixed)</label>
-                      <input className="w-full border border-black/20 rounded px-3 py-2 bg-black/5" value={protocolFeeRecipient || 'fetching…'} readOnly />
+                      <input className="w-full border border-black/20 rounded px-3 py-2" value={protocolFeeRecipient || 'fetching…'} readOnly />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-black/70 mb-1">Protocol percent</label>
                       <input
-                        className="w-full border border-black/20 rounded px-3 py-2 bg-black/5"
+                        className="w-full border border-black/20 rounded px-3 py-2"
                         value={protocolPercentDisplay ?? 'fetching…'}
                         readOnly
                       />
