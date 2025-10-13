@@ -364,7 +364,7 @@ describe('core flows e2e (stubbed)', () => {
     const state = {
       factoryAddress: '0xFaC70ry00000000000000000000000000000001',
       protocolFeeRecipient: '0xProt0000000000000000000000000000000001',
-      protocolPercent: 10,
+      protocolPercent: 1000,
       createdTempls: [],
       templs: {},
       tokens: {
@@ -434,9 +434,9 @@ describe('core flows e2e (stubbed)', () => {
     expect(result.groupId).toBe('group-1');
     expect(state.createdTempls).toHaveLength(1);
     expect(state.createdTempls[0]).toMatchObject({
-      burnPercent: 20,
-      treasuryPercent: 45,
-      memberPoolPercent: 25
+      burnPercent: 2000,
+      treasuryPercent: 4500,
+      memberPoolPercent: 2500
     });
 
     const memberSigner = createSigner('0xMember00000000000000000000000000000001');

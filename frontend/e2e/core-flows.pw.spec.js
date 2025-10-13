@@ -16,6 +16,68 @@ test.describe('TEMPL E2E - All 7 Core Flows', () => {
   test('All 7 Core Flows', async ({ page, wallets }) => {
 
     let lastSentTxHash = null;
+    const waitForUiReady = async (label) => {
+      await expect.poll(async () => {
+        const state = await page.evaluate(() => {
+          const ready = typeof window !== 'undefined' ? window.__templReady : null;
+          const statusText = document.querySelector('.status')?.textContent || '';
+          return {
+            signer: Boolean(ready?.signerReady),
+            xmtp: Boolean(ready?.xmtpReady),
+            status: statusText
+          };
+        });
+        dbg(`[${label}] readiness`, state);
+        if (state.signer && state.xmtp) return true;
+        if (state.status.includes('Wallet connected') && state.status.includes('Messaging client ready')) return true;
+        return false;
+      }, { timeout: 120000 }).toBe(true);
+    };
+    const installWalletBridge = async ({ address, signFnName, signTypedFnName, sendFnName }) => {
+      await page.evaluate(({ address, signFnName, signTypedFnName, sendFnName }) => {
+        const TEST_ACCOUNT = address;
+        window.ethereum = {
+          isMetaMask: true,
+          selectedAddress: TEST_ACCOUNT,
+          request: async ({ method, params }) => {
+            console.log('ETH method:', method);
+            if (method === 'eth_requestAccounts' || method === 'eth_accounts') return [TEST_ACCOUNT];
+            if (method === 'eth_chainId') return '0x7a69';
+            if (method === 'personal_sign') {
+              const [data] = params || [];
+              // @ts-ignore
+              return await window[signFnName]({ message: data });
+            }
+            if (method === 'eth_sign') {
+              const [, data] = params || [];
+              // @ts-ignore
+              return await window[signFnName]({ message: data });
+            }
+            if (method === 'eth_signTypedData' || method === 'eth_signTypedData_v4') {
+              const [_addr, typed] = params || [];
+              const payload = typeof typed === 'string' ? JSON.parse(typed) : typed;
+              // @ts-ignore
+              return await window[signTypedFnName]({ domain: payload.domain, types: payload.types, message: payload.message });
+            }
+            if (method === 'eth_sendTransaction') {
+              const [tx] = params || [];
+              // @ts-ignore
+              return await window[sendFnName](tx);
+            }
+            const response = await fetch('http://localhost:8545', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ jsonrpc: '2.0', method, params, id: 1 })
+            });
+            const result = await response.json();
+            if (result.error) throw new Error(result.error.message);
+            return result.result;
+          },
+          on: () => {},
+          removeListener: () => {}
+        };
+      }, { address, signFnName, signTypedFnName, sendFnName });
+    };
 
     if (VERBOSE) page.on('console', msg => console.log('PAGE LOG:', msg.text()));
     page.on('pageerror', err => console.log('PAGE ERROR:', err.message));
@@ -45,14 +107,25 @@ test.describe('TEMPL E2E - All 7 Core Flows', () => {
     );
     const templFactory = await factoryFactory.deploy(
       await wallets.delegate.getAddress(),
-      10,
+      1_000,
       { nonce: deployNonce++ }
     );
     await templFactory.waitForDeployment();
     const factoryAddress = await templFactory.getAddress();
+    // Allow non-deployer wallets (including freshly generated UI accounts) to create templs.
+    await (await templFactory.setPermissionless(true)).wait();
 
     // Rotate the UI-connected wallet until the app can initialize XMTP
-    const candidates = [wallets.priest, wallets.delegate, wallets.member];
+    const sharedProvider = wallets.priest.provider;
+    const freshUiWallet = ethers.Wallet.createRandom().connect(sharedProvider);
+    {
+      const fundingTx = await wallets.priest.sendTransaction({
+        to: await freshUiWallet.getAddress(),
+        value: ethers.parseEther('50')
+      });
+      await fundingTx.wait();
+    }
+    const candidates = [freshUiWallet, wallets.priest, wallets.delegate, wallets.member];
     let testWallet = null;
     let testAddress = '';
 
@@ -123,11 +196,11 @@ test.describe('TEMPL E2E - All 7 Core Flows', () => {
             gasPrice: tx.gasPrice ? BigInt(tx.gasPrice) : undefined,
             gasLimit: tx.gas || tx.gasLimit ? BigInt(tx.gas || tx.gasLimit) : undefined,
           };
-          const provider = w.provider;
-          let pendingNonce = await provider.getTransactionCount(addr, 'pending');
+          let pendingNonce = await w.provider.getTransactionCount(addr, 'pending');
           if (nextNonceForWallet !== null && pendingNonce < nextNonceForWallet) {
             pendingNonce = nextNonceForWallet;
           }
+          console.log('[wallet bridge] nonce selection', pendingNonce, nextNonceForWallet);
           req.nonce = pendingNonce;
           const resp = await w.sendTransaction(req);
           lastSentTxHash = resp.hash;
@@ -142,54 +215,13 @@ test.describe('TEMPL E2E - All 7 Core Flows', () => {
       });
 
       // Inject/override window.ethereum for this candidate on the current page
-      await page.evaluate(({ address, signFnName, signTypedFnName, sendFnName }) => {
-        const TEST_ACCOUNT = address;
-        window.ethereum = {
-          isMetaMask: true,
-          selectedAddress: TEST_ACCOUNT,
-          request: async ({ method, params }) => {
-      console.log('ETH method:', method);
-            if (method === 'eth_requestAccounts' || method === 'eth_accounts') return [TEST_ACCOUNT];
-            if (method === 'eth_chainId') return '0x7a69';
-            if (method === 'personal_sign') {
-              const [data] = params || [];
-              // @ts-ignore
-              return await window[signFnName]({ message: data });
-            }
-            if (method === 'eth_sign') {
-              const [, data] = params || [];
-              // @ts-ignore
-              return await window[signFnName]({ message: data });
-            }
-            if (method === 'eth_signTypedData' || method === 'eth_signTypedData_v4') {
-              const [_addr, typed] = params || [];
-              const payload = typeof typed === 'string' ? JSON.parse(typed) : typed;
-              // @ts-ignore
-              return await window[signTypedFnName]({ domain: payload.domain, types: payload.types, message: payload.message });
-            }
-            if (method === 'eth_sendTransaction') {
-              const [tx] = params || [];
-              // @ts-ignore
-              return await window[sendFnName](tx);
-            }
-            const response = await fetch('http://localhost:8545', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ jsonrpc: '2.0', method, params, id: 1 })
-            });
-            const result = await response.json();
-            if (result.error) throw new Error(result.error.message);
-            return result.result;
-          },
-          on: () => {},
-          removeListener: () => {}
-        };
-      }, { address: addr, signFnName, signTypedFnName, sendFnName });
+      await installWalletBridge({ address: addr, signFnName, signTypedFnName, sendFnName });
 
       // Attempt connect
       dbg('Core Flow 1: Connect Wallet');
       await page.click('button:has-text("Connect Wallet")');
       // Navigate to /create in the new routed UI
+      await page.evaluate(() => { window.__templSetAutoDeploy?.(true); });
       await page.click('button:has-text("Create")');
       try {
         await expect(page.locator('h2:has-text("Create Templ")')).toBeVisible();
@@ -199,6 +231,7 @@ test.describe('TEMPL E2E - All 7 Core Flows', () => {
         priestInboxId = await page.evaluate(() => window.__XMTP?.inboxId || '');
         testWallet = w;
         testAddress = addr;
+        await page.evaluate(() => { window.__templSetAutoDeploy?.(true); });
         break;
       } catch {
         // Try next candidate
@@ -224,10 +257,18 @@ test.describe('TEMPL E2E - All 7 Core Flows', () => {
       await page.fill('input[placeholder*="Factory address"]', factoryAddress);
     }
     await page.fill('input[placeholder*="Entry fee"]', '100');
-    // Use factory default values (30/30/30) which expect 10% protocol fee for 100% total
+    // Use factory default values (30/30/30) which expect a 10% protocol fee for 100% total
     await page.fill('input[placeholder="Burn"]', '30');
     await page.fill('input[placeholder="Treasury"]', '30');
     await page.fill('input[placeholder="Member pool"]', '30');
+    // Ensure default exponential curve is used (curve selection can stick across runs)
+    const curveToggle = page.locator('label:has-text("Customize curve") input[type="checkbox"]');
+    if (await curveToggle.count()) {
+      const checked = await curveToggle.isChecked();
+      if (checked) {
+        await curveToggle.uncheck({ force: true });
+      }
+    }
 
     const entryFeeValue = await page.inputValue('input[placeholder*="Entry fee"]');
     const burnValue = await page.locator('input[placeholder="Burn"]').inputValue();
@@ -237,6 +278,9 @@ test.describe('TEMPL E2E - All 7 Core Flows', () => {
     const burnPercentNum = Number(burnValue || '0');
     const treasuryPercentNum = Number(treasuryValue || '0');
     const memberPercentNum = Number(memberValue || '0');
+    const burnPercentBps = Math.round(burnPercentNum * 100);
+    const treasuryPercentBps = Math.round(treasuryPercentNum * 100);
+    const memberPercentBps = Math.round(memberPercentNum * 100);
 
     // Factory defaults are 30/30/30 with 10% protocol fee = 100% total
     const defaultsRequested = burnPercentNum === 30 && treasuryPercentNum === 30 && memberPercentNum === 30;
@@ -248,23 +292,35 @@ test.describe('TEMPL E2E - All 7 Core Flows', () => {
         priest: testAddress,
         token: tokenAddress,
         entryFee: entryFeeWei,
-        burnPercent: burnPercentNum,
-        treasuryPercent: treasuryPercentNum,
-        memberPoolPercent: memberPercentNum,
-        priestIsDictator: false
+        burnPercent: burnPercentBps,
+        treasuryPercent: treasuryPercentBps,
+        memberPoolPercent: memberPercentBps,
+        priestIsDictator: false,
+        curveProvided: false
       });
     }
     templAddress = ethers.getAddress(predictedTempl);
 
-    const prevTxHash = lastSentTxHash;
-    await page.click('button:has-text("Deploy")');
+    await expect.poll(async () => {
+      const addrLower = testAddress.toLowerCase();
+      const latest = await wallets.priest.provider.getTransactionCount(addrLower, 'latest');
+      const pending = await wallets.priest.provider.getTransactionCount(addrLower, 'pending');
+      dbg('[priest join] nonce sync check', { latest, pending });
+      return pending === latest;
+    }, { timeout: 60000 }).toBe(true);
 
-    await expect.poll(async () => Boolean(lastSentTxHash) && lastSentTxHash !== prevTxHash, { timeout: 7000 }).toBe(true);
-    const deployTxHash = lastSentTxHash;
-    await wallets.priest.provider.waitForTransaction(deployTxHash);
+    await page.evaluate(() => { window.__templTrigger?.('deploy'); });
+    dbg('[priest join] triggered deploy via __templTrigger');
 
-    const deployCode = await wallets.priest.provider.getCode(templAddress);
-    expect(deployCode && deployCode !== '0x').toBe(true);
+    await expect.poll(async () => {
+      const status = await page.locator('.status').textContent().catch(() => '');
+      return status?.includes('✅ Templ deployed');
+    }, { timeout: 120000 }).toBe(true);
+
+    await expect.poll(async () => {
+      const code = await wallets.priest.provider.getCode(templAddress);
+      return code && code !== '0x';
+    }, { timeout: 120000 }).toBe(true);
 
     try {
       await page.evaluate((address) => {
@@ -276,13 +332,17 @@ test.describe('TEMPL E2E - All 7 Core Flows', () => {
     const templ = new ethers.Contract(templAddress, templAbi, wallets.priest);
     expect(await templ.accessToken()).toBe(tokenAddress);
 
-    const waitForBackendJoin = async (contractAddress, inboxId) => {
+    const waitForBackendJoin = async (contractAddress, inboxId, label) => {
+      dbg(`[waitForBackendJoin] start ${label} contract=${contractAddress} inbox=${inboxId}`);
       await expect.poll(async () => {
         if (!inboxId) return false;
         try {
           const membership = await fetch(`http://localhost:3001/debug/membership?contractAddress=${contractAddress}&inboxId=${inboxId}`).then(r => r.json());
+          dbg(`[waitForBackendJoin] membership poll ${label}`, membership);
           if (membership && membership.contains === true) return true;
-        } catch {}
+        } catch (err) {
+          dbg(`[waitForBackendJoin] membership poll error ${label}`, err?.message || err);
+        }
         try {
           const lastJoin = await fetch('http://localhost:3001/debug/last-join').then(r => r.json());
           const meta = lastJoin?.payload?.joinMeta;
@@ -290,36 +350,55 @@ test.describe('TEMPL E2E - All 7 Core Flows', () => {
           if (meta && norm(meta.contract) === norm(contractAddress) && norm(meta.inboxId) === norm(inboxId)) {
             return true;
           }
-        } catch {}
+        } catch (err) {
+          dbg(`[waitForBackendJoin] last-join poll error ${label}`, err?.message || err);
+        }
         return false;
       }, { timeout: 180000 }).toBe(true);
+      dbg(`[waitForBackendJoin] success ${label}`);
     };
 
     // Core Flow 3: Pay-to-join (priest wallet via UI)
     console.log('Core Flow 3: Pay-to-join (priest)');
-    await page.click('button:has-text("Join")');
+    await page.evaluate((address) => {
+      const path = `/join?address=${address}`;
+      const url = new URL(path, window.location.origin);
+      window.history.pushState({}, '', url.toString());
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }, templAddress);
+    dbg('[priest join] switched route to /join');
+    try { await page.click('button:has-text("Connect Wallet")', { timeout: 5000 }); } catch {}
+    await waitForUiReady('priest join');
     await expect.poll(async () => await page.evaluate(() => typeof window.__templTrigger === 'function')).toBe(true);
     await page.evaluate(() => {
       console.log('trigger type (priest)', typeof window.__templTrigger);
     });
     await page.fill('input[placeholder*="Contract address"]', templAddress);
-    const priestJoinResponse = page.waitForResponse((res) => res.url().endsWith('/join') && res.request().method() === 'POST');
+    dbg('[priest join] filled contract address');
+    // Ensure trigger still bound after readiness wait
+    await expect.poll(async () => await page.evaluate(() => typeof window.__templTrigger === 'function')).toBe(true);
+    const priestJoinResponse = page.waitForResponse((res) => {
+      const ok = res.url().endsWith('/join') && res.request().method() === 'POST';
+      if (ok) dbg('[priest join] observed /join request', { status: res.status() });
+      return ok;
+    });
     await page.evaluate(() => {
       // @ts-ignore
       window.__templTrigger?.('join');
     });
     const priestJoin = await priestJoinResponse;
+    dbg('[priest join] response status', priestJoin.status());
     expect(priestJoin.ok()).toBeTruthy();
     try {
-      await waitForBackendJoin(templAddress, priestInboxId);
+      await waitForBackendJoin(templAddress, priestInboxId, 'priest');
     } catch (err) {
       console.warn('[e2e] priest join backend confirmation timed out', err?.message || err);
     }
     
     // Now join as a separate member to better mirror real usage
     dbg('Core Flow 3b: Switch to member wallet and join');
-    await page.reload();
-    await page.waitForLoadState('domcontentloaded');
+    await page.goto(`./join?address=${templAddress}`, { waitUntil: 'domcontentloaded' });
+    dbg('[member join] navigated to join route with query');
     {
       const w = wallets.member;
       const addr = await w.getAddress();
@@ -400,8 +479,8 @@ test.describe('TEMPL E2E - All 7 Core Flows', () => {
       }, { address: addr });
       // Reconnect as member and navigate to Join route
       await page.click('button:has-text("Connect Wallet")');
-      await page.click('button:has-text("Join")');
-      await expect.poll(async () => await page.evaluate(() => Boolean(window.__XMTP?.inboxId)), { timeout: 15000 }).toBe(true);
+      await waitForUiReady('member join');
+      dbg('[member join] XMTP inbox ready');
       await expect.poll(async () => await page.evaluate(() => typeof window.__templTrigger === 'function')).toBe(true);
       await page.evaluate(() => {
         console.log('trigger type (member)', typeof window.__templTrigger);
@@ -417,22 +496,31 @@ test.describe('TEMPL E2E - All 7 Core Flows', () => {
             const resp = await fetch(`http://localhost:3001/debug/inbox-state?inboxId=${inboxId}&env=${env}`).then(r => r.json());
             dbg('DEBUG /debug/inbox-state:', resp);
             if (resp && Array.isArray(resp.states) && resp.states.length > 0) break;
-          } catch {}
+          } catch (err) {
+            dbg('DEBUG /debug/inbox-state error', err?.message || err);
+          }
           await page.waitForTimeout(250);
         }
       } catch {}
       // Execute production flow via UI: approve + purchase + join
       await expect(page.locator('h2:has-text("Join Existing Templ")')).toBeVisible({ timeout: 5000 });
       await page.fill('input[placeholder*="Contract address"]', templAddress);
-      const memberJoinResponse = page.waitForResponse((res) => res.url().endsWith('/join') && res.request().method() === 'POST');
+      const memberStatus = await page.evaluate(() => document.querySelector('.status')?.textContent || '');
+      dbg('[member join] status area before trigger', memberStatus);
+      const memberJoinResponse = page.waitForResponse((res) => {
+        const ok = res.url().endsWith('/join') && res.request().method() === 'POST';
+        if (ok) dbg('[member join] observed /join request', { status: res.status() });
+        return ok;
+      });
       await page.evaluate(() => {
         // @ts-ignore
         window.__templTrigger?.('join');
       });
       const memberJoin = await memberJoinResponse;
+      dbg('[member join] response status', memberJoin.status());
       expect(memberJoin.ok()).toBeTruthy();
       try {
-        await waitForBackendJoin(templAddress, memberInboxId);
+        await waitForBackendJoin(templAddress, memberInboxId, 'member');
       } catch (err) {
         console.warn('[e2e] member join backend confirmation timed out', err?.message || err);
       }

@@ -55,7 +55,7 @@ describe('templ flows', () => {
     createTempl.staticCall = vi.fn().mockResolvedValue('0xDeAd');
     const factoryContract = {
       protocolFeeRecipient: vi.fn().mockResolvedValue('0xfee'),
-      protocolPercent: vi.fn().mockResolvedValue(10n),
+      protocolPercent: vi.fn().mockResolvedValue(1000n),
       createTempl
     };
     const ethers = {
@@ -111,7 +111,7 @@ describe('templ flows', () => {
     createTempl.staticCall = vi.fn().mockResolvedValue('0xDeAd');
     const factoryContract = {
       protocolFeeRecipient: vi.fn().mockResolvedValue('0xfee'),
-      protocolPercent: vi.fn().mockResolvedValue(10n),
+      protocolPercent: vi.fn().mockResolvedValue(1000n),
       createTempl
     };
     const ethers = {
@@ -146,7 +146,7 @@ describe('templ flows', () => {
     createTempl.staticCall = vi.fn().mockResolvedValue('0xDeAd');
     const factoryContract = {
       protocolFeeRecipient: vi.fn().mockResolvedValue('0xfee'),
-      protocolPercent: vi.fn().mockResolvedValue(10n),
+      protocolPercent: vi.fn().mockResolvedValue(1000n),
       createTempl
     };
     const ethers = {
@@ -178,7 +178,7 @@ describe('templ flows', () => {
     createTemplWithConfig.staticCall = vi.fn().mockResolvedValue('0xDeAf');
     const factoryContract = {
       protocolFeeRecipient: vi.fn().mockResolvedValue('0xfee'),
-      protocolPercent: vi.fn().mockResolvedValue(10n),
+      protocolPercent: vi.fn().mockResolvedValue(1000n),
       createTempl,
       createTemplWithConfig
     };

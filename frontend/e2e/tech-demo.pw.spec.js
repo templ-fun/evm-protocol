@@ -35,7 +35,7 @@ test.describe('Tech Demo: Realtime multi-user flow', () => {
     const tokenFactory = new ethers.ContractFactory(TestToken.abi, TestToken.bytecode, wallets.priest);
     const factoryFactory = new ethers.ContractFactory(TemplFactory.abi, TemplFactory.bytecode, wallets.priest);
     let deployNonce = await wallets.priest.getNonce();
-    const templFactory = await factoryFactory.deploy(await wallets.delegate.getAddress(), 10, { nonce: deployNonce++ });
+    const templFactory = await factoryFactory.deploy(await wallets.delegate.getAddress(), 1_000, { nonce: deployNonce++ });
     await templFactory.waitForDeployment();
     const factoryAddress = await templFactory.getAddress();
 
@@ -148,6 +148,13 @@ test.describe('Tech Demo: Realtime multi-user flow', () => {
       await page.fill('input[placeholder*="Factory address"]', factoryAddress);
     }
     await page.fill('input[placeholder*="Entry fee"]', '100');
+    const curveToggle = page.locator('label:has-text("Customize curve") input[type="checkbox"]');
+    if (await curveToggle.count()) {
+      const checked = await curveToggle.isChecked();
+      if (checked) {
+        await curveToggle.uncheck({ force: true });
+      }
+    }
     await page.click('button:has-text("Deploy")');
     // Resolve contract address via localStorage (set by the app on deploy); avoid relying on hidden DOM nodes
     let templAddress = '';
@@ -166,21 +173,17 @@ test.describe('Tech Demo: Realtime multi-user flow', () => {
     }
 
     // Pre-approve and purchase membership on-chain for all to guarantee treasury funding
-    const entryFee = 100n;
-    // priest
-    {
-      const erc20 = new ethers.Contract(tokenAddress, ['function approve(address,uint256) returns (bool)'], wallets.priest);
-      let n = await wallets.priest.getNonce();
-      await (await erc20.approve(templAddress, entryFee, { nonce: n++ })).wait();
-      const templPriest = new ethers.Contract(templAddress, templAbi, wallets.priest);
-      await (await templPriest.purchaseAccess({ nonce: n++ })).wait();
+    async function approveAndJoin(wallet) {
+      const erc20 = new ethers.Contract(tokenAddress, ['function approve(address,uint256) returns (bool)'], wallet);
+      const templInstance = new ethers.Contract(templAddress, templAbi, wallet);
+      const price = await templInstance.entryFee();
+      let nonce = await wallet.getNonce();
+      await (await erc20.approve(templAddress, price, { nonce: nonce++ })).wait();
+      await (await templInstance.purchaseAccess({ nonce: nonce++ })).wait();
     }
+    await approveAndJoin(wallets.priest);
     for (const u of users) {
-      const erc20 = new ethers.Contract(tokenAddress, ['function approve(address,uint256) returns (bool)'], u);
-      let n = await u.getNonce();
-      await (await erc20.approve(templAddress, entryFee, { nonce: n++ })).wait();
-      const templU = new ethers.Contract(templAddress, templAbi, u);
-      await (await templU.purchaseAccess({ nonce: n++ })).wait();
+      await approveAndJoin(u);
     }
     // Ensure all purchases accounted
     {

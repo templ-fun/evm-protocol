@@ -1726,6 +1726,19 @@ function App() {
     } catch {}
   }, [messages]);
 
+  useEffect(() => {
+    try {
+      // expose readiness for e2e harness
+      if (import.meta?.env?.VITE_E2E_DEBUG === '1' && typeof window !== 'undefined') {
+        window.__templReady = {
+          signerReady: Boolean(signer),
+          xmtpReady: Boolean(xmtp),
+          walletAddress: walletAddress || null
+        };
+      }
+    } catch {}
+  }, [signer, xmtp, walletAddress]);
+
   function saveProfileLocally({ name, avatar }) {
     try {
       if (!xmtp) return;
@@ -1950,6 +1963,9 @@ function App() {
           } else if (action === 'navigate-chat') {
             navigate('/chat');
           }
+        };
+        window.__templSetAutoDeploy = (flag) => {
+          autoDeployTriggeredRef.current = Boolean(flag);
         };
       }
     } catch {}
