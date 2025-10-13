@@ -21,6 +21,9 @@ export interface DeployRequest {
   maxMembers?: number | string | bigint
   backendUrl?: string
   txOptions?: Record<string, any>
+  curveProvided?: boolean
+  curveConfig?: Record<string, any> | null
+  templHomeLink?: string | null
 }
 
 export interface DeployResponse {
