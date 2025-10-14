@@ -8,6 +8,11 @@
   animation: landingBgShift 6s ease-in-out infinite;
 }
 
+img {
+    max-height: 100vh;
+
+}
+
 @keyframes landingBgShift {
   0% {
     background-color: #00ff00;
