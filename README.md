@@ -1,5 +1,7 @@
 # templ.fun
 
+<img width="635" height="293" alt="Screenshot 2025-10-14 at 23 04 32" src="https://github.com/user-attachments/assets/e0a4eeab-a61d-411e-9235-a6a5a3dc414d" />
+
 Templ lets any ERC-20 community spin up a gated club with transparent economics, one-member/one-vote governance, and optional Telegram + XMTP coordination. A single factory mints templs, each templ tracks its own members and fee splits, and the surrounding tooling keeps every surface in sync.
 
 ---
