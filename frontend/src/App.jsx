@@ -19,6 +19,7 @@ import {
   delegateMute,
   muteMember,
   listTempls,
+  getTokenAllowance,
   getTreasuryInfo,
   getClaimable,
   getExternalRewards
@@ -571,6 +572,9 @@ function App() {
   const [currentMemberCount, setCurrentMemberCount] = useState(null);
   const [currentAccessToken, setCurrentAccessToken] = useState(null);
   const [currentTokenSymbol, setCurrentTokenSymbol] = useState(null);
+  const [templSummaries, setTemplSummaries] = useState({});
+  const [approvalStage, setApprovalStage] = useState('unknown');
+  const [approvalError, setApprovalError] = useState(null);
   const [proposeBurnPercent, setProposeBurnPercent] = useState('');
   const [proposeTreasuryPercent, setProposeTreasuryPercent] = useState('');
   const [proposeMemberPercent, setProposeMemberPercent] = useState('');
@@ -610,6 +614,42 @@ function App() {
   }, [pathIsChat, templAddress, pendingJoinMatches, groupId, groupConnected]);
   const joinRetryCountRef = useRef(0);
   const moderationEnabled = false;
+  const zeroAddressLower = ethers.ZeroAddress.toLowerCase();
+  const needsTokenApproval = !!joinMembershipInfo.token && !joinMembershipInfo.isNative;
+  const approvalButtonLabel = approvalStage === 'pending'
+    ? 'Approving…'
+    : approvalStage === 'approved'
+      ? 'Approved'
+      : `Approve ${joinMembershipInfo.symbol || 'token'}`;
+  const approvalButtonDisabled = approvalStage === 'pending'
+    || approvalStage === 'checking'
+    || approvalStage === 'approved'
+    || !walletAddress
+    || !templAddress
+    || !joinMembershipInfo.required;
+  const approvalStatusText = (() => {
+    if (!needsTokenApproval) {
+      return 'No approval needed for native token entry fees.';
+    }
+    switch (approvalStage) {
+      case 'approved':
+        return 'Allowance ready. You can join now.';
+      case 'needs':
+        return 'Approval required before purchasing access.';
+      case 'pending':
+        return 'Waiting for approval confirmation…';
+      case 'checking':
+        return 'Checking token allowance…';
+      case 'error':
+        return approvalError || 'Unable to read allowance.';
+      default:
+        return walletAddress ? 'Allowance status unavailable.' : 'Connect your wallet to check allowance.';
+    }
+  })();
+  useEffect(() => {
+    setApprovalStage(needsTokenApproval ? 'checking' : 'approved');
+    setApprovalError(null);
+  }, [templAddress, walletAddress, needsTokenApproval]);
   const joinMembershipInfo = useMemo(() => {
     if (!templAddress || !ethers.isAddress(templAddress)) {
       return {
@@ -618,51 +658,68 @@ function App() {
         raw: null,
         usd: null,
         decimals: null,
-        symbol: null
+        symbol: null,
+        required: null,
+        isNative: false
       };
     }
-    if (!currentFee) {
+    let required = null;
+    try {
+      if (currentFee) required = BigInt(currentFee);
+    } catch {
+      required = null;
+    }
+    const token = currentAccessToken || null;
+    const isNative = token ? token.toLowerCase() === zeroAddressLower : false;
+    if (!required) {
       return {
-        token: currentAccessToken || null,
+        token,
         formatted: null,
         raw: null,
         usd: null,
         decimals: tokenDecimals,
-        symbol: currentTokenSymbol || null
+        symbol: currentTokenSymbol || (isNative ? 'ETH' : null),
+        required: null,
+        isNative
       };
     }
     try {
-      const feeValue = BigInt(currentFee);
-      const formatted = Number.isInteger(tokenDecimals)
-        ? formatTokenAmount(feeValue, tokenDecimals, currentTokenSymbol)
+      const decimals = Number.isInteger(tokenDecimals) ? tokenDecimals : null;
+      const symbol = currentTokenSymbol || (isNative ? 'ETH' : null);
+      const formatted = decimals !== null
+        ? formatTokenAmount(required, decimals, symbol)
         : null;
-      const rawUnits = Number.isInteger(tokenDecimals)
-        ? formatRawUnitsDisplay(feeValue, tokenDecimals, currentTokenSymbol)
+      const rawUnits = decimals !== null
+        ? formatRawUnitsDisplay(required, decimals, symbol)
         : null;
       const raw = rawUnits
         ? `${rawUnits.amount} ${rawUnits.unit}`
-        : `${feeValue.toString()} raw units`;
-      const usdRate = inferUsdRateForToken(currentTokenSymbol, (currentAccessToken || '').toLowerCase());
-      const usd = formatUsdFromBigInt(feeValue, tokenDecimals, usdRate);
+        : `${required.toString()} raw units`;
+      const usdRate = inferUsdRateForToken(symbol, (token || '').toLowerCase());
+      const usd = decimals !== null ? formatUsdFromBigInt(required, decimals, usdRate) : null;
       return {
-        token: currentAccessToken || null,
+        token,
         formatted: formatted || null,
         raw,
         usd,
-        decimals: tokenDecimals,
-        symbol: currentTokenSymbol || null
+        decimals,
+        symbol,
+        required,
+        isNative
       };
     } catch {
       return {
-        token: currentAccessToken || null,
+        token,
         formatted: null,
-        raw: `${currentFee} raw units`,
+        raw: `${required.toString()} raw units`,
         usd: null,
         decimals: tokenDecimals,
-        symbol: currentTokenSymbol || null
+        symbol: currentTokenSymbol || (isNative ? 'ETH' : null),
+        required,
+        isNative
       };
     }
-  }, [templAddress, currentFee, tokenDecimals, currentTokenSymbol, currentAccessToken]);
+  }, [templAddress, currentFee, tokenDecimals, currentTokenSymbol, currentAccessToken, zeroAddressLower]);
   useEffect(() => {
     if (proposeAction !== 'moveTreasuryToMe') {
       setProposeAmount('');
@@ -679,6 +736,55 @@ function App() {
       setProposeToken('');
     }
   }, [proposeOpen]);
+  useEffect(() => {
+    setApprovalError(null);
+    if (!joinMembershipInfo.token) {
+      setApprovalStage('unknown');
+      return;
+    }
+    if (joinMembershipInfo.isNative) {
+      setApprovalStage('approved');
+      return;
+    }
+    if (!walletAddress || !templAddress || !ethers.isAddress(templAddress)) {
+      setApprovalStage('unknown');
+      return;
+    }
+    if (!joinMembershipInfo.required) {
+      setApprovalStage('checking');
+      return;
+    }
+    const provider = signer?.provider ?? signer;
+    if (!provider) {
+      setApprovalStage('error');
+      setApprovalError('Connect a wallet to check token allowance');
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setApprovalStage('checking');
+      try {
+        const allowance = await getTokenAllowance({
+          ethers,
+          providerOrSigner: provider,
+          owner: walletAddress,
+          token: joinMembershipInfo.token,
+          spender: templAddress
+        });
+        if (cancelled) return;
+        if (allowance >= joinMembershipInfo.required) {
+          setApprovalStage('approved');
+        } else {
+          setApprovalStage('needs');
+        }
+      } catch (err) {
+        if (cancelled) return;
+        setApprovalStage('error');
+        setApprovalError(err?.message || 'Failed to read allowance');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [signer, walletAddress, templAddress, joinMembershipInfo.token, joinMembershipInfo.required, joinMembershipInfo.isNative]);
   const renderStepStatus = useCallback((label, state, extra) => {
     const icon = STATUS_ICONS[state] || STATUS_ICONS.idle;
     const text = STATUS_DESCRIPTIONS[state] || STATUS_DESCRIPTIONS.idle;
@@ -1000,19 +1106,27 @@ function App() {
     const items = templList.map((item) => {
       const contract = String(item.contract || '').toLowerCase();
       const joined = joinedTemplSet.has(contract) || (current && contract === current);
+      const summary = templSummaries[contract];
+      const members = summary?.status === 'ready' && summary.memberCount !== undefined
+        ? Number(summary.memberCount)
+        : null;
       return {
         ...item,
         contract,
-        joined
+        joined,
+        memberCount: members
       };
     });
     items.sort((a, b) => {
       if (a.joined && !b.joined) return -1;
       if (!a.joined && b.joined) return 1;
+      const aCount = Number.isFinite(a.memberCount) ? a.memberCount : -1;
+      const bCount = Number.isFinite(b.memberCount) ? b.memberCount : -1;
+      if (aCount !== bCount) return bCount - aCount;
       return a.contract.localeCompare(b.contract);
     });
     return items;
-  }, [templList, joinedTemplSet, templAddress]);
+  }, [templList, joinedTemplSet, templAddress, templSummaries]);
   const maxMembersValue = currentMaxMembers === null ? null : String(currentMaxMembers);
   const memberCountValue = currentMemberCount === null ? null : String(currentMemberCount);
   const maxMembersLabel = maxMembersValue === null ? '…' : (maxMembersValue === '0' ? 'Unlimited' : maxMembersValue);
@@ -1933,6 +2047,12 @@ function App() {
       stateAddress: templAddress
     });
     if (!signer || !xmtp) return;
+    const requiresApproval = joinMembershipInfo.token && !joinMembershipInfo.isNative;
+    if (requiresApproval && approvalStage !== 'approved') {
+      setJoinStatusNote('Awaiting token approval');
+      pushStatus('⚠️ Approve the membership token before joining.');
+      return;
+    }
     const rawAddress = templAddressRef.current || templAddress;
     const trimmedAddress = typeof rawAddress === 'string' ? rawAddress.trim() : '';
     if (!trimmedAddress || !ethers.isAddress(trimmedAddress)) {
@@ -1992,6 +2112,7 @@ function App() {
         walletAddress: memberAddress,
         templAddress: trimmedAddress,
         templArtifact,
+        autoApprove: false,
         onProgress: (stage) => {
           if (stage !== 'join:submission:retry' && lastStage === stage) return;
           switch (stage) {
@@ -2103,7 +2224,38 @@ function App() {
       }
       console.error('Join failed', err);
     }
-  }, [signer, xmtp, templAddress, updateTemplAddress, walletAddress, pushStatus, navigate, rememberJoinedTempl, setTemplList, joinSteps]);
+  }, [signer, xmtp, templAddress, updateTemplAddress, walletAddress, pushStatus, navigate, rememberJoinedTempl, setTemplList, joinSteps, joinMembershipInfo.isNative, joinMembershipInfo.token, approvalStage]);
+
+  const handleApproveToken = useCallback(async () => {
+    if (joinMembershipInfo.isNative) {
+      setApprovalStage('approved');
+      return;
+    }
+    if (!signer || !templAddress) {
+      pushStatus('⚠️ Connect your wallet before approving.');
+      return;
+    }
+    if (!joinMembershipInfo.token || !joinMembershipInfo.required) {
+      pushStatus('⚠️ Membership cost still loading.');
+      return;
+    }
+    try {
+      const tokenAddress = ethers.getAddress(joinMembershipInfo.token);
+      const erc20 = new ethers.Contract(tokenAddress, ['function approve(address spender, uint256 value) returns (bool)'], signer);
+      setApprovalError(null);
+      setApprovalStage('pending');
+      pushStatus('🔄 Approving membership token');
+      const tx = await erc20.approve(templAddress, joinMembershipInfo.required);
+      await tx.wait();
+      pushStatus('✅ Token approved');
+      setApprovalStage('approved');
+    } catch (err) {
+      const message = err?.message || 'Approval failed';
+      setApprovalStage('error');
+      setApprovalError(message);
+      pushStatus(`⚠️ Approval failed: ${message}`);
+    }
+  }, [joinMembershipInfo.isNative, joinMembershipInfo.token, joinMembershipInfo.required, signer, templAddress, pushStatus]);
 
   // Passive discovery: if a groupId is known (e.g., after deploy) try to
   // discover the conversation without requiring an explicit join.
@@ -2769,6 +2921,111 @@ function App() {
       localStorage.setItem(`templ:proposals:${addr}`, JSON.stringify(proposalsById));
     } catch {}
   }, [proposalsById, templAddress]);
+
+  useEffect(() => {
+    const reader = signer?.provider ?? signer ?? (window?.ethereum ? new ethers.BrowserProvider(window.ethereum) : null);
+    if (!templList.length || !reader) {
+      return;
+    }
+    let cancelled = false;
+    const tasks = [];
+    templList.forEach((item) => {
+      const raw = String(item.contract || '').trim();
+      if (!raw) return;
+      let checksum;
+      try {
+        checksum = ethers.getAddress(raw);
+      } catch {
+        return;
+      }
+      const key = checksum.toLowerCase();
+      const existing = templSummaries[key];
+      if (existing && (existing.status === 'ready' || existing.status === 'loading')) {
+        return;
+      }
+      tasks.push({ key, checksum });
+    });
+    tasks.forEach(({ key, checksum }) => {
+      setTemplSummaries((prev) => ({ ...prev, [key]: { status: 'loading', contract: checksum } }));
+      (async () => {
+        try {
+          const contract = new ethers.Contract(checksum, templArtifact.abi, reader);
+          let tokenAddr;
+          let entryFee;
+          let totalMembers = null;
+          let maxMembersRaw = null;
+          try {
+            const cfg = await contract.getConfig();
+            tokenAddr = cfg[0];
+            entryFee = BigInt(cfg[1] ?? 0n);
+          } catch {
+            tokenAddr = await contract.accessToken();
+            entryFee = BigInt(await contract.entryFee());
+          }
+          try {
+            const count = await contract.totalPurchases();
+            totalMembers = Number(count);
+          } catch {}
+          try {
+            maxMembersRaw = await contract.MAX_MEMBERS();
+          } catch {}
+          let symbol = null;
+          let decimals = null;
+          const tokenLower = tokenAddr ? String(tokenAddr).toLowerCase() : null;
+          if (tokenLower === zeroAddressLower) {
+            symbol = 'ETH';
+            decimals = 18;
+          } else if (tokenAddr) {
+            const erc20Meta = new ethers.Contract(
+              tokenAddr,
+              ['function symbol() view returns (string)', 'function decimals() view returns (uint8)'],
+              reader
+            );
+            try {
+              const rawSymbol = await erc20Meta.symbol();
+              if (typeof rawSymbol === 'string' && rawSymbol.trim()) symbol = rawSymbol.trim();
+            } catch {}
+            try {
+              decimals = Number(await erc20Meta.decimals());
+            } catch {}
+          }
+          const formatted = decimals !== null ? formatTokenAmount(entryFee, decimals, symbol) : null;
+          const rawUnits = decimals !== null ? formatRawUnitsDisplay(entryFee, decimals, symbol) : null;
+          const rawLabel = rawUnits ? `${rawUnits.amount} ${rawUnits.unit}` : `${entryFee.toString()} raw units`;
+          const usdRate = inferUsdRateForToken(symbol, (tokenAddr || '').toLowerCase());
+          const usd = decimals !== null ? formatUsdFromBigInt(entryFee, decimals, usdRate) : null;
+          if (cancelled) return;
+          setTemplSummaries((prev) => ({
+            ...prev,
+            [key]: {
+              status: 'ready',
+              contract: checksum,
+              token: tokenAddr,
+              symbol,
+              formatted: formatted || rawLabel,
+              raw: rawLabel,
+              usd,
+              decimals,
+              required: entryFee,
+              memberCount: Number.isFinite(totalMembers) ? totalMembers : null,
+              maxMembers: maxMembersRaw !== null && maxMembersRaw !== undefined ? maxMembersRaw.toString() : null
+            }
+          }));
+        } catch (err) {
+          if (cancelled) return;
+          setTemplSummaries((prev) => ({
+            ...prev,
+            [key]: {
+              status: 'error',
+              contract: checksum,
+              error: err?.message || 'Failed to load token info'
+            }
+          }));
+        }
+      })();
+    });
+    return () => { cancelled = true; };
+  }, [templList, signer, templSummaries, zeroAddressLower]);
 
   async function handleSend() {
     if (!messageInput) return;
@@ -3673,13 +3930,38 @@ function App() {
                   <span className="font-medium text-black/80">Decimals</span>
                   <span>{Number.isInteger(joinMembershipInfo.decimals) ? joinMembershipInfo.decimals : 'Unknown'}</span>
                 </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium text-black/80">Members</span>
+                  <span>{memberCountWithLimit}</span>
+                </div>
               </div>
             </div>
+            {needsTokenApproval && (
+              <div className="rounded border border-black/20 bg-white/80 p-3 text-xs text-black/70 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-semibold text-black/90">Token approval</span>
+                  <button
+                    type="button"
+                    className="px-3 py-1 rounded border border-black/20 text-xs font-semibold"
+                    onClick={handleApproveToken}
+                    disabled={approvalButtonDisabled}
+                  >
+                    {approvalButtonLabel}
+                  </button>
+                </div>
+                <p className="text-xs text-black/60">
+                  Grant the templ contract permission to pull the entry fee from your wallet once. Approval only needs to be signed the first time.
+                </p>
+                <p className={`text-xs ${approvalStage === 'approved' ? 'text-green-700' : approvalStage === 'error' ? 'text-red-600' : 'text-black/60'}`}>
+                  {approvalStatusText}
+                </p>
+              </div>
+            )}
             <input className="w-full border border-black/20 rounded px-3 py-2" placeholder="Contract address" value={templAddress} onChange={(e) => updateTemplAddress(e.target.value)} />
             <button
               className="px-4 py-2 rounded bg-primary text-black font-semibold w-full sm:w-auto"
               onClick={handlePurchaseAndJoin}
-              disabled={joinSteps.purchase === 'pending' || joinSteps.join === 'pending'}
+              disabled={joinSteps.purchase === 'pending' || joinSteps.join === 'pending' || (needsTokenApproval && approvalStage !== 'approved')}
             >
               Purchase & Join
             </button>
@@ -3690,20 +3972,52 @@ function App() {
               </div>
             )}
             {/* Optional list if no prefill */}
-            {(!templAddress || templAddress.trim() === '') && (
-              <div className="space-y-2">
-                {templList.map((t) => (
-                  <div key={t.contract} className="flex flex-col sm:flex-row sm:items-center gap-2">
-                    <button type="button" title="Copy address" data-address={String(t.contract).toLowerCase()} className="text-left underline underline-offset-4 font-mono text-sm flex-1 break-words" onClick={() => copyToClipboard(t.contract)}>
-                      {shorten(t.contract)}
-                    </button>
-                    <button className="px-3 py-1 rounded border border-black/20 w-full sm:w-auto" onClick={() => navigate(`/join?address=${t.contract}`)}>Select</button>
+              {(!templAddress || templAddress.trim() === '') && (
+                <div className="space-y-2">
+                  {templList.map((t) => (
+                  <div key={t.contract} className="flex flex-col gap-2 rounded border border-black/10 bg-white/70 p-2">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                      <button type="button" title="Copy address" data-address={String(t.contract).toLowerCase()} className="text-left underline underline-offset-4 font-mono text-sm flex-1 break-words" onClick={() => copyToClipboard(t.contract)}>
+                        {shorten(t.contract)}
+                      </button>
+                      <button className="px-3 py-1 rounded border border-black/20 w-full sm:w-auto" onClick={() => navigate(`/join?address=${t.contract}`)}>Select</button>
+                    </div>
+                    {(() => {
+                      const key = String(t.contract || '').toLowerCase();
+                      const summary = templSummaries[key];
+                      if (!summary) {
+                        return <div className="text-xs text-black/60">Loading entry fee…</div>;
+                      }
+                      if (summary.status === 'loading') {
+                        return <div className="text-xs text-black/60">Loading entry fee…</div>;
+                      }
+                      if (summary.status === 'error') {
+                        return <div className="text-xs text-red-600">{summary.error || 'Failed to load entry fee'}</div>;
+                      }
+                      const tokenLabel = summary.symbol || (summary.token ? shorten(summary.token) : 'Unknown token');
+                      const members = Number.isFinite(summary.memberCount) ? summary.memberCount : null;
+                      const maxMembers = summary.maxMembers;
+                      let membersDisplay = '…';
+                      if (members !== null) {
+                        membersDisplay = maxMembers && maxMembers !== '0'
+                          ? `${members} / ${maxMembers}`
+                          : `${members}`;
+                      }
+                      return (
+                        <div className="text-xs text-black/60 space-y-1">
+                          <div>Token: {tokenLabel}</div>
+                          <div>Entry fee: {summary.formatted}</div>
+                          {summary.usd && <div>≈ {summary.usd}</div>}
+                          <div>Members: {membersDisplay}</div>
+                        </div>
+                      );
+                    })()}
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
         {path === '/chat' && (
           templAddress ? (
