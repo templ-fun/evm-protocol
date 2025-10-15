@@ -3988,6 +3988,9 @@ function App() {
                 Purchase & Join
               </button>
             </div>
+            <p className="text-xs text-black/60">
+              After the on-chain join confirms, the templ backend may take up to a minute to provision the XMTP group. The status panel below updates automatically once the chat is ready.
+            </p>
             {(joinSteps.purchase !== 'idle' || joinSteps.join !== 'idle') && pendingJoinMatches && (
               <div className="mt-2 rounded border border-black/10 bg-white/70 p-3 text-xs text-black/70">
                 <div>{renderStepStatus('Purchase access (tx)', joinSteps.purchase, joinSteps.purchase === 'error' ? joinSteps.error : purchaseStatusNote || undefined)}</div>
