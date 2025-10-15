@@ -944,7 +944,8 @@ async function restoreGroupsFromPersistence({ listBindings, templs, watchContrac
         templHomeLink: '',
         bindingCode: row?.bindingCode ? String(row.bindingCode) : null,
         groupId: row?.groupId ? String(row.groupId) : null,
-        group: null
+        group: null,
+        creatorInboxId: null
       };
       templs.set(key, record);
       if (watchContract) {
@@ -1480,7 +1481,11 @@ export async function createApp(opts) {
         }
         if (!record.groupId && xmtp?.conversations?.newGroup && process.env.XMTP_ENABLED !== '0') {
           try {
-            const group = await xmtp.conversations.newGroup([], {
+            const initialMembers = [];
+            if (record.creatorInboxId) {
+              initialMembers.push(record.creatorInboxId);
+            }
+            const group = await xmtp.conversations.newGroup(initialMembers, {
               name: `templ:${record.contractAddress?.slice?.(0, 10) ?? 'templ'}`,
               description: record.templHomeLink ? `templ.fun • ${record.templHomeLink}` : 'templ.fun group'
             });

@@ -42,50 +42,6 @@ function normaliseInboxId(value) {
   return trimmed.toLowerCase();
 }
 
-async function addCreatorToGroup({ group, inboxId, priestAddress, logger }) {
-  if (!group || !inboxId) return;
-  const attempts = [
-    async () => {
-      if (typeof group.addMembersByInboxId === 'function') {
-        await group.addMembersByInboxId([inboxId]);
-        return true;
-      }
-      return false;
-    },
-    async () => {
-      if (typeof group.addMembers === 'function') {
-        await group.addMembers([inboxId]);
-        return true;
-      }
-      return false;
-    },
-    async () => {
-      if (typeof group.addMembersByIdentifiers === 'function' && priestAddress) {
-        await group.addMembersByIdentifiers([{ identifier: priestAddress.toLowerCase(), identifierKind: 0 }]);
-        return true;
-      }
-      return false;
-    }
-  ];
-  for (const attempt of attempts) {
-    try {
-      const applied = await attempt();
-      if (applied) {
-        logger?.info?.({ inboxId }, 'Added creator to XMTP group');
-        return;
-      }
-    } catch (err) {
-      const message = String(err?.message || err);
-      if (message.toLowerCase().includes('already')) {
-        logger?.info?.({ inboxId }, 'Creator already present in XMTP group');
-        return;
-      }
-      logger?.debug?.({ err: message, inboxId }, 'Failed to add creator via current method; trying fallback');
-    }
-  }
-  logger?.warn?.({ inboxId }, 'Unable to add creator inbox to XMTP group');
-}
-
 export async function registerTempl(body, context) {
   const { contractAddress, priestAddress } = body;
   const { provider, logger, templs, persist, watchContract, findBinding, skipFactoryValidation, ensureGroup } = context;
@@ -121,7 +77,8 @@ export async function registerTempl(body, context) {
       templHomeLink: '',
       bindingCode: persisted?.bindingCode ?? null,
       groupId: persisted?.groupId ?? null,
-      group: null
+      group: null,
+      creatorInboxId: null
     };
     if (persisted?.telegramChatId) {
       existing.telegramChatId = String(persisted.telegramChatId);
@@ -140,6 +97,7 @@ export async function registerTempl(body, context) {
   existing.priest = priest;
   existing.telegramChatId = telegramChatId ?? existing.telegramChatId ?? null;
   existing.groupId = providedGroupId ?? existing.groupId ?? null;
+  existing.creatorInboxId = creatorInboxId ?? existing.creatorInboxId ?? null;
   existing.contractAddress = contract;
   let resolvedHomeLink = existing.templHomeLink || '';
   if (provider) {
@@ -161,10 +119,6 @@ export async function registerTempl(body, context) {
       if (group?.id) {
         existing.groupId = String(group.id);
         existing.group = group;
-        if (creatorInboxId) {
-          await addCreatorToGroup({ group, inboxId: creatorInboxId, priestAddress: priest, logger });
-          try { await group.sync?.(); } catch {/* ignore */}
-        }
       }
     } catch (err) {
       logger?.warn?.({ err: String(err?.message || err), contract }, 'ensureGroup failed during registration');
