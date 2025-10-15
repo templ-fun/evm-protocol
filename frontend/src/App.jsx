@@ -541,6 +541,8 @@ function App() {
   const [nowSeconds, setNowSeconds] = useState(() => Math.floor(Date.now() / 1000));
   const [currentExecutionDelay, setCurrentExecutionDelay] = useState(null);
   const [currentQuorumPercent, setCurrentQuorumPercent] = useState(null);
+  const [activeInboxId, setActiveInboxId] = useState('');
+  const [xmtpLimitWarning, setXmtpLimitWarning] = useState(null);
   const messageSeenRef = useRef(new Set());
   const [profilesByAddress, setProfilesByAddress] = useState({}); // { [addressLower]: { name, avatar } }
   const [profileName, setProfileName] = useState('');
@@ -620,6 +622,14 @@ function App() {
     if (normalizedTemplAddress) return `templ:${normalizedTemplAddress}`;
     return null;
   }, [normalizedGroupId, normalizedTemplAddress]);
+  const resetChatState = useCallback(() => {
+    messageSeenRef.current = new Set();
+    setMessages([]);
+    setProposals([]);
+    setProposalsById({});
+    setGroup(null);
+    setGroupConnected(false);
+  }, []);
   const pendingJoinMatches = useMemo(() => {
     if (!pendingJoinAddress || !templAddress) return false;
     try {
@@ -1505,9 +1515,9 @@ function App() {
         }
         try { maxMembersRaw = await c.MAX_MEMBERS(); } catch {}
         try {
-          memberCountRaw = await c.memberCount();
+          memberCountRaw = await c.getMemberCount();
         } catch {
-          try { memberCountRaw = await c.totalPurchases(); } catch {}
+          memberCountRaw = null;
         }
         let dictatorshipState = null;
         try {
@@ -1594,27 +1604,36 @@ function App() {
     if (!window.ethereum) return;
     const provider = new ethers.BrowserProvider(window.ethereum);
     await provider.send('eth_requestAccounts', []);
-    const signer = await provider.getSigner();
-    setSigner(signer);
-    const address = await signer.getAddress();
+    const nextSigner = await provider.getSigner();
+    const address = await nextSigner.getAddress();
+    setSigner(nextSigner);
     setWalletAddress(address);
+    setXmtpLimitWarning(null);
     pushStatus('✅ Wallet connected');
-    
-    // Proactively close any existing XMTP client before switching identities to avoid
-    // OPFS/db handle contention and duplicate streams across wallets during e2e runs.
+
+    // Tear down any existing XMTP session before rotating wallets.
     try {
+      if (creatingXmtpPromiseRef.current) {
+        try {
+          const pendingClient = await creatingXmtpPromiseRef.current;
+          await pendingClient?.close?.();
+        } catch {}
+      }
+      creatingXmtpPromiseRef.current = null;
       if (xmtp && typeof xmtp.close === 'function') {
         await xmtp.close();
       }
     } catch {}
+    identityReadyRef.current = false;
+    identityReadyPromiseRef.current = null;
+    setXmtp(undefined);
+    setActiveInboxId('');
+    resetChatState();
 
-    // Use an XMTP-compatible signer wrapper for the browser SDK with inbox rotation
     const forcedEnv = import.meta.env.VITE_XMTP_ENV?.trim();
     const xmtpEnv = forcedEnv || (['localhost', '127.0.0.1'].includes(window.location.hostname) ? 'dev' : 'production');
+
     async function createXmtpStable() {
-      // Use a stable installation nonce per wallet to avoid exhausting the
-      // XMTP dev network's 10-installation cap and to prevent OPFS handle
-      // conflicts from repeated Client.create() attempts.
       const storageKey = `xmtp:nonce:${address.toLowerCase()}`;
       let stableNonce = 1;
       try {
@@ -1640,7 +1659,7 @@ function App() {
           } else {
             toSign = String(message);
           }
-          const signature = await signer.signMessage(toSign);
+          const signature = await nextSigner.signMessage(toSign);
           return ethers.getBytes(signature);
         }
       };
@@ -1648,34 +1667,47 @@ function App() {
       try {
         dlog('[app] Creating XMTP client with stable nonce', stableNonce);
         const client = await Client.create(xmtpSigner, { env: xmtpEnv, appVersion: 'templ/0.1.0' });
-        // Persist the nonce we successfully used so future runs reuse the same installation
         try { localStorage.setItem(storageKey, String(stableNonce)); } catch {}
         return client;
       } catch (err) {
         const msg = String(err?.message || err);
-        // If the identity already has 10/10 installations, do not spin — surface a clear error.
-        // Re-running with the same nonce avoids creating new installations.
         if (msg.includes('already registered 10/10 installations')) {
-          throw new Error('XMTP installation limit reached for this wallet. Please revoke older installations for dev or switch account.');
+          const limitError = new Error('XMTP installation limit reached for this wallet. Please revoke older installations or switch wallets.');
+          limitError.name = 'XMTP_LIMIT';
+          throw limitError;
         }
         throw err;
       }
     }
-    // Reset conversation state so the new identity discovers and streams afresh
-    setGroup(null);
-    setGroupConnected(false);
+
     let client;
-    if (creatingXmtpPromiseRef.current) {
-      client = await creatingXmtpPromiseRef.current;
-    } else {
-      const p = (async () => {
-        const c = await createXmtpStable();
-        setXmtp(c);
-        return c;
-      })().finally(() => { creatingXmtpPromiseRef.current = null; });
-      creatingXmtpPromiseRef.current = p;
-      client = await p;
+    try {
+      if (creatingXmtpPromiseRef.current) {
+        client = await creatingXmtpPromiseRef.current;
+      } else {
+        const p = (async () => {
+          const c = await createXmtpStable();
+          setXmtp(c);
+          return c;
+        })().finally(() => { creatingXmtpPromiseRef.current = null; });
+        creatingXmtpPromiseRef.current = p;
+        client = await p;
+      }
+    } catch (err) {
+      creatingXmtpPromiseRef.current = null;
+      setXmtp(undefined);
+      setActiveInboxId('');
+      const message = String(err?.message || err);
+      if (err?.name === 'XMTP_LIMIT' || message.includes('installation limit')) {
+        setXmtpLimitWarning(message);
+        pushStatus('⚠️ XMTP limit reached. Use a different wallet or revoke old inboxes.');
+      } else {
+        pushStatus('❌ Failed to initialise XMTP: ' + message);
+      }
+      return;
     }
+    setActiveInboxId(client?.inboxId || '');
+    setXmtpLimitWarning(null);
     dlog('[app] XMTP client created', { env: xmtpEnv, inboxId: client.inboxId });
     // Kick off identity readiness check in background so deploy/join can await it later
     try {
@@ -2962,13 +2994,9 @@ function App() {
         ]);
         let countRaw = null;
         try {
-          countRaw = await contract.memberCount();
+          countRaw = await contract.getMemberCount();
         } catch {
-          try {
-            countRaw = await contract.totalPurchases();
-          } catch {
-            countRaw = null;
-          }
+          countRaw = null;
         }
         if (!cancelled) {
           setPaused(Boolean(p));
@@ -3246,13 +3274,10 @@ function App() {
             entryFee = BigInt(await contract.entryFee());
           }
           try {
-            const count = await contract.memberCount();
+            const count = await contract.getMemberCount();
             totalMembers = Number(count);
           } catch {
-            try {
-              const count = await contract.totalPurchases();
-              totalMembers = Number(count);
-            } catch {}
+            totalMembers = null;
           }
           try {
             maxMembersRaw = await contract.MAX_MEMBERS();
@@ -3321,6 +3346,40 @@ function App() {
     });
     return () => { cancelled = true; };
   }, [templList, signer, templSummaries, zeroAddressLower]);
+
+
+  async function disconnectWallet() {
+    try {
+      if (creatingXmtpPromiseRef.current) {
+        try {
+          const pendingClient = await creatingXmtpPromiseRef.current;
+          await pendingClient?.close?.();
+        } catch {}
+        creatingXmtpPromiseRef.current = null;
+      }
+      if (xmtp && typeof xmtp.close === 'function') {
+        await xmtp.close();
+      }
+    } catch {}
+    identityReadyRef.current = false;
+    identityReadyPromiseRef.current = null;
+    setXmtp(undefined);
+    setActiveInboxId('');
+    setXmtpLimitWarning(null);
+    setSigner(undefined);
+    setWalletAddress('');
+    resetChatState();
+    setPendingJoinAddress(null);
+    setPurchaseStatusNote(null);
+    setJoinStatusNote(null);
+    setProfileOpen(false);
+    setPendingJoinAddress(null);
+    setPurchaseStatusNote(null);
+    setJoinStatusNote(null);
+    setProfileOpen(false);
+    pushStatus('👋 Wallet disconnected');
+  }
+
 
   async function handleSend() {
     if (!messageInput) return;
@@ -3682,15 +3741,18 @@ function App() {
       {/* Header / Nav */}
       <div className="w-full border-b border-black/10">
         <div className="max-w-screen-md mx-auto px-4 py-2 flex items-center justify-between">
-          <div className="flex gap-2">
-            <button className="px-3 py-1 rounded border border-black/20" onClick={() => navigate('/templs')}>List</button>
-            <button className="px-3 py-1 rounded border border-black/20" onClick={() => navigate('/create')}>Create</button>
-          </div>
+          <div className="text-lg font-semibold text-black/80">Templ</div>
           <div className="flex items-center gap-2">
             {walletAddress && (
-              <button className="px-3 py-1 rounded border border-black/20" onClick={() => setProfileOpen(true)}>Profile</button>
+              <>
+                <span className="hidden sm:inline text-xs font-mono text-black/70">{shorten(walletAddress)}</span>
+                <button className="px-3 py-1 rounded border border-black/20" onClick={() => setProfileOpen(true)}>Profile</button>
+                <button className="px-3 py-1 rounded border border-black/20" onClick={disconnectWallet}>Disconnect</button>
+              </>
             )}
-            <button className="px-3 py-1 rounded bg-primary text-black font-semibold" onClick={connectWallet}>Connect Wallet</button>
+            {!walletAddress && (
+              <button className="px-3 py-1 rounded bg-primary text-black font-semibold" onClick={connectWallet}>Connect Wallet</button>
+            )}
           </div>
         </div>
       </div>
@@ -4973,6 +5035,23 @@ function App() {
               <button className="modal__close" onClick={() => setProfileOpen(false)}>×</button>
             </div>
             <div className="modal__body">
+              <div className="mb-3 border border-black/10 rounded px-3 py-2 text-xs text-black/70">
+                <div className="font-semibold text-black/80">XMTP Status</div>
+                <div className="mt-1">
+                  {xmtpLimitWarning ? (
+                    <span className="text-red-600">{xmtpLimitWarning}</span>
+                  ) : xmtp ? (
+                    <span>
+                      Connected{activeInboxId ? <span> • Inbox {shorten(activeInboxId)}</span> : null}
+                    </span>
+                  ) : (
+                    <span>Not connected</span>
+                  )}
+                </div>
+                <div className="mt-1 text-black/60">
+                  XMTP wallets can maintain up to 10 active inbox installations. If you reach the limit, revoke an older installation or switch wallets before creating new templ chats.
+                </div>
+              </div>
               <div className="mb-2 text-sm text-black/70">Set a display name and an optional avatar URL. This will be reused across all Templs. We’ll also broadcast it to the current group so others can see it.</div>
               <input className="w-full border border-black/20 rounded px-3 py-2 mb-2" placeholder="Display name" value={profileName} onChange={(e) => setProfileName(e.target.value)} />
               <input className="w-full border border-black/20 rounded px-3 py-2" placeholder="Avatar URL (optional)" value={profileAvatar} onChange={(e) => setProfileAvatar(e.target.value)} />
