@@ -376,6 +376,53 @@ function extractKeyPackageStatus(statuses, installationId) {
   return null;
 }
 
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, typeof ms === 'number' && ms > 0 ? ms : 0));
+}
+
+let activePersistenceClear = null;
+async function clearXmtpPersistence(tag) {
+  if (typeof navigator === 'undefined' || !navigator?.storage?.getDirectory) {
+    return false;
+  }
+  const runner = (async () => {
+    let cleared = false;
+    try {
+      const root = await navigator.storage.getDirectory();
+      if (!root || typeof root.entries !== 'function') return false;
+      for await (const [name, handle] of root.entries()) {
+        if (!name || typeof name !== 'string') continue;
+        if (!name.startsWith('xmtp-')) continue;
+        try {
+          if (handle?.kind === 'directory') {
+            await root.removeEntry(name, { recursive: true });
+          } else {
+            await root.removeEntry(name);
+          }
+          cleared = true;
+        } catch (err) {
+          dlog('[app] Failed to remove XMTP persistence entry', { name, message: err?.message || err });
+        }
+      }
+      if (cleared) {
+        dlog('[app] Cleared XMTP persistence', tag ? { tag } : undefined);
+      }
+    } catch (err) {
+      dlog('[app] clearXmtpPersistence error', err?.message || err);
+    }
+    return cleared;
+  })();
+  try {
+    if (activePersistenceClear) {
+      try { await activePersistenceClear; } catch {}
+    }
+    activePersistenceClear = runner;
+    return await activePersistenceClear;
+  } finally {
+    activePersistenceClear = null;
+  }
+}
+
 // Curve configuration constants
 const CURVE_STYLE_INDEX = {
   static: 0,
@@ -2152,6 +2199,7 @@ function App() {
 
     async function createOrResumeXmtp() {
       let installationSnapshot = null;
+      let accessHandleErrorCount = 0;
       if (cache?.inboxId) {
         try {
           const pruneResult = await pruneExcessInstallations({
@@ -2204,10 +2252,20 @@ function App() {
         for (const nonce of candidateNonces) {
           try {
             dlog('[app] Attempting XMTP resume', { nonce });
-            return await createClientWithNonce(nonce, true);
+            const resumedClient = await createClientWithNonce(nonce, true);
+            accessHandleErrorCount = 0;
+            return resumedClient;
           } catch (err) {
             const msg = String(err?.message || err);
-            if (isAccessHandleError(err)) continue;
+            if (isAccessHandleError(err)) {
+              accessHandleErrorCount += 1;
+              dlog('[app] XMTP resume encountered AccessHandle error', { nonce, attempt: accessHandleErrorCount, message: msg });
+              if (accessHandleErrorCount >= 2) {
+                await clearXmtpPersistence(`resume-access-handle-${nonce}`);
+              }
+              await delay(accessHandleErrorCount >= 2 ? 450 : 180);
+              continue;
+            }
             if (msg.includes('already registered 10/10 installations')) {
               limitEncountered = true;
               continue;
@@ -2240,13 +2298,21 @@ function App() {
           hadCachedInbox,
           fallbackNonce
         });
+        await clearXmtpPersistence('fallback-reinstall');
       }
       try {
-        return await createClientWithNonce(fallbackNonce, false);
+        const freshClient = await createClientWithNonce(fallbackNonce, false);
+        accessHandleErrorCount = 0;
+        return freshClient;
       } catch (err) {
         const msg = String(err?.message || err);
         if (isAccessHandleError(err)) {
           dlog('[app] XMTP fallback retry after access handle error', { fallbackNonce });
+          accessHandleErrorCount += 1;
+          if (accessHandleErrorCount >= 2) {
+            await clearXmtpPersistence(`fallback-access-handle-${fallbackNonce}`);
+          }
+          await delay(accessHandleErrorCount >= 2 ? 450 : 180);
           return await createClientWithNonce(fallbackNonce, false);
         }
         if (err?.name === 'XMTP_REINSTALL') {
@@ -2254,6 +2320,8 @@ function App() {
             fallbackNonce,
             reinstallReason: err?.message || ''
           });
+          await clearXmtpPersistence('fallback-reinstall');
+          await delay(180);
           return await createClientWithNonce(fallbackNonce, false);
         }
         if (msg.includes('already registered 10/10 installations')) {
