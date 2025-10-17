@@ -871,10 +871,7 @@ const formatPreviewRangeLabel = (preview) => {
 
 function App() {
   const { path, query, navigate } = useAppLocation();
-
-  if (path === '/landing') {
-    return <Landing onEnterApp={() => navigate('/create')} />;
-  }
+  const showLanding = path === '/landing';
 
   const miniAppHost = useMiniAppHost();
   const isMiniApp = miniAppHost.isMiniApp;
@@ -1202,12 +1199,28 @@ function App() {
       pushStatus('⚠️ Unable to open share composer');
       alert(err?.message || 'Unable to open Warpcast composer');
     }
-  }, [canComposeCast, inviteUrl, miniAppSdk, pushStatus, templAddress]);
+  }, [canComposeCast, copyToClipboard, inviteUrl, miniAppSdk, pushStatus, templAddress]);
   const chatStorageKey = useMemo(() => {
     if (normalizedGroupId) return `group:${normalizedGroupId}`;
     if (normalizedTemplAddress) return `templ:${normalizedTemplAddress}`;
     return null;
   }, [normalizedGroupId, normalizedTemplAddress]);
+  const copyToClipboard = useCallback(async (text) => {
+    try {
+      await navigator.clipboard?.writeText(text);
+      pushStatus('📋 Copied to clipboard');
+    } catch {
+      try {
+        const el = document.createElement('textarea');
+        el.value = text;
+        document.body.appendChild(el);
+        el.select();
+        document.execCommand('copy');
+        document.body.removeChild(el);
+        pushStatus('📋 Copied to clipboard');
+      } catch {}
+    }
+  }, [pushStatus]);
   const resetChatState = useCallback(() => {
     messageSeenRef.current = new Set();
     setMessages([]);
@@ -2210,9 +2223,11 @@ function App() {
       return;
     }
     providerCacheRef.current = { source, provider };
+    let nextSigner;
+    let address;
     try {
-      const nextSigner = await provider.getSigner();
-      const address = await nextSigner.getAddress();
+      nextSigner = await provider.getSigner();
+      address = await nextSigner.getAddress();
       setSigner(nextSigner);
       setWalletAddress(address);
       setXmtpLimitWarning(null);
@@ -4544,21 +4559,9 @@ function App() {
       return addr;
     }
   }
-  async function copyToClipboard(text) {
-    try {
-      await navigator.clipboard?.writeText(text);
-      pushStatus('📋 Copied to clipboard');
-    } catch {
-      try {
-        const el = document.createElement('textarea');
-        el.value = text;
-        document.body.appendChild(el);
-        el.select();
-        document.execCommand('copy');
-        document.body.removeChild(el);
-        pushStatus('📋 Copied to clipboard');
-      } catch {}
-    }
+
+  if (showLanding) {
+    return <Landing onEnterApp={() => navigate('/create')} />;
   }
 
   return (

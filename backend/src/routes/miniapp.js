@@ -43,13 +43,16 @@ export default function miniappRouter(context = {}) {
           }
           break;
         }
-        case 'miniapp_removed':
-        case 'notifications_disabled': {
-          if (event.event === 'miniapp_removed' && event?.notificationDetails?.token) {
-            await deleteMiniAppNotification(event.notificationDetails.token);
-          } else {
-            await deleteMiniAppNotificationsForFid(fid);
+        case 'miniapp_removed': {
+          const details = 'notificationDetails' in event ? /** @type {any} */ (event).notificationDetails : null;
+          if (details?.token) {
+            await deleteMiniAppNotification(details.token);
           }
+          await deleteMiniAppNotificationsForFid(fid);
+          break;
+        }
+        case 'notifications_disabled': {
+          await deleteMiniAppNotificationsForFid(fid);
           break;
         }
         default:

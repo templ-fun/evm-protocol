@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+/* eslint-env node */
+import process from 'node:process';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';

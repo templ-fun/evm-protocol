@@ -29,8 +29,8 @@ export function useMiniAppHost() {
       }
 
       try {
-        const module = await import('@farcaster/miniapp-sdk');
-        const sdk = module.default ?? module.sdk ?? module;
+        const imported = await import('@farcaster/miniapp-sdk');
+        const sdk = /** @type {import('@farcaster/miniapp-sdk').default} */ (imported.default ?? imported.sdk ?? imported);
         if (!sdk || typeof sdk.isInMiniApp !== 'function') {
           if (!cancelled) {
             setState({
