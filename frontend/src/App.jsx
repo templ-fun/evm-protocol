@@ -1678,9 +1678,10 @@ const createWithRetry = useCallback(async (operation, maxRetries = 3, operationN
   let lastError;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    let controller;
     try {
       // Create a new abort controller for each attempt
-      const controller = new AbortController();
+      controller = new AbortController();
       abortControllerRef.current = controller;
 
       const result = await createWithTimeout(
