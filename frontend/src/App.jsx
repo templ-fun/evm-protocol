@@ -2598,6 +2598,16 @@ const [sessionAttemptedNonces, setSessionAttemptedNonces] = useState(new Set());
         const initPromise = (async () => {
           let installationSnapshot = null;
           let accessHandleErrorCount = 0;
+      // Enhanced debugging for XMTP installation flow
+      dlog('[app] XMTP installation debugging', {
+        address,
+        hasCache: !!cache,
+        cachedInstallationId: cachedInstallationId || 'none',
+        cachedInboxId: cache?.inboxId || 'none',
+        sessionAttemptedNonces: Array.from(sessionAttemptedNonces),
+        xmtpEnv
+      });
+
       if (cache?.inboxId) {
         try {
           const pruneResult = await pruneExcessInstallations({
@@ -2675,6 +2685,8 @@ const [sessionAttemptedNonces, setSessionAttemptedNonces] = useState(new Set());
           } catch (err) {
             retryCount++;
             const msg = String(err?.message || err);
+            dlog('[app] XMTP resume attempt failed', { nonce, retryCount, maxRetryAttempts, error: msg, errorName: err?.name });
+
             if (isAccessHandleError(err)) {
               accessHandleErrorCount += 1;
               dlog('[app] XMTP resume encountered AccessHandle error', { nonce, attempt: accessHandleErrorCount, message: msg });
@@ -2719,11 +2731,14 @@ const [sessionAttemptedNonces, setSessionAttemptedNonces] = useState(new Set());
         await clearXmtpPersistence('fallback-reinstall');
       }
       try {
+        dlog('[app] Attempting fresh XMTP installation', { fallbackNonce, requireFreshInstallation, reinstallReason });
         const freshClient = await createClientWithNonce(fallbackNonce, false);
         accessHandleErrorCount = 0;
+        dlog('[app] Fresh XMTP installation succeeded', { fallbackNonce, inboxId: freshClient?.inboxId, installationId: freshClient?.installationId });
         return freshClient;
       } catch (err) {
         const msg = String(err?.message || err);
+        dlog('[app] Fresh XMTP installation failed', { fallbackNonce, error: msg, errorName: err?.name });
         if (isAccessHandleError(err)) {
           dlog('[app] XMTP fallback retry after access handle error', { fallbackNonce });
           accessHandleErrorCount += 1;
