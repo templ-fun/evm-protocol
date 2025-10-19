@@ -5281,8 +5281,8 @@ function App() {
             {/* Always-on brief stats */}
             {templAddress && (
               <div className="text-xs text-black/70 px-1 py-1 flex items-center gap-2">
-                <span>Treasurey: {treasuryInfo?.treasury || '0'}</span>
-                <span>· Burned: {treasuryInfo?.totalBurnedAmount || '0'}</span>
+                <span>Treasury: {treasuryInfo?.treasury || '0'}</span>
+                <span>· Burn: {currentBurnPercent ?? '…'}%</span>
                 <span>· Claimable: <span data-testid="claimable-amount">{claimable || '0'}</span></span>
                 {hasExternalClaim && (
                   <span>· External tokens: {externalRewards.filter((r) => r.claimable && r.claimable !== '0').length}</span>
@@ -5309,7 +5309,7 @@ function App() {
                   {templAddress && (
                     <>
                       <div className="text-sm">Treasury: {treasuryInfo?.treasury || '0'}</div>
-                      <div className="text-sm">Total Burned: {treasuryInfo?.totalBurnedAmount || '0'}</div>
+                      <div className="text-sm">Burn percent: {currentBurnPercent ?? '…'}%</div>
                       <div className="text-sm flex items-center gap-2">
                         <span>Claimable (you): <span data-testid="claimable-amount-info">{claimable || '0'}</span></span>
                       </div>

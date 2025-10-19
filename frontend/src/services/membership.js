@@ -453,13 +453,11 @@ export async function sendMessage({ group, content }) {
  */
 export async function getTreasuryInfo({ ethers, providerOrSigner, templAddress, templArtifact }) {
   const contract = new ethers.Contract(templAddress, templArtifact.abi, providerOrSigner);
-  const [treasury, memberPool, totalReceived, totalBurnedAmount, totalProtocolFees, protocolAddress] = await contract.getTreasuryInfo();
+  // Contract getTreasuryInfo returns: (treasury, memberPool, protocolAddress)
+  const [treasury, memberPool, protocolAddress] = await contract.getTreasuryInfo();
   return {
-    treasury: BigInt(treasury).toString(),
-    memberPool: BigInt(memberPool).toString(),
-    totalReceived: BigInt(totalReceived).toString(),
-    totalBurnedAmount: BigInt(totalBurnedAmount).toString(),
-    totalProtocolFees: BigInt(totalProtocolFees).toString(),
+    treasury: BigInt(treasury ?? 0n).toString(),
+    memberPool: BigInt(memberPool ?? 0n).toString(),
     protocolAddress
   };
 }
