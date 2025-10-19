@@ -29,6 +29,7 @@ import './App.css';
 import { BACKEND_URL, FACTORY_CONFIG } from './config.js';
 import { useAppLocation } from './hooks/useAppLocation.js';
 import { useStatusLog } from './hooks/useStatusLog.js';
+import XMTPDebug from './XMTPDebug.jsx';
 
 const DEBUG_ENABLED = (() => {
   try {
@@ -4449,8 +4450,6 @@ function App() {
             {walletAddress && (
               <>
                 <span className="hidden sm:inline text-xs font-mono text-black/70">{shorten(walletAddress)}</span>
-                <button className="px-3 py-1 rounded border border-black/20 text-xs" onClick={() => navigate('/templs')}>Templs</button>
-                <button className="px-3 py-1 rounded border border-black/20 text-xs" onClick={() => navigate('/xmtp-debug')}>XMTP Debug</button>
                 <button className="px-3 py-1 rounded border border-black/20" onClick={() => setProfileOpen(true)}>Profile</button>
                 <button className="px-3 py-1 rounded border border-black/20" onClick={disconnectWallet}>Disconnect</button>
               </>

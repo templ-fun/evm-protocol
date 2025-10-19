@@ -1,6 +1,6 @@
 // @ts-check
 import { useState, useEffect } from 'react';
-import { getInboxIdForIdentifier } from '@xmtp/browser-sdk';
+import { Client } from '@xmtp/browser-sdk';
 
 function XMTPDebug() {
   const [debugInfo, setDebugInfo] = useState({});
@@ -20,20 +20,21 @@ function XMTPDebug() {
           xmtpEnv: import.meta.env.VITE_XMTP_ENV || 'not set'
         };
 
-        // Try to get user's inbox ID
-        if (window.walletAddress) {
+        // Try to get user's inbox ID using browser SDK
+        if (window.walletAddress && window.xmtpClient) {
           try {
-            const identifier = {
-              identifier: window.walletAddress,
-              identifierKind: 0 // 0 = Ethereum
-            };
-            const inboxId = await getInboxIdForIdentifier(identifier);
-            info.userInboxId = inboxId || 'Not found';
+            // In browser SDK, we can get inbox ID from the client
+            const inboxId = window.xmtpClient.inboxId;
+            info.userInboxId = inboxId || 'Not available';
             info.inboxIdTimestamp = new Date().toISOString();
+            info.inboxIdSource = 'client';
           } catch (err) {
             info.userInboxIdError = err.message;
             info.inboxIdTimestamp = new Date().toISOString();
           }
+        } else if (window.walletAddress && !window.xmtpClient) {
+          info.userInboxIdError = 'XMTP client not initialized';
+          info.inboxIdTimestamp = new Date().toISOString();
         }
 
         setDebugInfo(info);
@@ -84,17 +85,18 @@ function XMTPDebug() {
 
       {debugInfo.userInboxId && (
         <div className="border border-black/20 rounded p-3 space-y-2">
-          <h3 className="text-lg font-medium mb-2">User Inbox Resolution</h3>
+          <h3 className="text-lg font-medium mb-2">User Inbox Information</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
             <div><strong>Your Inbox ID:</strong> <code className="text-xs">{debugInfo.userInboxId}</code></div>
+            <div><strong>Source:</strong> {debugInfo.inboxIdSource || 'Unknown'}</div>
             <div><strong>Query Time:</strong> {debugInfo.inboxIdTimestamp}</div>
           </div>
           <div className="mt-2 text-xs">
             <p>This is your XMTP inbox ID that should be used when you're listed as a priest in a templ.</p>
-            {debugInfo.userInboxId !== 'Not found' ? (
-              <p className="text-green-600">✅ Your wallet address can be resolved to an XMTP inbox ID!</p>
+            {debugInfo.inboxIdSource === 'client' ? (
+              <p className="text-green-600">✅ XMTP client initialized and inbox ID available!</p>
             ) : (
-              <p className="text-red-600">❌ Your wallet address cannot be resolved to an XMTP inbox ID. You may need to initialize XMTP first.</p>
+              <p className="text-yellow-600">⚠️ XMTP inbox ID may not be available. Initialize XMTP to ensure proper functionality.</p>
             )}
           </div>
         </div>
@@ -126,10 +128,11 @@ function XMTPDebug() {
       <div className="space-y-2">
         <h3 className="text-lg font-medium">Next Steps</h3>
         <div className="text-sm text-black/70 space-y-1">
-          <p>• If your <strong>User Inbox ID</strong> shows "Not found", you need to initialize XMTP with your wallet first</p>
+          <p>• If <strong>XMTP Client</strong> shows "Not available", you need to initialize XMTP with your wallet first</p>
           <p>• Compare your <strong>Active Inbox ID</strong> with <strong>Your Inbox ID</strong> - they should match when using this wallet</p>
           <p>• Make sure your XMTP environment matches the backend (backend is using: <code>local</code>)</p>
           <p>• Priest address needs to be resolved to the same inbox ID as shown here for automatic addition to work</p>
+          <p>• Join any templ or chat to initialize your XMTP client if needed</p>
         </div>
       </div>
     </div>
