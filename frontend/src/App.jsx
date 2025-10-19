@@ -1586,7 +1586,7 @@ function App() {
     }
   })();
   const joinedTemplSet = useMemo(() => new Set(joinedTempls), [joinedTempls]);
-  const alreadyMember = normalizedTemplAddress ? joinedTemplSet.has(normalizedTemplAddress) : false;
+  const alreadyMember = normalizedTemplAddress ? (joinedTemplSet.has(normalizedTemplAddress) || isPriest) : false;
   const showApprovalPrompt = needsTokenApproval && !alreadyMember;
   useEffect(() => {
     if (!walletAddress || !walletAddressLower || !signer) return;
@@ -2764,13 +2764,11 @@ function App() {
       updateTemplAddress(result.contractAddress);
       setGroup(result.group);
       setGroupId(result.groupId);
+      setGroupConnected(Boolean(result.group));
       pushStatus('✅ Templ deployed');
       if (result.groupId) pushStatus('✅ Group created');
       if (result.contractAddress) {
-        const lower = String(result.contractAddress).toLowerCase();
-        setPendingJoinAddress(lower);
         setJoinSteps({ purchase: 'idle', join: 'idle', error: null });
-        pushStatus('ℹ️ Next step: Purchase & join to activate chat');
       }
       try {
         localStorage.setItem('templ:lastAddress', result.contractAddress);
@@ -3126,13 +3124,16 @@ function App() {
       try { gid = String(localStorage.getItem('templ:lastGroupId') || ''); } catch {}
       if (!gid) return;
       try {
+        console.info('[chat] passive discovery: waitForConversation', { gid });
         const found = await waitForConversation({ xmtp, groupId: gid, retries: 20, delayMs: 500 });
         if (found) {
           setGroup(found);
           setGroupConnected(true);
           pushStatus('✅ Group connected');
         }
-      } catch {}
+      } catch (e) {
+        console.warn('[chat] passive discovery failed', e?.message || e);
+      }
     })();
   }, [pathIsChat, xmtp, group, groupConnected, pushStatus]);
 
@@ -3468,6 +3469,7 @@ function App() {
       while (!cancelled && attempts < maxAttempts && !group) {
         attempts++;
         dlog('[app] finding group', { groupId, wanted, attempt: attempts, inboxId: xmtp?.inboxId });
+        console.info('[chat] finding group', { wanted, attempt: attempts });
         try {
           // Fetch new conversations (welcome messages) from the network
           if (import.meta.env.VITE_E2E_DEBUG === '1') {
@@ -3491,6 +3493,7 @@ function App() {
           }
           if (maybe) {
             dlog('[app] found group by id');
+            console.info('[chat] found group by id');
             setGroup(maybe);
             pushStatus('✅ Group discovered');
             setGroupConnected(true);
@@ -3503,9 +3506,11 @@ function App() {
             conversationType: XMTP_GROUP_CONVERSATION_TYPE
           }) || [];
           dlog('[app] list size=', list?.length, 'firstIds=', (list||[]).slice(0,3).map(c=>c.id));
+          console.info('[chat] list conversations size', list?.length);
           const found = list.find((c) => String(c.id) === wanted || ('0x'+String(c.id))===wanted || String(c.id) === wanted.replace(/^0x/i, ''));
           if (found) {
             dlog('[app] found group by list');
+            console.info('[chat] found group by list');
             setGroup(found);
             pushStatus('✅ Group discovered');
             setGroupConnected(true);
