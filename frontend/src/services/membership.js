@@ -73,6 +73,42 @@ export async function getTokenAllowance({ ethers, providerOrSigner, owner, token
   return BigInt(current);
 }
 
+function resolveXmtpEnvForBrowser() {
+  try {
+    const forced = import.meta.env?.VITE_XMTP_ENV?.trim();
+    if (forced) return forced;
+    if (typeof window !== 'undefined') {
+      return (['localhost', '127.0.0.1'].includes(window.location?.hostname) ? 'dev' : 'production');
+    }
+  } catch {/* ignore */}
+  return 'production';
+}
+
+async function ensureInboxReady({ xmtp, retries = 90, delayMs = 1000 }) {
+  if (!xmtp?.inboxId) return true;
+  const inboxId = String(xmtp.inboxId).replace(/^0x/i, '');
+  const env = resolveXmtpEnvForBrowser();
+  let Client;
+  try {
+    // Dynamic import to avoid test/bundling surprises
+    ({ Client } = await import('@xmtp/browser-sdk'));
+  } catch {/* ignore */}
+  for (let i = 0; i < retries; i++) {
+    try { await xmtp?.preferences?.inboxState?.(true); } catch {/* ignore */}
+    try { await xmtp?.conversations?.sync?.(); } catch {/* ignore */}
+    if (Client?.inboxStateFromInboxIds) {
+      try {
+        const states = await Client.inboxStateFromInboxIds([inboxId], env);
+        if (Array.isArray(states) && states.length > 0) {
+          return true;
+        }
+      } catch {/* ignore */}
+    }
+    await new Promise((r) => setTimeout(r, delayMs));
+  }
+  return false;
+}
+
 async function ensureTokenAllowance({ ethers, signer, owner, token, spender, amount, txOptions }) {
   const zeroAddress = (typeof ethers?.ZeroAddress === 'string'
     ? ethers.ZeroAddress
@@ -348,6 +384,14 @@ export async function purchaseAndJoin({
   const signature = await signer.signTypedData(joinTyped.domain, joinTyped.types, joinTyped.message);
   onProgress?.('join:signature:complete');
 
+  // Ensure the user's XMTP inbox is visible on the network before submitting join
+  try {
+    const ready = await ensureInboxReady({ xmtp });
+    if (!ready) {
+      dlog('purchaseAndJoin: inbox not observed on network after wait');
+    }
+  } catch {/* ignore */}
+
   const joinPayload = {
     contractAddress: templAddress,
     memberAddress: normalizedMemberAddress,
@@ -433,6 +477,82 @@ export async function purchaseAndJoin({
     dlog('purchaseAndJoin: completed join process successfully');
   } catch {}
   onProgress?.('join:submission:complete');
+  const result = await finalizeJoin({ xmtp, groupId });
+  onProgress?.('join:complete');
+  return result;
+}
+
+/**
+ * Request a chat invite only (assumes access already purchased on-chain).
+ * Performs typed-data signing and backend /join call, then waits for the group.
+ */
+export async function requestChatInvite({
+  ethers,
+  xmtp,
+  signer,
+  walletAddress,
+  templAddress,
+  templArtifact,
+  backendUrl = BACKEND_URL,
+  onProgress
+}) {
+  if (!ethers || !xmtp || !signer || !templAddress || !templArtifact) {
+    throw new Error('Missing parameters for requestChatInvite');
+  }
+  // Ensure inbox is visible on the network to reduce 503s
+  try { await ensureInboxReady({ xmtp }); } catch {/* ignore */}
+
+  let memberAddress = walletAddress;
+  if (!memberAddress || typeof memberAddress !== 'string') {
+    try { memberAddress = await signer.getAddress(); } catch {}
+  }
+  if (!memberAddress) {
+    throw new Error('Join failed: missing member address');
+  }
+  const network = await signer.provider?.getNetwork?.();
+  const chainId = Number(network?.chainId || 1337);
+  const joinTyped = buildJoinTypedData({ chainId, contractAddress: templAddress.toLowerCase() });
+  onProgress?.('join:signature:start');
+  const signature = await signer.signTypedData(joinTyped.domain, joinTyped.types, joinTyped.message);
+  onProgress?.('join:signature:complete');
+
+  const joinPayload = {
+    contractAddress: templAddress,
+    memberAddress: memberAddress,
+    inboxId: xmtp?.inboxId?.replace?.(/^0x/i, '') || undefined,
+    signature,
+    chainId,
+    nonce: joinTyped.message.nonce,
+    issuedAt: joinTyped.message.issuedAt,
+    expiry: joinTyped.message.expiry
+  };
+
+  onProgress?.('join:submission:start');
+  let res = await postJson(`${backendUrl}/join`, joinPayload);
+  if (res.status === 503) {
+    onProgress?.('join:submission:waiting');
+    // Retry loop similar to purchaseAndJoin
+    const tries = 90;
+    const delay = 1000;
+    for (let i = 0; i < tries; i++) {
+      try { await xmtp?.preferences?.inboxState?.(true); } catch {}
+      try { await xmtp?.conversations?.sync?.(); } catch {}
+      await new Promise((r) => setTimeout(r, delay));
+      onProgress?.('join:submission:retry');
+      res = await postJson(`${backendUrl}/join`, joinPayload);
+      if (res.ok) break;
+    }
+  }
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`Join failed: ${res.status} ${res.statusText} ${body}`.trim());
+  }
+  onProgress?.('join:submission:complete');
+  const data = await res.json();
+  if (!data || typeof data.groupId !== 'string' || data.groupId.length === 0) {
+    throw new Error('Invalid /join response: missing groupId');
+  }
+  const groupId = String(data.groupId);
   const result = await finalizeJoin({ xmtp, groupId });
   onProgress?.('join:complete');
   return result;

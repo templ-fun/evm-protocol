@@ -198,6 +198,32 @@ export async function deployTempl({
     dlog('XMTP not ready at deploy; backend will resolve inboxId from network');
   }
 
+  // If the XMTP client exists, try to ensure the inbox is visible on the network
+  if (xmtp?.inboxId) {
+    try {
+      const { Client } = await import('@xmtp/browser-sdk');
+      const id = String(xmtp.inboxId).replace(/^0x/i, '');
+      const env = (() => {
+        try {
+          const forced = import.meta?.env?.VITE_XMTP_ENV?.trim();
+          if (forced) return forced;
+          return (typeof window !== 'undefined' && ['localhost','127.0.0.1'].includes(window.location.hostname)) ? 'dev' : 'production';
+        } catch { return 'production'; }
+      })();
+      let ok = false;
+      for (let i = 0; i < 30; i++) {
+        try { await xmtp?.preferences?.inboxState?.(true); } catch {}
+        try { await xmtp?.conversations?.sync?.(); } catch {}
+        try {
+          const states = await Client.inboxStateFromInboxIds([id], env);
+          if (Array.isArray(states) && states.length > 0) { ok = true; break; }
+        } catch {}
+        await new Promise(r => setTimeout(r, 500));
+      }
+      dlog('deployTempl: inbox visibility preflight', { ok, env });
+    } catch {/* ignore */}
+  }
+
   try { console.log('[deployTempl] calling /templs'); } catch {}
   const registerPayload = {
     contractAddress,
@@ -340,4 +366,9 @@ export async function registerTemplBackend({ ethers, signer, walletAddress, temp
     throw new Error(`Templ registration failed: ${res.status} ${res.statusText} ${body}`.trim());
   }
   return res.ok;
+}
+
+// Allow re-running templ registration signature to complete chat setup later.
+export async function retryTemplRegistration({ ethers, signer, walletAddress, templAddress, backendUrl = BACKEND_URL }) {
+  return await registerTemplBackend({ ethers, signer, walletAddress, templAddress, backendUrl });
 }

@@ -18,6 +18,7 @@ try {
 
 import templsRouter from './routes/templs.js';
 import joinRouter from './routes/join.js';
+import debugRouter from './routes/debug.js';
 
 import { logger } from './logger.js';
 import { createTelegramNotifier } from './telegram.js';
@@ -27,6 +28,7 @@ import { createFactoryIndexer } from './services/factoryIndexer.js';
 import { registerTempl } from './services/registerTempl.js';
 
 import { createPersistence } from './persistence/index.js';
+import { resolveXmtpEnv } from './xmtp/options.js';
 
 /**
  * @typedef {{
@@ -1541,7 +1543,9 @@ export async function createApp(opts) {
               if (context.getInboxIdForIdentifier) {
                 try {
                   const priestIdentifier = { identifier: record.priest, identifierKind: 0 }; // 0 = Ethereum
-                  const priestInboxId = await context.getInboxIdForIdentifier(priestIdentifier);
+                  const envOpt = resolveXmtpEnv();
+                  const typedEnv = envOpt === 'production' ? 'production' : (envOpt === 'dev' ? 'dev' : 'local');
+                  const priestInboxId = await context.getInboxIdForIdentifier(priestIdentifier, typedEnv);
                   if (priestInboxId) {
                     initialMembers.push(priestInboxId);
                     logger.info({
@@ -1656,6 +1660,7 @@ export async function createApp(opts) {
   app.use(waitForRestoration);
   app.use(templsRouter(context));
   app.use(joinRouter(context));
+  app.use(debugRouter());
 
   app.close = async () => {
     try {

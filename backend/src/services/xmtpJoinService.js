@@ -309,22 +309,25 @@ async function addMemberToGroup({ group, inboxId, memberIdentifier, logger }) {
   }, 'Starting member addition to group');
 
   try {
-    if (typeof group.addMembers === 'function') {
-      logger.info({ method: 'addMembers', inboxId }, 'Attempting to add member using addMembers');
-      await group.addMembers([inboxId]);
-      logger?.info?.({ inboxId, method: 'addMembers' }, 'addMembers([inboxId]) succeeded');
-      return;
-    }
+    // Prefer explicit inboxId API if available
     if (typeof group.addMembersByInboxId === 'function') {
       logger.info({ method: 'addMembersByInboxId', inboxId }, 'Attempting to add member using addMembersByInboxId');
       await group.addMembersByInboxId([inboxId]);
       logger?.info?.({ inboxId, method: 'addMembersByInboxId' }, 'addMembersByInboxId([inboxId]) succeeded');
       return;
     }
+    // Fall back to identifier-based API
     if (typeof group.addMembersByIdentifiers === 'function') {
       logger.info({ method: 'addMembersByIdentifiers', member: memberIdentifier.identifier }, 'Attempting to add member using addMembersByIdentifiers');
       await group.addMembersByIdentifiers([memberIdentifier]);
       logger?.info?.({ member: memberIdentifier.identifier, method: 'addMembersByIdentifiers' }, 'addMembersByIdentifiers succeeded');
+      return;
+    }
+    // Legacy API: some SDKs expose addMembers(identifiers)
+    if (typeof group.addMembers === 'function') {
+      logger.info({ method: 'addMembers', member: memberIdentifier.identifier }, 'Attempting to add member using addMembers');
+      await group.addMembers([memberIdentifier]);
+      logger?.info?.({ member: memberIdentifier.identifier, method: 'addMembers' }, 'addMembers([identifier]) succeeded');
       return;
     }
 
@@ -511,7 +514,7 @@ export async function joinTemplWithXmtp(body, context) {
     groupId: group.id,
     groupMembersBefore: group.members?.length || 0
   }, 'Adding member to XMTP group');
-
+  try { if (typeof group?.sync === 'function') { await group.sync(); } } catch {/* ignore */}
   await addMemberToGroup({ group, inboxId, memberIdentifier, logger });
 
   logger.info({

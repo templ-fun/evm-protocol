@@ -11,21 +11,53 @@ function XMTPDebug() {
   const [activeInboxId, setActiveInboxId] = useState('');
   const [xmtpInstallations, setXmtpInstallations] = useState([]);
 
-  // Sync window properties to state
+  // Helper: find any cached XMTP info in localStorage
+  function findAnyXmtpCache() {
+    try {
+      if (typeof localStorage === 'undefined') return null;
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (!key) continue;
+        if (key.startsWith('xmtp:cache:')) {
+          try {
+            const address = key.slice('xmtp:cache:'.length);
+            const parsed = JSON.parse(localStorage.getItem(key) || '{}');
+            if (parsed && typeof parsed === 'object') {
+              return { address, cache: parsed };
+            }
+          } catch {/* ignore */}
+        }
+      }
+    } catch {/* ignore */}
+    return null;
+  }
+
+  // Sync window properties (and fallbacks) to state
   useEffect(() => {
     const interval = setInterval(() => {
-      if (window.walletAddress !== walletAddress) {
-        setWalletAddress(window.walletAddress || '');
-      }
-      if (window.xmtpClient !== xmtpClient) {
-        setXmtpClient(window.xmtpClient || null);
-      }
-      if (window.activeInboxId !== activeInboxId) {
-        setActiveInboxId(window.activeInboxId || '');
-      }
-      if (JSON.stringify(window.xmtpInstallations) !== JSON.stringify(xmtpInstallations)) {
-        setXmtpInstallations(window.xmtpInstallations || []);
-      }
+      try {
+        if (window.walletAddress !== walletAddress) {
+          setWalletAddress(window.walletAddress || '');
+        }
+      } catch {/* ignore */}
+      try {
+        const candidateClient = window.xmtpClient || window.__XMTP || null;
+        if (candidateClient !== xmtpClient) {
+          setXmtpClient(candidateClient);
+        }
+      } catch {/* ignore */}
+      try {
+        const candidateInbox = window.activeInboxId || (xmtpClient?.inboxId ?? '') || '';
+        if (candidateInbox !== activeInboxId) {
+          setActiveInboxId(candidateInbox || '');
+        }
+      } catch {/* ignore */}
+      try {
+        const candidateInstalls = window.xmtpInstallations || [];
+        if (JSON.stringify(candidateInstalls) !== JSON.stringify(xmtpInstallations)) {
+          setXmtpInstallations(candidateInstalls);
+        }
+      } catch {/* ignore */}
     }, 100);
 
     return () => clearInterval(interval);
@@ -45,7 +77,7 @@ function XMTPDebug() {
           xmtpEnv: import.meta.env.VITE_XMTP_ENV || 'not set'
         };
 
-        // Try to get user's inbox ID using browser SDK
+        // Try to get user's inbox ID using browser SDK (or cache fallback)
         if (walletAddress && xmtpClient) {
           try {
             // In browser SDK, we can get inbox ID from the client
@@ -58,8 +90,34 @@ function XMTPDebug() {
             info.inboxIdTimestamp = new Date().toISOString();
           }
         } else if (walletAddress && !xmtpClient) {
-          info.userInboxIdError = 'XMTP client not initialized';
-          info.inboxIdTimestamp = new Date().toISOString();
+          // Fallback to cache: xmtp:cache:<address>
+          try {
+            const cached = findAnyXmtpCache();
+            const cachedInbox = cached?.cache?.inboxId || '';
+            if (cachedInbox) {
+              info.userInboxId = cachedInbox;
+              info.inboxIdSource = 'cache';
+              info.inboxIdTimestamp = new Date().toISOString();
+              // Try to fetch installation count via inboxStateFromInboxIds
+              try {
+                const env = (() => {
+                  const forced = import.meta.env.VITE_XMTP_ENV || '';
+                  if (forced) return forced;
+                  try { return ['localhost','127.0.0.1'].includes(window.location.hostname) ? 'dev' : 'production'; } catch { return 'production'; }
+                })();
+                const states = await Client.inboxStateFromInboxIds([cachedInbox], env);
+                const state = Array.isArray(states) ? states[0] : null;
+                const list = Array.isArray(state?.installations) ? state.installations : [];
+                info.installationsCount = list.length;
+              } catch {/* ignore */}
+            } else {
+              info.userInboxIdError = 'XMTP client not initialized';
+              info.inboxIdTimestamp = new Date().toISOString();
+            }
+          } catch {
+            info.userInboxIdError = 'XMTP client not initialized';
+            info.inboxIdTimestamp = new Date().toISOString();
+          }
         }
 
         setDebugInfo(info);

@@ -6,6 +6,7 @@ import templArtifact from './contracts/TEMPL.json';
 import templFactoryArtifact from './contracts/TemplFactory.json';
 import {
   deployTempl,
+  purchaseAccess,
   purchaseAndJoin,
   sendMessage,
   proposeVote,
@@ -24,6 +25,8 @@ import {
   getClaimable,
   getExternalRewards
 } from './flows.js';
+import { requestChatInvite } from './services/membership.js';
+import { retryTemplRegistration } from './services/deployment.js';
 import { syncXMTP, waitForConversation, XMTP_CONSENT_STATES, XMTP_CONVERSATION_TYPES } from '@shared/xmtp.js';
 import './App.css';
 import { BACKEND_URL, FACTORY_CONFIG } from './config.js';
@@ -2838,7 +2841,7 @@ function App() {
       refAddress: templAddressRef.current,
       stateAddress: templAddress
     });
-    if (!signer || !xmtp) return;
+    if (!signer) return;
     const requiresApproval = joinMembershipInfo.token && !joinMembershipInfo.isNative;
     if (requiresApproval && approvalStage !== 'approved') {
       setJoinStatusNote('Awaiting token approval');
@@ -2859,6 +2862,22 @@ function App() {
       joinRetryCountRef.current = 0;
       setPurchaseStatusNote('Waiting for purchase transaction confirmation');
       setJoinStatusNote(null);
+      // If XMTP is not ready, perform on-chain purchase only and allow invite retry later
+      if (!xmtp) {
+        await purchaseAccess({
+          ethers,
+          signer,
+          walletAddress,
+          templAddress: trimmedAddress,
+          templArtifact,
+          autoApprove: false
+        });
+        setJoinSteps({ purchase: 'success', join: 'idle', error: null });
+        setPurchaseStatusNote('Access purchased');
+        setJoinStatusNote('Initialize XMTP and complete the invite when ready');
+        pushStatus('✅ Access purchased. Initialize XMTP to complete chat invite.');
+        return;
+      }
       // Ensure browser identity is registered before joining
       try {
         if (identityReadyPromiseRef.current) {
@@ -3017,6 +3036,53 @@ function App() {
       console.error('Join failed', err);
     }
   }, [signer, xmtp, templAddress, updateTemplAddress, walletAddress, pushStatus, navigate, rememberJoinedTempl, setTemplList, joinSteps, joinMembershipInfo.isNative, joinMembershipInfo.token, approvalStage]);
+
+  const handleJoinOnly = useCallback(async () => {
+    if (!signer || !xmtp) {
+      pushStatus('⚠️ Initialize XMTP to complete the chat invite.');
+      return;
+    }
+    const trimmedAddress = typeof templAddress === 'string' ? templAddress.trim() : '';
+    if (!trimmedAddress || !ethers.isAddress(trimmedAddress)) return;
+    try {
+      setJoinSteps((prev) => ({ ...prev, join: 'pending', error: null }));
+      setJoinStatusNote('Sign the join request in your wallet');
+      const result = await requestChatInvite({
+        ethers,
+        xmtp,
+        signer,
+        walletAddress,
+        templAddress: trimmedAddress,
+        templArtifact
+      });
+      setJoinSteps({ purchase: 'success', join: 'success', error: null });
+      setJoinStatusNote('Chat access granted');
+      setGroup(result.group);
+      setGroupId(result.groupId);
+      setGroupConnected(Boolean(result.group));
+      pushStatus('✅ Chat invite completed');
+    } catch (err) {
+      const msg = String(err?.message || 'Join failed');
+      setJoinSteps((prev) => ({ ...prev, join: 'error', error: msg }));
+      setJoinStatusNote(msg);
+      if (/rejected/i.test(msg)) {
+        pushStatus('⚠️ Join incomplete: signature declined. Try again when ready.');
+      } else {
+        pushStatus(`⚠️ Join failed: ${msg}`);
+      }
+    }
+  }, [signer, xmtp, templAddress, walletAddress, templArtifact, pushStatus]);
+
+  const handleRetryChatSetup = useCallback(async () => {
+    if (!signer || !templAddress) return;
+    try {
+      pushStatus('🔄 Completing chat setup…');
+      await retryTemplRegistration({ ethers, signer, walletAddress, templAddress });
+      pushStatus('✅ Chat setup request submitted');
+    } catch (err) {
+      pushStatus(`⚠️ Chat setup failed: ${String(err?.message || err)}`);
+    }
+  }, [signer, templAddress, walletAddress, pushStatus]);
 
   const handleApproveToken = useCallback(async () => {
     if (joinMembershipInfo.isNative) {
@@ -4167,6 +4233,18 @@ function App() {
     } catch {}
   }, [signer, xmtp, walletAddress]);
 
+  // Surface minimal XMTP + wallet state on window for the /xmtp-debug page
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try { window.walletAddress = walletAddress || ''; } catch {}
+    try { window.xmtpClient = xmtp || null; } catch {}
+    try { window.activeInboxId = activeInboxId || ''; } catch {}
+  }, [walletAddress, xmtp, activeInboxId]);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try { window.xmtpInstallations = Array.isArray(installations) ? installations : []; } catch {}
+  }, [installations]);
+
   function saveProfileLocally({ name, avatar }) {
     try {
       if (!xmtp) return;
@@ -5114,7 +5192,7 @@ function App() {
               {showApprovalPrompt && (
                 <button
                   type="button"
-                  className="px-4 py-2 rounded border border-black/20 text-sm font-semibold w-full sm:w-auto"
+                  className={`px-4 py-2 rounded text-sm font-semibold w-full sm:w-auto ${(!approvalButtonDisabled ? 'bg-primary text-black' : 'border border-black/20')}`}
                   onClick={handleApproveToken}
                   disabled={approvalButtonDisabled}
                 >
@@ -5123,7 +5201,7 @@ function App() {
               )}
               {!alreadyMember && (
                 <button
-                  className="px-4 py-2 rounded bg-primary text-black font-semibold w-full sm:w-auto"
+                  className={`px-4 py-2 rounded font-semibold w-full sm:w-auto ${((joinSteps.purchase === 'pending' || joinSteps.join === 'pending' || (needsTokenApproval && approvalStage !== 'approved')) ? 'border border-black/20' : 'bg-primary text-black')}`}
                   onClick={handlePurchaseAndJoin}
                   disabled={joinSteps.purchase === 'pending' || joinSteps.join === 'pending' || (needsTokenApproval && approvalStage !== 'approved')}
                 >
@@ -5133,7 +5211,7 @@ function App() {
               {alreadyMember && (
                 <button
                   type="button"
-                  className="px-4 py-2 rounded border border-black/20 text-sm font-semibold w-full sm:w-auto"
+                  className="px-4 py-2 rounded bg-primary text-black text-sm font-semibold w-full sm:w-auto"
                   onClick={() => navigate(`/chat?address=${templAddress}`)}
                 >
                   Go to Chat
@@ -5144,9 +5222,24 @@ function App() {
               After the on-chain join confirms, the templ backend may take up to a minute to provision the XMTP group. The status panel below updates automatically once the chat is ready.
             </p>
             {(joinSteps.purchase !== 'idle' || joinSteps.join !== 'idle') && pendingJoinMatches && (
-              <div className="mt-2 rounded border border-black/10 bg-white/70 p-3 text-xs text-black/70">
+              <div className="mt-2 rounded border border-black/10 bg-white/70 p-3 text-xs text-black/70 space-y-2">
                 <div>{renderStepStatus('Purchase access (tx)', joinSteps.purchase, joinSteps.purchase === 'error' ? joinSteps.error : purchaseStatusNote || undefined)}</div>
                 <div>{renderStepStatus('Join & sync', joinSteps.join, joinSteps.join === 'error' ? joinSteps.error : joinStatusNote || undefined)}</div>
+                {joinSteps.purchase === 'success' && joinSteps.join !== 'success' && (
+                  <div className="pt-1">
+                    <button
+                      type="button"
+                      className="px-3 py-1 rounded border border-black/20"
+                      onClick={handleJoinOnly}
+                      disabled={joinSteps.join === 'pending'}
+                    >
+                      Complete join now
+                    </button>
+                    {!xmtp && (
+                      <div className="mt-2 text-[11px] text-black/60">Initialize XMTP in your profile to enable chat invites.</div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
             {/* Optional list if no prefill */}
@@ -5257,10 +5350,10 @@ function App() {
                   <button
                     type="button"
                     className="px-3 py-1 rounded border border-black/20 text-xs font-semibold"
-                    onClick={handlePurchaseAndJoin}
+                    onClick={joinSteps.purchase === 'success' ? handleJoinOnly : handlePurchaseAndJoin}
                     disabled={joinSteps.purchase === 'pending' || joinSteps.join === 'pending'}
                   >
-                    Complete join
+                    {joinSteps.purchase === 'success' ? 'Complete invite' : 'Complete join'}
                   </button>
                 </div>
               </div>
@@ -5276,6 +5369,17 @@ function App() {
                     ? 'Templ backend is finalizing the XMTP group. Check back shortly; chat unlocks as soon as the group is ready.'
                     : 'XMTP is still syncing this conversation. Messages will appear as soon as the group becomes available.'}
                 </p>
+                {chatProvisionState === 'pending-group' && isPriest && (
+                  <div className="mt-2">
+                    <button
+                      type="button"
+                      className="px-3 py-1 rounded border border-black/20 text-xs font-semibold"
+                      onClick={handleRetryChatSetup}
+                    >
+                      Complete chat setup
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
