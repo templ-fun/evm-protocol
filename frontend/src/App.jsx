@@ -4441,7 +4441,7 @@ function App() {
 
   return (
     <div className="App min-h-screen flex flex-col overflow-x-hidden">
-      {/* Header / Nav */}
+        {/* Header / Nav */}
       <div className="w-full border-b border-black/10">
         <div className="max-w-screen-md mx-auto px-4 py-2 flex items-center justify-between">
           <div className="text-lg font-semibold text-black/80">Templ</div>
@@ -4449,6 +4449,8 @@ function App() {
             {walletAddress && (
               <>
                 <span className="hidden sm:inline text-xs font-mono text-black/70">{shorten(walletAddress)}</span>
+                <button className="px-3 py-1 rounded border border-black/20 text-xs" onClick={() => navigate('/templs')}>Templs</button>
+                <button className="px-3 py-1 rounded border border-black/20 text-xs" onClick={() => navigate('/xmtp-debug')}>XMTP Debug</button>
                 <button className="px-3 py-1 rounded border border-black/20" onClick={() => setProfileOpen(true)}>Profile</button>
                 <button className="px-3 py-1 rounded border border-black/20" onClick={disconnectWallet}>Disconnect</button>
               </>
@@ -5686,6 +5688,9 @@ function App() {
             </div>
           )
         )}
+
+        {path === '/xmtp-debug' && <XMTPDebug />}
+
       </div>
 
       {/* Hidden status bucket for tests (not user-facing) */}
