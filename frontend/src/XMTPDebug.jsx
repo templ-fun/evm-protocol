@@ -49,7 +49,7 @@ function XMTPDebug() {
     };
 
     loadDebugInfo();
-  }, []);
+  }, [window.walletAddress, window.xmtpClient, window.activeInboxId, window.xmtpInstallations]);
 
   if (loading) {
     return (
