@@ -4,7 +4,8 @@ import { defineConfig } from 'eslint/config'
 
 export default defineConfig([
   {
-    files: ['**/*.js'],
+    files: ['**/*.{js,jsx}'],
+    ignores: ['**/*.d.ts'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'module',

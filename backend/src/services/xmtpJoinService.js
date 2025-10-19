@@ -8,6 +8,7 @@ import {
   shouldVerifyContracts
 } from '../xmtp/options.js';
 import { ensureContractDeployed } from './contractValidation.js';
+import { logger } from '../logger.js';
 
 function templError(message, statusCode) {
   return Object.assign(new Error(message), { statusCode });
@@ -54,22 +55,97 @@ async function waitForInboxId({ identifier, xmtp, allowDeterministic }) {
   const fast = isFastEnv();
   let tries = fast ? 8 : 180;
   const delayMs = envOpt === 'local' ? 200 : fast ? 150 : 1000;
+
+  logger.info({
+    identifier: identifier.identifier,
+    identifierKind: identifier.identifierKind,
+    envOpt: typedEnv,
+    fast,
+    tries,
+    delayMs,
+    allowDeterministic
+  }, 'Starting inbox ID resolution');
+
   for (let i = 0; i < tries; i++) {
+    let found = null;
+
+    // Try local method first
     try {
       if (typeof xmtp?.findInboxIdByIdentifier === 'function') {
-        const local = await xmtp.findInboxIdByIdentifier(identifier);
-        if (local) return local;
+        found = await xmtp.findInboxIdByIdentifier(identifier);
+        if (found) {
+          logger.info({
+            identifier: identifier.identifier,
+            method: 'local',
+            attempt: i + 1,
+            inboxId: found
+          }, 'Inbox ID found via local method');
+          return found;
+        }
       }
-    } catch {/* ignore */}
+    } catch (err) {
+      logger.debug({
+        identifier: identifier.identifier,
+        method: 'local',
+        attempt: i + 1,
+        error: err?.message || err
+      }, 'Local inbox ID lookup failed');
+    }
+
+    // Try remote method
     try {
-      const found = await getInboxIdForIdentifier(identifier, typedEnv);
-      if (found) return found;
-    } catch {/* ignore */}
+      found = await getInboxIdForIdentifier(identifier, typedEnv);
+      if (found) {
+        logger.info({
+          identifier: identifier.identifier,
+          method: 'remote',
+          attempt: i + 1,
+          inboxId: found
+        }, 'Inbox ID found via remote method');
+        return found;
+      }
+    } catch (err) {
+      logger.debug({
+        identifier: identifier.identifier,
+        method: 'remote',
+        attempt: i + 1,
+        error: err?.message || err
+      }, 'Remote inbox ID lookup failed');
+    }
+
+    logger.debug({
+      identifier: identifier.identifier,
+      attempt: i + 1,
+      totalTries: tries,
+      nextDelayMs: delayMs
+    }, 'Inbox ID not found, retrying');
+
     await new Promise((resolve) => setTimeout(resolve, delayMs));
   }
+
+  // Fallback to deterministic if allowed
   if (allowDeterministic) {
-    try { return generateInboxId(identifier); } catch {/* ignore */}
+    try {
+      const deterministicId = generateInboxId(identifier);
+      logger.info({
+        identifier: identifier.identifier,
+        method: 'deterministic',
+        inboxId: deterministicId
+      }, 'Using deterministic inbox ID');
+      return deterministicId;
+    } catch (err) {
+      logger.warn({
+        identifier: identifier.identifier,
+        error: err?.message || err
+      }, 'Failed to generate deterministic inbox ID');
+    }
   }
+
+  logger.warn({
+    identifier: identifier.identifier,
+    totalAttempts: tries,
+    allowDeterministic
+  }, 'Failed to resolve inbox ID after all attempts');
   return null;
 }
 
@@ -82,8 +158,18 @@ async function ensureInstallationsReady({ inboxId, xmtp, lastJoin, logger }) {
   const isLocal = envOpt === 'local';
   const max = isLocal ? 40 : 60;
   const delay = isLocal ? 150 : 500;
+
+  logger.info({
+    inboxId,
+    envOpt: typedEnv,
+    isLocal,
+    maxAttempts: max,
+    delayMs: delay
+  }, 'Starting installations readiness check');
+
   let candidateInstallationIds = [];
   let lastInboxState = null;
+
   for (let i = 0; i < max; i++) {
     try {
       if (typeof NodeXmtpClient.inboxStateFromInboxIds === 'function') {
@@ -93,11 +179,27 @@ async function ensureInstallationsReady({ inboxId, xmtp, lastJoin, logger }) {
         candidateInstallationIds = Array.isArray(state?.installations)
           ? state.installations.map((inst) => String(inst?.id || '')).filter(Boolean)
           : [];
+
+        logger.debug({
+          inboxId,
+          attempt: i + 1,
+          hasState: !!state,
+          installationCount: candidateInstallationIds.length,
+          installationIds: candidateInstallationIds
+        }, 'Inbox state check completed');
+
         if (candidateInstallationIds.length) break;
       } else {
+        logger.warn({ inboxId, typedEnv }, 'NodeXmtpClient.inboxStateFromInboxIds not available');
         break;
       }
-    } catch {/* ignore */}
+    } catch (err) {
+      logger.debug({
+        inboxId,
+        attempt: i + 1,
+        error: err?.message || err
+      }, 'Inbox state check failed');
+    }
     await new Promise((resolve) => setTimeout(resolve, delay));
   }
 
@@ -195,25 +297,61 @@ async function syncAndWarm({ group, xmtp, contractAddress, memberAddress }) {
 }
 
 async function addMemberToGroup({ group, inboxId, memberIdentifier, logger }) {
+  logger.info({
+    groupId: group?.id,
+    inboxId,
+    memberIdentifier,
+    availableMethods: {
+      addMembers: typeof group.addMembers === 'function',
+      addMembersByInboxId: typeof group.addMembersByInboxId === 'function',
+      addMembersByIdentifiers: typeof group.addMembersByIdentifiers === 'function'
+    }
+  }, 'Starting member addition to group');
+
   try {
     if (typeof group.addMembers === 'function') {
+      logger.info({ method: 'addMembers', inboxId }, 'Attempting to add member using addMembers');
       await group.addMembers([inboxId]);
-      logger?.info?.({ inboxId }, 'addMembers([inboxId]) succeeded');
+      logger?.info?.({ inboxId, method: 'addMembers' }, 'addMembers([inboxId]) succeeded');
       return;
     }
     if (typeof group.addMembersByInboxId === 'function') {
+      logger.info({ method: 'addMembersByInboxId', inboxId }, 'Attempting to add member using addMembersByInboxId');
       await group.addMembersByInboxId([inboxId]);
-      logger?.info?.({ inboxId }, 'addMembersByInboxId([inboxId]) succeeded');
+      logger?.info?.({ inboxId, method: 'addMembersByInboxId' }, 'addMembersByInboxId([inboxId]) succeeded');
       return;
     }
     if (typeof group.addMembersByIdentifiers === 'function') {
+      logger.info({ method: 'addMembersByIdentifiers', member: memberIdentifier.identifier }, 'Attempting to add member using addMembersByIdentifiers');
       await group.addMembersByIdentifiers([memberIdentifier]);
-      logger?.info?.({ member: memberIdentifier.identifier }, 'addMembersByIdentifiers succeeded');
+      logger?.info?.({ member: memberIdentifier.identifier, method: 'addMembersByIdentifiers' }, 'addMembersByIdentifiers succeeded');
       return;
     }
+
+    logger.error({
+      groupId: group?.id,
+      availableMethods: {
+        addMembers: typeof group.addMembers === 'function',
+        addMembersByInboxId: typeof group.addMembersByInboxId === 'function',
+        addMembersByIdentifiers: typeof group.addMembersByIdentifiers === 'function'
+      }
+    }, 'No supported member addition method found');
     throw new Error('XMTP group does not support adding members');
   } catch (err) {
-    if (!String(err?.message || '').includes('succeeded')) {
+    const errMsg = String(err?.message || '');
+    if (errMsg.includes('succeeded')) {
+      logger.info({
+        inboxId,
+        method: 'unknown',
+        rawMessage: errMsg
+      }, 'Member addition succeeded despite error message');
+    } else {
+      logger.error({
+        inboxId,
+        error: errMsg,
+        stack: err?.stack,
+        errorType: err?.constructor?.name
+      }, 'Failed to add member to group');
       throw err;
     }
   }
@@ -243,31 +381,89 @@ export async function joinTemplWithXmtp(body, context) {
     ensureGroup
   } = context;
 
+  logger.info({
+    contractAddress,
+    memberAddress,
+    chainId,
+    serverInboxId: xmtp?.inboxId,
+    body: {
+      ...body,
+      signature: '[REDACTED]'
+    }
+  }, 'Starting XMTP join request');
+
   const record = templs.get(contractAddress.toLowerCase());
   if (!record) {
+    logger.warn({ contractAddress, availableTempls: Array.from(templs.keys()) }, 'Unknown Templ contract');
     throw templError('Unknown Templ', 404);
   }
 
+  logger.info({
+    contractAddress,
+    templExists: !!record,
+    hasGroupId: !!record.groupId
+  }, 'Templ record found');
+
   await verifyPurchase({ hasJoined, contractAddress, memberAddress });
 
+  logger.info({
+    contractAddress,
+    memberAddress
+  }, 'Purchase verification successful');
+
   if (shouldVerifyContracts()) {
+    logger.info({ contractAddress, chainId }, 'Verifying contract deployment');
     await ensureContractDeployed({ provider, contractAddress, chainId: Number(chainId) });
+    logger.info({ contractAddress }, 'Contract deployment verification successful');
   }
+
+  logger.info({
+    contractAddress,
+    recordHasGroup: !!record.group,
+    usingEnsureGroup: typeof ensureGroup === 'function'
+  }, 'Attempting to hydrate group');
 
   const group = await hydrateGroup(record, { ensureGroup, xmtp, logger });
   if (!group) {
+    logger.warn({
+      contractAddress,
+      recordGroupId: record.groupId,
+      ensureGroupAvailable: typeof ensureGroup === 'function'
+    }, 'Group hydration failed');
     throw templError('Group not ready yet; retry shortly', 503);
   }
+
+  logger.info({
+    contractAddress,
+    groupId: group.id,
+    groupName: group.name,
+    groupMembersCount: group.members?.length || 0
+  }, 'Group hydration successful');
 
   const memberIdentifier = { identifier: memberAddress.toLowerCase(), identifierKind: 0 };
   const providedInboxId = parseProvidedInboxId(body?.inboxId || body?.memberInboxId);
   const allowDeterministic = allowDeterministicInbox();
+
+  logger.info({
+    memberAddress,
+    providedInboxId,
+    allowDeterministic,
+    memberIdentifier
+  }, 'Starting inbox ID resolution');
+
   const resolvedInboxId = await waitForInboxId({ identifier: memberIdentifier, xmtp, allowDeterministic });
   let inboxId = resolvedInboxId;
   if (!inboxId && allowDeterministic) {
+    logger.info({ providedInboxId, resolvedInboxId }, 'Using deterministic inbox ID');
     inboxId = providedInboxId || null;
   }
   if (!inboxId) {
+    logger.warn({
+      memberAddress,
+      providedInboxId,
+      resolvedInboxId,
+      allowDeterministic
+    }, 'Failed to resolve member inbox ID');
     throw templError('Member identity not registered yet; retry shortly', 503);
   }
 
@@ -275,10 +471,22 @@ export async function joinTemplWithXmtp(body, context) {
     logger?.info?.({ resolvedInboxId, providedInboxId }, 'Resolved inbox overrides provided value');
   }
 
+  logger.info({
+    inboxId,
+    fastEnv: isFastEnv()
+  }, 'Ensuring installations are ready');
+
   await ensureInstallationsReady({ inboxId, xmtp, lastJoin, logger });
+
   const readyTries = isFastEnv() ? 2 : 60;
+  logger.info({
+    inboxId,
+    readyTries,
+    fastEnv: isFastEnv()
+  }, 'Waiting for inbox readiness');
+
   const ready = await waitForInboxReady(inboxId, readyTries);
-  logger?.info?.({ inboxId, ready }, 'Member inbox readiness before add');
+  logger?.info?.({ inboxId, ready, readyTries }, 'Member inbox readiness before add');
 
   const joinMeta = {
     contract: contractAddress.toLowerCase(),
@@ -287,10 +495,30 @@ export async function joinTemplWithXmtp(body, context) {
     serverInboxId: xmtp?.inboxId || null,
     groupId: group?.id || record.groupId || null
   };
-  const beforeAgg = xmtp?.debugInformation?.apiAggregateStatistics?.();
+
+  let beforeAgg = null;
+  try {
+    beforeAgg = xmtp?.debugInformation?.apiAggregateStatistics?.();
+    joinMeta.beforeAgg = beforeAgg;
+  } catch (err) {
+    logger.debug({ err: err?.message || err }, 'Failed to get before API statistics');
+  }
+
   logger?.info?.(joinMeta, 'Inviting member by inboxId');
 
+  logger.info({
+    inboxId,
+    groupId: group.id,
+    groupMembersBefore: group.members?.length || 0
+  }, 'Adding member to XMTP group');
+
   await addMemberToGroup({ group, inboxId, memberIdentifier, logger });
+
+  logger.info({
+    inboxId,
+    groupId: group.id,
+    groupMembersAfter: group.members?.length || 0
+  }, 'Member addition completed');
 
   try {
     await syncXMTP(xmtp);

@@ -33,24 +33,56 @@ export async function syncXMTP(xmtp, retries = 1, delayMs = 1000) {
     retries = Math.min(retries, 2);
     delayMs = Math.min(delayMs, 200);
   }
+
+  dlog(`Starting XMTP sync with ${retries} retries and ${delayMs}ms delay`);
+
   for (let i = 0; i < retries; i++) {
-    try { await xmtp?.conversations?.sync?.(); } catch (err) {
-      dlog('conversations.sync failed:', err?.message || String(err));
+    let successCount = 0;
+    let totalCount = 0;
+
+    // Sync conversations
+    totalCount++;
+    try {
+      await xmtp?.conversations?.sync?.();
+      successCount++;
+      dlog(`Attempt ${i + 1}: conversations.sync succeeded`);
+    } catch (err) {
+      dlog(`Attempt ${i + 1}: conversations.sync failed:`, err?.message || String(err));
     }
-    try { await xmtp?.preferences?.sync?.(); } catch (err) {
-      dlog('preferences.sync failed:', err?.message || String(err));
+
+    // Sync preferences
+    totalCount++;
+    try {
+      await xmtp?.preferences?.sync?.();
+      successCount++;
+      dlog(`Attempt ${i + 1}: preferences.sync succeeded`);
+    } catch (err) {
+      dlog(`Attempt ${i + 1}: preferences.sync failed:`, err?.message || String(err));
     }
+
+    // Sync all conversations by consent state
+    totalCount++;
     try {
       await xmtp?.conversations?.syncAll?.([
         XMTP_CONSENT_STATES.ALLOWED,
         XMTP_CONSENT_STATES.UNKNOWN,
         XMTP_CONSENT_STATES.DENIED
       ]);
+      successCount++;
+      dlog(`Attempt ${i + 1}: conversations.syncAll succeeded`);
     } catch (err) {
-      dlog('conversations.syncAll failed:', err?.message || String(err));
+      dlog(`Attempt ${i + 1}: conversations.syncAll failed:`, err?.message || String(err));
     }
-    if (i < retries - 1) await new Promise(r => setTimeout(r, delayMs));
+
+    dlog(`Attempt ${i + 1}: ${successCount}/${totalCount} sync operations succeeded`);
+
+    if (i < retries - 1) {
+      dlog(`Waiting ${delayMs}ms before next sync attempt`);
+      await new Promise(r => setTimeout(r, delayMs));
+    }
   }
+
+  dlog('XMTP sync completed');
 }
 
 /**
@@ -68,26 +100,40 @@ export async function waitForConversation({ xmtp, groupId, retries = 60, delayMs
     retries = Math.min(retries, 5);
     delayMs = Math.min(delayMs, 200);
   }
+
+  dlog(`Waiting for conversation ${groupId} with ${retries} retries and ${delayMs}ms delay`);
+
   const norm = (id) => (id || '').toString();
   const wantedRaw = norm(groupId);
   const wantedNo0x = wantedRaw.replace(/^0x/i, '');
   const wanted0x = wantedRaw.startsWith('0x') ? wantedRaw : `0x${wantedNo0x}`;
+
+  dlog(`Looking for group conversation with ID formats: ${wantedRaw}, ${wanted0x}, ${wantedNo0x}`);
+
   const group = await waitFor({
     tries: retries,
     delayMs,
     check: async () => {
       await syncXMTP(xmtp);
       let conv = null;
+      let usedMethod = '';
+
       // Try with exact, 0x-prefixed, and non-0x forms for maximum compatibility
       for (const candidate of [wantedRaw, wanted0x, wantedNo0x]) {
         if (conv) break;
+        usedMethod = `getConversationById(${candidate})`;
         try {
           conv = await xmtp?.conversations?.getConversationById?.(candidate);
+          if (conv) {
+            dlog(`Found conversation via ${usedMethod}:`, conv.id);
+          }
         } catch (err) {
-          dlog('getConversationById failed:', err?.message || String(err));
+          dlog(`getConversationById(${candidate}) failed:`, err?.message || String(err));
         }
       }
+
       if (!conv) {
+        usedMethod = 'listConversations';
         try {
           const conversations = await xmtp?.conversations?.list?.({
             consentStates: [
@@ -97,28 +143,52 @@ export async function waitForConversation({ xmtp, groupId, retries = 60, delayMs
             ],
             conversationType: XMTP_CONVERSATION_TYPES.GROUP
           }) || [];
+
           dlog(`Sync attempt: Found ${conversations.length} conversations; firstIds=`, conversations.slice(0,3).map(c => c.id));
+
           conv = conversations.find(c => {
             const cid = String(c.id);
             return cid === wantedRaw || cid === wanted0x || cid === wantedNo0x || `0x${cid}` === wanted0x || cid.replace(/^0x/i,'') === wantedNo0x;
           }) || null;
+
+          if (conv) {
+            dlog(`Found conversation via ${usedMethod}:`, conv.id);
+          }
         } catch (err) {
           dlog('list conversations failed:', err?.message || String(err));
         }
       }
+
       if (conv) {
-        dlog('Found group:', conv.id, 'consent state:', conv.consentState);
+        dlog(`Found group ${conv.id} via ${usedMethod}, consent state:`, conv.consentState);
+
+        // Ensure consent state is allowed
         if (conv.consentState !== 'allowed' && typeof conv.updateConsentState === 'function') {
           try {
+            dlog(`Updating consent state from '${conv.consentState}' to 'allowed' for conversation ${conv.id}`);
             await conv.updateConsentState('allowed');
+            dlog('Successfully updated consent state');
           } catch (err) {
             dlog('updateConsentState failed:', err?.message || String(err));
           }
         }
+
         return conv;
       }
+
+      dlog(`Conversation ${groupId} not found in this attempt, will retry`);
       return null;
+    },
+    onError: (err) => {
+      dlog('waitForConversation check failed:', err?.message || String(err));
     }
   });
+
+  if (group) {
+    dlog(`Successfully found and verified conversation ${group.id}`);
+  } else {
+    dlog(`Failed to find conversation ${groupId} after ${retries} attempts`);
+  }
+
   return group;
 }

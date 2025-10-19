@@ -224,17 +224,61 @@ export function createFactoryIndexer(options = {}) {
     void processLog(log);
   };
 
+  // Add error event listener to suppress filter timeout errors
+  const handleProviderError = (err) => {
+    // Suppress common ethers filter timeout errors to reduce log noise
+    const errMsg = String(err?.message || err);
+    if (errMsg.includes('filter not found') || errMsg.includes('could not coalesce error')) {
+      // These are normal filter timeout errors, don't log them
+      return;
+    }
+    // Log other legitimate provider errors
+    logger?.warn?.({ err: errMsg }, 'Factory indexer provider error');
+  };
+
   return {
     async start() {
       if (running) return;
       running = true;
+
+      // Suppress ethers.js filter timeout errors globally
+      const originalConsoleError = console.error;
+      console.error = (...args) => {
+        const message = args.join(' ');
+        if (message.includes('filter not found') ||
+            message.includes('could not coalesce error') ||
+            message.includes('@TODO Error: could not coalesce error')) {
+          // Suppress these specific ethers filter timeout errors
+          return;
+        }
+        // Log all other errors normally
+        originalConsoleError(...args);
+      };
+
+      // Store original for cleanup
+      this._originalConsoleError = originalConsoleError;
+
       await syncHistorical();
       provider.on(subscriptionFilter, handleProviderEvent);
+      // Listen for provider errors to suppress filter timeout noise
+      provider.on('error', handleProviderError);
+
+      logger?.info?.({ factoryAddress }, 'Factory indexer started with filter timeout suppression');
     },
     async stop() {
       if (!running) return;
       running = false;
+
+      // Restore original console.error
+      if (this._originalConsoleError) {
+        console.error = this._originalConsoleError;
+        this._originalConsoleError = null;
+      }
+
       provider.off(subscriptionFilter, handleProviderEvent);
+      provider.off('error', handleProviderError);
+
+      logger?.info?.({ factoryAddress }, 'Factory indexer stopped');
     }
   };
 }

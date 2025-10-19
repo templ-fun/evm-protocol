@@ -1466,42 +1466,127 @@ export async function createApp(opts) {
 
       // Add XMTP helper function to context
       context.ensureGroup = async (record) => {
-        if (!record) return null;
-        if (record.group) return record.group;
+        logger.info({
+          contractAddress: record?.contractAddress,
+          hasGroupId: !!record?.groupId,
+          hasGroup: !!record?.group,
+          hasCreatorInboxId: !!record?.creatorInboxId,
+          xmtpEnabled: process.env.XMTP_ENABLED !== '0',
+          xmtpAvailable: !!xmtp
+        }, 'ensureGroup called');
+
+        if (!record) {
+          logger.warn('ensureGroup called with null record');
+          return null;
+        }
+        if (record.group) {
+          logger.debug({ groupId: record.group.id }, 'Returning cached group');
+          return record.group;
+        }
+
+        // Try to get existing group by ID
         if (record.groupId && xmtp?.conversations?.getConversationById) {
+          logger.info({
+            groupId: record.groupId,
+            contractAddress: record.contractAddress
+          }, 'Attempting to hydrate existing group by ID');
+
           try {
             const maybe = await xmtp.conversations.getConversationById(record.groupId);
             if (maybe) {
+              logger.info({
+                groupId: maybe.id,
+                groupName: maybe.name,
+                membersCount: maybe.members?.length || 0
+              }, 'Successfully hydrated existing group');
               record.group = maybe;
               return maybe;
             }
           } catch (err) {
-            logger.warn({ err: err?.message || err, groupId: record.groupId }, 'Failed to hydrate group conversation');
+            logger.error({
+              error: err?.message || err,
+              stack: err?.stack,
+              groupId: record.groupId,
+              contractAddress: record.contractAddress,
+              errorType: err?.constructor?.name
+            }, 'Failed to hydrate group conversation');
           }
         }
+
+        // Create new group if no existing one
         if (!record.groupId && xmtp?.conversations?.newGroup && process.env.XMTP_ENABLED !== '0') {
+          logger.info({
+            contractAddress: record.contractAddress,
+            creatorInboxId: record.creatorInboxId,
+            templHomeLink: record.templHomeLink
+          }, 'Creating new XMTP group');
+
+          const initialMembers = [];
           try {
-            const initialMembers = [];
             if (record.creatorInboxId) {
               initialMembers.push(record.creatorInboxId);
+              logger.info({ creatorInboxId: record.creatorInboxId }, 'Adding creator to initial group members');
             }
+
+            const groupName = `templ:${record.contractAddress?.slice?.(0, 10) ?? 'templ'}`;
+            const groupDescription = record.templHomeLink ? `templ.fun • ${record.templHomeLink}` : 'templ.fun group';
+
+            logger.info({
+              initialMembers,
+              groupName,
+              groupDescription
+            }, 'Creating XMTP group with parameters');
+
             const group = await xmtp.conversations.newGroup(initialMembers, {
-              name: `templ:${record.contractAddress?.slice?.(0, 10) ?? 'templ'}`,
-              description: record.templHomeLink ? `templ.fun • ${record.templHomeLink}` : 'templ.fun group'
+              name: groupName,
+              description: groupDescription
             });
+
             if (group?.id) {
+              logger.info({
+                groupId: group.id,
+                groupName: group.name,
+                groupDescription: group.description,
+                membersCount: group.members?.length || 0
+              }, 'Successfully created new XMTP group');
+
               record.groupId = String(group.id);
               record.group = group;
               templs.set(record.contractAddress || record.contract || '', record);
               await persist(record.contractAddress || record.contract || '', record);
-              logger.info({ contract: record.contractAddress, groupId: record.groupId }, 'Created XMTP group for templ');
+
+              logger.info({
+                contract: record.contractAddress,
+                groupId: record.groupId
+              }, 'Created and persisted XMTP group for templ');
+
               return group;
+            } else {
+              logger.error({
+                contractAddress: record.contractAddress,
+                initialMembers,
+                groupName
+              }, 'Failed to create XMTP group - no group ID returned');
             }
           } catch (err) {
-            logger.warn({ err: err?.message || err, contract: record.contractAddress }, 'Failed to create XMTP group');
+            logger.error({
+              error: err?.message || err,
+              stack: err?.stack,
+              contract: record.contractAddress,
+              initialMembers: initialMembers,
+              errorType: err?.constructor?.name
+            }, 'Failed to create XMTP group');
           }
         }
-        return record.group || null;
+
+        const result = record.group || null;
+        logger.info({
+          contractAddress: record.contractAddress,
+          groupId: result?.id,
+          success: !!result
+        }, 'ensureGroup completed');
+
+        return result;
       };
 
     } catch (err) {
