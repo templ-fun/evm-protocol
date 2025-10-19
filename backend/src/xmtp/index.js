@@ -184,6 +184,9 @@ async function revokeStaleInstallations({ wallet, env }) {
   }
 }
 
+// Re-export getInboxIdForIdentifier for use in other modules
+export { getInboxIdForIdentifier };
+
 export async function createXmtpWithRotation(wallet, maxAttempts = 20) {
   logger.info({
     walletAddress: wallet.address,

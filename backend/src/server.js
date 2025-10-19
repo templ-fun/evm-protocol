@@ -1406,7 +1406,7 @@ export async function createApp(opts) {
   if (process.env.XMTP_ENABLED === '1') {
     try {
       // Dynamically import XMTP modules only when enabled
-      const { createXmtpWithRotation, waitForXmtpClientReady } = await import('./xmtp/index.js');
+      const { createXmtpWithRotation, waitForXmtpClientReady, getInboxIdForIdentifier } = await import('./xmtp/index.js');
 
       // Generate or load a persistent bot private key tied to this server instance
       let botPrivateKey = process.env.BOT_PRIVATE_KEY;
@@ -1463,6 +1463,7 @@ export async function createApp(opts) {
       // Add XMTP context
       context.xmtp = xmtp;
       context.lastJoin = lastJoin;
+      context.getInboxIdForIdentifier = getInboxIdForIdentifier;
 
       // Add XMTP helper function to context
       context.ensureGroup = async (record) => {
@@ -1534,13 +1535,13 @@ export async function createApp(opts) {
               logger.info({
                 priestAddress: record.priest,
                 contractAddress: record.contractAddress,
-                xmtpAvailable: !!xmtp?.findInboxIdByIdentifier
+                getInboxIdAvailable: !!context.getInboxIdForIdentifier
               }, 'Priest address provided, attempting to resolve XMTP inbox ID');
 
-              if (xmtp?.findInboxIdByIdentifier) {
+              if (context.getInboxIdForIdentifier) {
                 try {
                   const priestIdentifier = { identifier: record.priest, identifierKind: 'Ethereum' };
-                  const priestInboxId = await xmtp.findInboxIdByIdentifier(priestIdentifier);
+                  const priestInboxId = await context.getInboxIdForIdentifier(priestIdentifier);
                   if (priestInboxId) {
                     initialMembers.push(priestInboxId);
                     logger.info({
@@ -1567,7 +1568,7 @@ export async function createApp(opts) {
                 logger.warn({
                   priestAddress: record.priest,
                   contractAddress: record.contractAddress
-                }, '❌ XMTP findInboxIdByIdentifier not available - cannot add priest to group');
+                }, '❌ XMTP getInboxIdForIdentifier not available - cannot add priest to group');
               }
             } else {
               logger.info({
