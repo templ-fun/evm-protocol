@@ -1711,6 +1711,25 @@ export async function createApp(opts) {
                 logger
               });
 
+              try {
+                const systemPayload = {
+                  type: 'templ-created',
+                  contract: record.contractAddress,
+                  timestamp: Date.now()
+                };
+                await group.send(JSON.stringify(systemPayload));
+                logger.info({
+                  groupId: record.groupId,
+                  contract: record.contractAddress
+                }, 'Sent templ-created system message to new group');
+              } catch (err) {
+                logger.warn({
+                  err: String(err?.message || err),
+                  groupId: record.groupId,
+                  contract: record.contractAddress
+                }, 'Failed to send templ-created system message');
+              }
+
               logger.info({
                 contract: record.contractAddress,
                 groupId: record.groupId,

@@ -1,8 +1,6 @@
 // @ts-check
 
 // XMTP utility helpers shared across frontend, backend, and tests
-
-import { ethers } from 'ethers';
 import { waitFor } from './xmtp-wait.js';
 import { isTemplDebugEnabled, isTemplE2EDebug } from './debug.js';
 
@@ -34,19 +32,24 @@ export const XMTP_CONVERSATION_TYPES = {
  * @returns {string}
  */
 export function deriveTemplGroupName(contractAddress) {
-  if (!contractAddress) return '';
+  if (!contractAddress) return 'templ';
   const raw = String(contractAddress).trim();
-  if (!raw) return '';
-  let checksum = raw;
-  try {
-    checksum = ethers.getAddress(raw);
-  } catch {
-    if (!raw.startsWith('0x') && /^([0-9a-fA-F]+)$/.test(raw)) {
-      checksum = `0x${raw}`;
-    }
+  if (!raw) return 'templ';
+  const bareHex = /^[0-9a-fA-F]{40}$/;
+  const prefixedHex = /^0x[0-9a-fA-F]{40}$/;
+  let normalized = raw;
+  if (bareHex.test(raw)) {
+    normalized = `0x${raw}`;
   }
-  const prefix = checksum.slice(0, 10);
-  return prefix ? `templ:${prefix}` : 'templ';
+  if (prefixedHex.test(normalized)) {
+    const lower = normalized.toLowerCase();
+    const prefix = lower.slice(0, 10);
+    return prefix ? `templ:${prefix}` : 'templ';
+  }
+  const lower = raw.toLowerCase();
+  if (lower.startsWith('templ:')) return lower;
+  const fallback = lower.startsWith('0x') ? lower.slice(0, 10) : lower.slice(0, Math.min(10, lower.length));
+  return fallback ? `templ:${fallback}` : 'templ';
 }
 
 export async function syncXMTP(xmtp, retries = 1, delayMs = 1000) {
