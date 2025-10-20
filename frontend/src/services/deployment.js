@@ -268,13 +268,13 @@ export async function deployTempl({
   try {
     // @ts-ignore - vite injects env on import.meta
     if (import.meta?.env?.VITE_E2E_DEBUG === '1') {
-      return { contractAddress, group: null, groupId };
+      return { contractAddress, group: null, groupId, discoveryPending: true };
     }
   } catch {}
 
   // If XMTP isn’t ready yet on the client, skip fetching the group for now.
   if (!xmtp) {
-    return { contractAddress, group: null, groupId };
+    return { contractAddress, group: null, groupId, discoveryPending: true };
   }
 
   dlog('Syncing conversations to find group', groupId);
@@ -283,9 +283,10 @@ export async function deployTempl({
   const delayMs = isFast ? 500 : 1000;
   const group = await waitForConversation({ xmtp, groupId, expectedName: expectedGroupName, retries, delayMs });
   if (!group) {
-    throw new Error('Failed to discover XMTP group after deploy; please retry once XMTP finishes provisioning.');
+    dlog('deployTempl: XMTP group discovery still pending after initial wait', { groupId });
+    return { contractAddress, group: null, groupId, discoveryPending: true };
   }
-  return { contractAddress, group, groupId };
+  return { contractAddress, group, groupId, discoveryPending: false };
 }
 
 export async function registerTemplBackend({ ethers, signer, walletAddress, templAddress, backendUrl = BACKEND_URL }) {

@@ -2823,6 +2823,7 @@ function App() {
       updateTemplAddress(result.contractAddress);
       const resolvedGroup = resolvedGroupOrNull(result.group);
       const canonicalGroupId = result.groupId ? normaliseGroupId(result.groupId).prefixed : null;
+      const discoveryPending = result.discoveryPending === true;
       setGroup(resolvedGroup);
       setGroupId(canonicalGroupId || result.groupId);
       setGroupConnected(Boolean(resolvedGroup));
@@ -2832,6 +2833,8 @@ function App() {
       if (result.groupId) pushStatus('✅ Group created');
       if (resolvedGroup) {
         pushStatus('✅ Group connected');
+      } else if (discoveryPending) {
+        pushStatus('⏳ XMTP is still provisioning the conversation. This can take a few minutes.');
       } else {
         pushStatus('🔄 Waiting for group discovery');
       }
@@ -3052,6 +3055,7 @@ function App() {
       dlog('[app] purchaseAndJoin groupId details', { groupId: result.groupId, has0x: String(result.groupId).startsWith('0x'), len: String(result.groupId).length });
       if (result) {
         const resolvedGroup = resolvedGroupOrNull(result.group);
+        const discoveryPending = result.discoveryPending === true;
         setGroup(resolvedGroup);
         const canonicalGroupId = result.groupId ? normaliseGroupId(result.groupId).prefixed : null;
         setGroupId(canonicalGroupId || result.groupId);
@@ -3060,7 +3064,11 @@ function App() {
         pushStatus('✅ Membership confirmed; connecting to group');
         if (resolvedGroup) {
           pushStatus('✅ Group connected');
+        } else if (discoveryPending) {
+          setJoinStatusNote('Waiting for XMTP to sync the conversation…');
+          pushStatus('⏳ XMTP is still provisioning the conversation. This can take a few minutes.');
         } else {
+          setJoinStatusNote('Waiting for XMTP to sync the conversation…');
           pushStatus('🔄 Waiting for group discovery');
         }
         rememberGroupMeta(resolvedGroup, canonicalGroupId || result.groupId, deriveTemplGroupName(trimmedAddress));
@@ -3123,13 +3131,24 @@ function App() {
       setJoinSteps({ purchase: 'success', join: 'success', error: null });
       setJoinStatusNote('Chat access granted');
       const resolvedGroup = resolvedGroupOrNull(result.group);
+      const discoveryPending = result.discoveryPending === true;
       setGroup(resolvedGroup);
       const canonicalGroupId = result.groupId ? normaliseGroupId(result.groupId).prefixed : null;
       setGroupId(canonicalGroupId || result.groupId);
       setGroupConnected(Boolean(resolvedGroup));
       rememberGroupMeta(resolvedGroup, canonicalGroupId || result.groupId, deriveTemplGroupName(trimmedAddress));
+      if (!resolvedGroup) {
+        setJoinStatusNote('Waiting for XMTP to sync the conversation…');
+      }
       try { localStorage.setItem('templ:lastAddress', trimmedAddress); } catch {}
       pushStatus('✅ Chat invite completed');
+      if (resolvedGroup) {
+        pushStatus('✅ Group connected');
+      } else if (discoveryPending) {
+        pushStatus('⏳ XMTP is still provisioning the conversation. This can take a few minutes.');
+      } else {
+        pushStatus('🔄 Waiting for group discovery');
+      }
     } catch (err) {
       const msg = String(err?.message || 'Join failed');
       setJoinSteps((prev) => ({ ...prev, join: 'error', error: msg }));
@@ -3538,7 +3557,7 @@ function App() {
     async function poll() {
       // Be generous even in e2e to allow for network propagation
       const fast = import.meta.env?.VITE_E2E_DEBUG === '1';
-      const maxAttempts = fast ? 120 : 120;
+      const maxAttempts = fast ? 240 : 360;
       const delay = fast ? 1000 : 1000;
       // Deterministic first attempt using shared helper (handles id formats and consent)
       try {

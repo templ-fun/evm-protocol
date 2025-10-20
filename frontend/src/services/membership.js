@@ -568,9 +568,10 @@ async function finalizeJoin({ xmtp, groupId, templAddress }) {
   const delayMs = isFast ? 250 : 1000;
   const group = await waitForConversation({ xmtp, groupId, expectedName, retries, delayMs });
   if (!group) {
-    throw new Error('Failed to discover XMTP group after join; please retry once XMTP finishes provisioning.');
+    dlog('finalizeJoin: XMTP group discovery still pending', { groupId, templAddress });
+    return { group: null, groupId, discoveryPending: true };
   }
-  return { group, groupId };
+  return { group, groupId, discoveryPending: false };
 }
 
 export async function sendMessage({ group, content }) {

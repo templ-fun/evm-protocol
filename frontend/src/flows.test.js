@@ -102,10 +102,10 @@ describe('templ flows', () => {
     expect(fetchArgs[1].body).toContain('"nonce":');
     expect(fetchArgs[1].body).toContain('"issuedAt":');
     expect(fetchArgs[1].body).toContain('"expiry":');
-    expect(result).toEqual({ contractAddress: '0xDeAd', group: { id: 'group-1', consentState: 'allowed' }, groupId: 'group-1' });
+    expect(result).toEqual({ contractAddress: '0xDeAd', group: { id: 'group-1', consentState: 'allowed' }, groupId: 'group-1', discoveryPending: false });
   });
 
-  it('deployTempl throws when XMTP group cannot be discovered', async () => {
+  it('deployTempl flags pending discovery when XMTP group cannot be found immediately', async () => {
     const wait = vi.fn().mockResolvedValue({});
     const createTempl = vi.fn().mockResolvedValue({ wait });
     createTempl.staticCall = vi.fn().mockResolvedValue('0xDeAd');
@@ -120,7 +120,7 @@ describe('templ flows', () => {
     mockFetchSuccess({ groupId: 'group-1' });
     waitForConversation.mockResolvedValueOnce(null);
 
-    await expect(deployTempl({
+    const result = await deployTempl({
       ethers,
       xmtp,
       signer,
@@ -133,7 +133,8 @@ describe('templ flows', () => {
       factoryAddress: '0xFactory',
       factoryArtifact: { abi: [] },
       templArtifact
-    })).rejects.toThrow('Failed to discover XMTP group after deploy');
+    });
+    expect(result).toEqual({ contractAddress: '0xDeAd', group: null, groupId: 'group-1', discoveryPending: true });
   });
 
   it('deployTempl throws on non-200 backend response', async () => {
@@ -331,10 +332,10 @@ describe('templ flows', () => {
 
     expect(templContract.purchaseAccess).toHaveBeenCalled();
     expect(signer.signTypedData).toHaveBeenCalled();
-    expect(result).toEqual({ group: { id: 'group-2', consentState: 'allowed' }, groupId: 'group-2' });
+    expect(result).toEqual({ group: { id: 'group-2', consentState: 'allowed' }, groupId: 'group-2', discoveryPending: false });
   });
 
-  it('purchaseAndJoin throws when XMTP group cannot be discovered', async () => {
+  it('purchaseAndJoin flags pending discovery when XMTP group cannot be found immediately', async () => {
     const templContract = {
       hasAccess: vi.fn().mockResolvedValue(true),
       purchaseAccess: vi.fn().mockResolvedValue({ wait: vi.fn() }),
@@ -345,14 +346,15 @@ describe('templ flows', () => {
     const xmtp = createXMTPMock({ inboxId: 'inbox-2' });
     waitForConversation.mockResolvedValueOnce(null);
 
-    await expect(purchaseAndJoin({
+    const result = await purchaseAndJoin({
       ethers,
       xmtp,
       signer,
       walletAddress: '0xabc',
       templAddress: '0xTeMpL',
       templArtifact
-    })).rejects.toThrow('Failed to discover XMTP group after join');
+    });
+    expect(result).toEqual({ group: null, groupId: 'group-2', discoveryPending: true });
   });
 
   it('purchaseAndJoin rejects on backend failure', async () => {
