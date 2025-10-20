@@ -27,7 +27,8 @@ async function getGroupMemberIds(group, logger) {
     const rawMembers = typeof group.members === 'function'
       ? await group.members()
       : Array.isArray(group.members) ? group.members : [];
-    return rawMembers
+    if (!rawMembers.length) return [];
+    const normalized = rawMembers
       .map((entry) => {
         if (!entry) return null;
         if (typeof entry === 'string') return normaliseHex(entry);
@@ -38,6 +39,10 @@ async function getGroupMemberIds(group, logger) {
         return null;
       })
       .filter(Boolean);
+    if (!normalized.length) {
+      logger?.debug?.({ groupId: group?.id, rawMembers }, 'Group members present but failed to normalize inbox IDs');
+    }
+    return normalized;
   } catch (err) {
     logger?.debug?.({
       err: err?.message || err,

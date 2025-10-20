@@ -29,6 +29,7 @@ import { registerTempl } from './services/registerTempl.js';
 
 import { createPersistence } from './persistence/index.js';
 import { resolveXmtpEnv } from './xmtp/options.js';
+import { syncXMTP } from '../../shared/xmtp.js';
 
 /**
  * @typedef {{
@@ -969,6 +970,88 @@ async function restoreGroupsFromPersistence({ listBindings, templs, watchContrac
   }
 }
 
+function normaliseInboxHex(value) {
+  try {
+    const raw = String(value ?? '').trim();
+    if (!raw) return null;
+    const hex = raw.replace(/^0x/i, '').toLowerCase();
+    return hex.length ? hex : null;
+  } catch {
+    return null;
+  }
+}
+
+function extractMemberInboxIds(members) {
+  if (!Array.isArray(members)) return [];
+  return members
+    .map((member) => {
+      if (!member) return null;
+      if (typeof member === 'string') return normaliseInboxHex(member);
+      if (typeof member === 'object') {
+        if (member.inboxId) return normaliseInboxHex(member.inboxId);
+        if (member.inbox_id) return normaliseInboxHex(member.inbox_id);
+      }
+      return null;
+    })
+    .filter(Boolean);
+}
+
+async function ensureInitialMembersInGroup({ group, inboxIds, xmtp, logger }) {
+  if (!group || !Array.isArray(inboxIds) || !inboxIds.length) return;
+  const unique = Array.from(new Set(inboxIds.map(normaliseInboxHex).filter(Boolean)));
+  if (!unique.length) return;
+
+  for (const clean of unique) {
+    const candidates = [`0x${clean}`, clean];
+    let added = false;
+    for (const candidate of candidates) {
+      try {
+        if (typeof group.addMembers === 'function') {
+          await group.addMembers([candidate]);
+          logger?.info?.({ groupId: group?.id, inboxId: candidate }, 'Ensured initial member via addMembers');
+          added = true;
+          break;
+        }
+      } catch (err) {
+        const msg = String(err?.message || '').toLowerCase();
+        if (msg.includes('already added')) {
+          added = true;
+          break;
+        }
+        logger?.debug?.({ groupId: group?.id, inboxId: candidate, error: err?.message || err }, 'addMembers failed for initial member');
+      }
+      if (typeof group.addMembersByInboxId === 'function' && !added) {
+        try {
+          await group.addMembersByInboxId([candidate]);
+          logger?.info?.({ groupId: group?.id, inboxId: candidate }, 'Ensured initial member via addMembersByInboxId');
+          added = true;
+          break;
+        } catch (err) {
+          const msg = String(err?.message || '').toLowerCase();
+          if (msg.includes('already added')) {
+            added = true;
+            break;
+          }
+          logger?.debug?.({ groupId: group?.id, inboxId: candidate, error: err?.message || err }, 'addMembersByInboxId failed for initial member');
+        }
+      }
+    }
+    if (!added) {
+      logger?.warn?.({ groupId: group?.id, inboxId: clean }, 'Failed to ensure initial member present in group');
+    }
+  }
+
+  try { await syncXMTP(xmtp); } catch (err) { logger?.debug?.({ err: err?.message || err }, 'syncXMTP after ensuring members failed'); }
+  try { await group?.sync?.(); } catch (err) { logger?.debug?.({ err: err?.message || err }, 'group.sync after ensuring members failed'); }
+  try {
+    const members = await group?.members?.();
+    const memberIds = extractMemberInboxIds(members);
+    logger?.info?.({ groupId: group?.id, memberIds }, 'Group members after ensuring initial membership');
+  } catch (err) {
+    logger?.debug?.({ err: err?.message || err, groupId: group?.id }, 'Failed to enumerate group members after ensuring membership');
+  }
+}
+
 function createBackgroundTasks({ templs, notifier, logger, persist }) {
   async function checkProposals() {
     const nowSeconds = Math.floor(Date.now() / 1000);
@@ -1608,6 +1691,13 @@ export async function createApp(opts) {
               record.group = group;
               templs.set(record.contractAddress || record.contract || '', record);
               await persist(record.contractAddress || record.contract || '', record);
+
+              await ensureInitialMembersInGroup({
+                group,
+                inboxIds: initialMembers,
+                xmtp,
+                logger
+              });
 
               logger.info({
                 contract: record.contractAddress,
