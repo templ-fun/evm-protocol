@@ -1,7 +1,7 @@
 // @ts-check
 import { BACKEND_URL } from '../config.js';
 import { buildJoinTypedData } from '@shared/signing.js';
-import { waitForConversation } from '@shared/xmtp.js';
+import { waitForConversation, deriveTemplGroupName } from '@shared/xmtp.js';
 import { dlog, isDebugEnabled } from './utils.js';
 import { registerTemplBackend } from './deployment.js';
 import { postJson } from './http.js';
@@ -426,7 +426,7 @@ export async function purchaseAndJoin({
       if (retry.ok) {
         const data = await retry.json();
         if (data && typeof data.groupId === 'string') {
-          return await finalizeJoin({ xmtp, groupId: String(data.groupId).replace(/^0x/i, '') });
+          return await finalizeJoin({ xmtp, groupId: String(data.groupId).replace(/^0x/i, ''), templAddress });
         }
       }
     } catch (err) {
@@ -455,7 +455,7 @@ export async function purchaseAndJoin({
       if (again.ok) {
         const data = await again.json();
         if (data && typeof data.groupId === 'string') {
-          return await finalizeJoin({ xmtp, groupId: String(data.groupId).replace(/^0x/i, '') });
+          return await finalizeJoin({ xmtp, groupId: String(data.groupId).replace(/^0x/i, ''), templAddress });
         }
       }
     }
@@ -480,7 +480,7 @@ export async function purchaseAndJoin({
     dlog('purchaseAndJoin: completed join process successfully');
   } catch {}
   onProgress?.('join:submission:complete');
-  const result = await finalizeJoin({ xmtp, groupId });
+  const result = await finalizeJoin({ xmtp, groupId, templAddress });
   onProgress?.('join:complete');
   return result;
 }
@@ -556,14 +556,15 @@ export async function requestChatInvite({
     throw new Error('Invalid /join response: missing groupId');
   }
   const groupId = String(data.groupId);
-  const result = await finalizeJoin({ xmtp, groupId });
+  const result = await finalizeJoin({ xmtp, groupId, templAddress });
   onProgress?.('join:complete');
   return result;
 }
 
-async function finalizeJoin({ xmtp, groupId }) {
+async function finalizeJoin({ xmtp, groupId, templAddress }) {
   const isFast = (() => { try { return import.meta?.env?.VITE_E2E_DEBUG === '1'; } catch { return false; } })();
-  const group = await waitForConversation({ xmtp, groupId, retries: isFast ? 25 : 60, delayMs: isFast ? 200 : 1000 });
+  const expectedName = deriveTemplGroupName(templAddress);
+  const group = await waitForConversation({ xmtp, groupId, expectedName, retries: isFast ? 25 : 60, delayMs: isFast ? 200 : 1000 });
   return { group, groupId };
 }
 

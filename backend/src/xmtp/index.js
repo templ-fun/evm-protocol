@@ -143,8 +143,9 @@ async function revokeStaleInstallations({ wallet, env }) {
       totalInstallations: installations.length
     }, 'Proceeding with installation revocation');
 
+    /** @type {import('@xmtp/node-sdk').Signer} */
     const revoker = {
-      type: 'EOA',
+      type: /** @type {'EOA'} */ ('EOA'),
       getIdentifier: () => ({
         identifier: wallet.address.toLowerCase(),
         identifierKind: 0,
@@ -152,13 +153,14 @@ async function revokeStaleInstallations({ wallet, env }) {
       }),
       signMessage: async (message) => {
         logger.debug({ messageType: typeof message }, 'Revoker signing message');
+        const rawMessage = /** @type {any} */ (message);
         let toSign;
-        if (message instanceof Uint8Array) {
-          try { toSign = ethers.toUtf8String(message); } catch { toSign = ethers.hexlify(message); }
-        } else if (typeof message === 'string') {
-          toSign = message;
+        if (rawMessage instanceof Uint8Array) {
+          try { toSign = ethers.toUtf8String(rawMessage); } catch { toSign = ethers.hexlify(rawMessage); }
+        } else if (typeof rawMessage === 'string') {
+          toSign = rawMessage;
         } else {
-          toSign = String(message);
+          toSign = String(rawMessage);
         }
         const signature = await wallet.signMessage(toSign);
         return ethers.getBytes(signature);
@@ -245,26 +247,26 @@ export async function createXmtpWithRotation(wallet, maxAttempts = 20) {
       walletAddress: wallet.address.toLowerCase()
     }, 'XMTP client creation attempt');
 
-    /** @type {import('@xmtp/node-sdk').Signer} */
     const xmtpSigner = /** @type {import('@xmtp/node-sdk').Signer} */ ({
-      type: 'EOA',
+      type: /** @type {'EOA'} */ ('EOA'),
       getIdentifier: () => ({
         identifier: wallet.address.toLowerCase(),
         identifierKind: 0, // Ethereum enum
         nonce: attempt
       }),
       signMessage: async (message) => {
+        const rawMessage = /** @type {any} */ (message);
         let toSign;
-        if (message instanceof Uint8Array) {
+        if (rawMessage instanceof Uint8Array) {
           try {
-            toSign = ethers.toUtf8String(message);
+            toSign = ethers.toUtf8String(rawMessage);
           } catch {
-            toSign = ethers.hexlify(message);
+            toSign = ethers.hexlify(rawMessage);
           }
-        } else if (typeof message === 'string') {
-          toSign = message;
+        } else if (typeof rawMessage === 'string') {
+          toSign = rawMessage;
         } else {
-          toSign = String(message);
+          toSign = String(rawMessage);
         }
         const signature = await wallet.signMessage(toSign);
         return ethers.getBytes(signature);

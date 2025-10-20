@@ -14,9 +14,14 @@ export default function debugRouter() {
       if (!/^[0-9a-fA-F]+$/.test(inboxId)) return res.status(400).json({ error: 'invalid inboxId' });
 
       const envParam = String(req.query.env || '').trim();
-      const resolved = ['local', 'dev', 'production'].includes(envParam)
-        ? envParam
-        : resolveXmtpEnv();
+      const fallbackEnv = resolveXmtpEnv();
+      const resolved = /** @type {'local' | 'dev' | 'production'} */ (
+        envParam === 'local' || envParam === 'dev' || envParam === 'production'
+          ? envParam
+          : fallbackEnv === 'local' || fallbackEnv === 'dev' || fallbackEnv === 'production'
+            ? fallbackEnv
+            : 'dev'
+      );
 
       let states = [];
       try {
@@ -36,4 +41,3 @@ export default function debugRouter() {
 
   return router;
 }
-

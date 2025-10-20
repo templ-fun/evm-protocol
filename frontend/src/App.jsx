@@ -27,7 +27,7 @@ import {
 } from './flows.js';
 import { requestChatInvite } from './services/membership.js';
 import { retryTemplRegistration } from './services/deployment.js';
-import { syncXMTP, waitForConversation, XMTP_CONSENT_STATES, XMTP_CONVERSATION_TYPES } from '@shared/xmtp.js';
+import { syncXMTP, waitForConversation, XMTP_CONSENT_STATES, XMTP_CONVERSATION_TYPES, listConversationCandidates, deriveTemplGroupName } from '@shared/xmtp.js';
 import './App.css';
 import { BACKEND_URL, FACTORY_CONFIG } from './config.js';
 import { useAppLocation } from './hooks/useAppLocation.js';
@@ -79,6 +79,17 @@ function groupIdEquals(a, b) {
     left.prefixed === right.lower ||
     right.prefixed === left.lower
   );
+}
+
+function rememberGroupMeta(group, groupId, fallbackName = '') {
+  if (typeof window === 'undefined') return;
+  try {
+    if (groupId) window.localStorage.setItem('templ:lastGroupId', groupId);
+  } catch {/* ignore */}
+  try {
+    const name = (group?.name || fallbackName || '').toString().trim();
+    if (name) window.localStorage.setItem('templ:lastGroupName', name);
+  } catch {/* ignore */}
 }
 
 const JOINED_STORAGE_PREFIX = 'templ:joined';
@@ -989,6 +1000,7 @@ function App() {
     setTemplAddress(next);
   }, []);
   const [groupId, setGroupId] = useState('');
+  const expectedGroupName = useMemo(() => deriveTemplGroupName(templAddress), [templAddress]);
   const joinedLoggedRef = useRef(false);
   const lastProfileBroadcastRef = useRef(0);
   const autoDeployTriggeredRef = useRef(false);
@@ -2458,11 +2470,11 @@ function App() {
           window.__XMTP = client;
           window.__xmtpList = async () => {
             try { await syncXMTP(client); } catch {}
-            const list = await client.conversations.list({
-              conversationType: XMTP_GROUP_CONVERSATION_TYPE,
+            const candidates = await listConversationCandidates({
+              xmtp: client,
               consentStates: XMTP_CONSENT_STATE_VALUES
             });
-            return list.map(c => c.id);
+            return (candidates || []).map((entry) => entry?.conv?.id).filter(Boolean);
           };
           window.__xmtpGetById = async (id) => {
             const wanted = String(id);
@@ -2474,11 +2486,11 @@ function App() {
               }
             } catch {}
             try {
-              const list = await client.conversations.list?.({
-                consentStates: XMTP_CONSENT_STATE_VALUES,
-                conversationType: XMTP_GROUP_CONVERSATION_TYPE
-              }) || [];
-              return list.some((c) => groupIdEquals(c?.id, wanted));
+              const candidates = await listConversationCandidates({
+                xmtp: client,
+                consentStates: XMTP_CONSENT_STATE_VALUES
+              });
+              return (candidates || []).some(({ conv }) => groupIdEquals(conv?.id, wanted));
             } catch {}
             return false;
           };
@@ -2805,6 +2817,7 @@ function App() {
       const canonicalGroupId = result.groupId ? normaliseGroupId(result.groupId).prefixed : null;
       setGroupId(canonicalGroupId || result.groupId);
       setGroupConnected(Boolean(result.group));
+      rememberGroupMeta(result.group, canonicalGroupId || result.groupId, deriveTemplGroupName(result.contractAddress));
       pushStatus('✅ Templ deployed');
       if (result.groupId) pushStatus('✅ Group created');
       if (result.contractAddress) {
@@ -2812,7 +2825,6 @@ function App() {
       }
       try {
         localStorage.setItem('templ:lastAddress', result.contractAddress);
-        if (canonicalGroupId) localStorage.setItem('templ:lastGroupId', canonicalGroupId);
       } catch {}
       navigate(`/chat?address=${result.contractAddress}`);
     } catch (err) {
@@ -3035,10 +3047,10 @@ function App() {
         } else {
           pushStatus('🔄 Waiting for group discovery');
         }
+        rememberGroupMeta(result.group, canonicalGroupId || result.groupId, deriveTemplGroupName(trimmedAddress));
         setPendingJoinAddress(null);
         try {
           localStorage.setItem('templ:lastAddress', trimmedAddress);
-          if (canonicalGroupId) localStorage.setItem('templ:lastGroupId', canonicalGroupId);
         } catch {}
         rememberJoinedTempl(trimmedAddress);
         setTemplList((prev) => {
@@ -3098,6 +3110,8 @@ function App() {
       const canonicalGroupId = result.groupId ? normaliseGroupId(result.groupId).prefixed : null;
       setGroupId(canonicalGroupId || result.groupId);
       setGroupConnected(Boolean(result.group));
+      rememberGroupMeta(result.group, canonicalGroupId || result.groupId, deriveTemplGroupName(trimmedAddress));
+      try { localStorage.setItem('templ:lastAddress', trimmedAddress); } catch {}
       pushStatus('✅ Chat invite completed');
     } catch (err) {
       const msg = String(err?.message || 'Join failed');
@@ -3109,7 +3123,7 @@ function App() {
         pushStatus(`⚠️ Join failed: ${msg}`);
       }
     }
-  }, [signer, xmtp, templAddress, walletAddress, templArtifact, pushStatus]);
+  }, [signer, xmtp, templAddress, walletAddress, pushStatus]);
 
   const handleRetryChatSetup = useCallback(async () => {
     if (!signer || !templAddress) return;
@@ -3161,24 +3175,36 @@ function App() {
     (async () => {
       if (!xmtp || group || groupConnected) return;
       let gid = '';
+      let storedName = '';
       try {
         const stored = localStorage.getItem('templ:lastGroupId');
         if (stored) gid = normaliseGroupId(stored).prefixed;
       } catch {}
+      try {
+        storedName = localStorage.getItem('templ:lastGroupName') || '';
+      } catch {}
       if (!gid) return;
+      const fallbackName = expectedGroupName || storedName;
       try {
         console.info('[chat] passive discovery: waitForConversation', { gid });
-        const found = await waitForConversation({ xmtp, groupId: gid, retries: 20, delayMs: 500 });
+        const found = await waitForConversation({
+          xmtp,
+          groupId: gid,
+          expectedName: fallbackName,
+          retries: 20,
+          delayMs: 500
+        });
         if (found) {
           setGroup(found);
           setGroupConnected(true);
           pushStatus('✅ Group connected');
+          rememberGroupMeta(found, gid, fallbackName);
         }
       } catch (e) {
         console.warn('[chat] passive discovery failed', e?.message || e);
       }
     })();
-  }, [pathIsChat, xmtp, group, groupConnected, pushStatus]);
+  }, [pathIsChat, xmtp, group, groupConnected, pushStatus, expectedGroupName]);
 
   // As soon as we have a groupId, surface a visible success status
   useEffect(() => {
@@ -3501,11 +3527,12 @@ function App() {
       try {
         const retries = import.meta.env?.VITE_XMTP_ENV === 'local' ? 25 : 6;
         const d = import.meta.env?.VITE_XMTP_ENV === 'local' ? 200 : 1000;
-        const conv = await waitForConversation({ xmtp, groupId: wanted, retries, delayMs: d });
+        const conv = await waitForConversation({ xmtp, groupId: wanted, expectedName: expectedGroupName, retries, delayMs: d });
         if (conv) {
           setGroup(conv);
           pushStatus('✅ Group discovered');
           setGroupConnected(true);
+          rememberGroupMeta(conv, wanted, expectedGroupName);
           return;
         }
       } catch {}
@@ -3540,25 +3567,30 @@ function App() {
             setGroup(maybe);
             pushStatus('✅ Group discovered');
             setGroupConnected(true);
+            rememberGroupMeta(maybe, wanted, expectedGroupName);
             break;
           }
         } catch (e) { console.warn('[app] getById error', e?.message || e); }
         try {
-          const list = await xmtp.conversations.list?.({
-            consentStates: XMTP_CONSENT_STATE_VALUES,
-            conversationType: XMTP_GROUP_CONVERSATION_TYPE
-          }) || [];
-          dlog('[app] list size=', list?.length, 'firstIds=', (list||[]).slice(0,3).map(c=>c.id));
-          console.info('[chat] list conversations size', list?.length);
-          console.info('[chat] conversation ids', (list || []).map((c) => c.id));
-          const found = list.find((c) => groupIdEquals(c?.id, wanted));
-          if (found) {
+          const candidates = await listConversationCandidates({
+            xmtp,
+            consentStates: XMTP_CONSENT_STATE_VALUES
+          });
+          const list = (candidates || []).map(({ conv }) => conv).filter(Boolean);
+          const ids = list.map((c) => c.id);
+          const tagPreview = (candidates || []).slice(0, 3).map(({ conv: candidate, tags }) => `${candidate?.id || 'unknown'}[${(tags || []).join('+')}]`);
+          dlog('[app] conversation candidates size=', list.length, 'firstIds=', ids.slice(0, 3), 'tags=', tagPreview);
+          console.info('[chat] list conversations size', list.length);
+          console.info('[chat] conversation ids', ids);
+          const foundEntry = (candidates || []).find(({ conv: candidate }) => groupIdEquals(candidate?.id, wanted) || (candidate?.name && candidate.name.toLowerCase() === (expectedGroupName || '').toLowerCase()));
+          if (foundEntry?.conv) {
             dlog('[app] found group by list');
             console.info('[chat] found group by list');
-            setGroup(found);
+            setGroup(foundEntry.conv);
             pushStatus('✅ Group discovered');
             setGroupConnected(true);
             await logAgg('post-discovery');
+            rememberGroupMeta(foundEntry.conv, wanted, expectedGroupName);
             break;
           }
         } catch (e) { console.warn('[app] list error', e?.message || e); }
@@ -3619,6 +3651,7 @@ function App() {
               setGroup(maybe);
               pushStatus('✅ Group discovered');
               setGroupConnected(true);
+              rememberGroupMeta(maybe, wanted, expectedGroupName);
             }
           }
         };
@@ -3639,6 +3672,7 @@ function App() {
                 setGroup(maybe);
                 pushStatus('✅ Group discovered');
                 setGroupConnected(true);
+                rememberGroupMeta(maybe, wanted, expectedGroupName);
                 break;
               }
             }
@@ -3649,7 +3683,7 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [pathIsChat, xmtp, groupId, group, templAddress, pushStatus]);
+  }, [pathIsChat, xmtp, groupId, group, templAddress, pushStatus, expectedGroupName]);
 
   useEffect(() => {
     if (!pathIsChat || !templAddress || !signer) return;
@@ -4210,11 +4244,12 @@ function App() {
       // If discovery lags, resolve the conversation on demand before sending
       if (!activeGroup && xmtp && groupId) {
         try {
-          activeGroup = await waitForConversation({ xmtp, groupId, retries: 30, delayMs: 1000 });
+          activeGroup = await waitForConversation({ xmtp, groupId, expectedName: expectedGroupName, retries: 30, delayMs: 1000 });
           if (activeGroup) {
             setGroup(activeGroup);
             setGroupConnected(true);
             pushStatus('✅ Group discovered');
+            rememberGroupMeta(activeGroup, groupId, expectedGroupName);
           }
         } catch {}
       }
@@ -6341,7 +6376,7 @@ function App() {
                       if (xmtp) {
                         let convo = group;
                         if ((!convo || !convo.id) && groupId) {
-                          convo = await waitForConversation({ xmtp, groupId, retries: 6, delayMs: 500 });
+                          convo = await waitForConversation({ xmtp, groupId, expectedName: expectedGroupName, retries: 6, delayMs: 500 });
                         }
                         if (convo && typeof convo.send === 'function') {
                           const payload = { type: 'proposal-meta', id: numericId, title: metaTitle };

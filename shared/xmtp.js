@@ -2,6 +2,7 @@
 
 // XMTP utility helpers shared across frontend, backend, and tests
 
+import { ethers } from 'ethers';
 import { waitFor } from './xmtp-wait.js';
 import { isTemplDebugEnabled, isTemplE2EDebug } from './debug.js';
 
@@ -26,6 +27,27 @@ export const XMTP_CONVERSATION_TYPES = {
   GROUP: 1,
   SYNC: 2
 };
+
+/**
+ * Derive the standard templ group name given a contract address.
+ * @param {string} [contractAddress]
+ * @returns {string}
+ */
+export function deriveTemplGroupName(contractAddress) {
+  if (!contractAddress) return '';
+  const raw = String(contractAddress).trim();
+  if (!raw) return '';
+  let checksum = raw;
+  try {
+    checksum = ethers.getAddress(raw);
+  } catch {
+    if (!raw.startsWith('0x') && /^([0-9a-fA-F]+)$/.test(raw)) {
+      checksum = `0x${raw}`;
+    }
+  }
+  const prefix = checksum.slice(0, 10);
+  return prefix ? `templ:${prefix}` : 'templ';
+}
 
 export async function syncXMTP(xmtp, retries = 1, delayMs = 1000) {
   // In e2e fast mode, avoid long retries
@@ -86,15 +108,114 @@ export async function syncXMTP(xmtp, retries = 1, delayMs = 1000) {
 }
 
 /**
+ * Aggregate conversations across conversation types for discovery flows.
+ * @param {object} [params]
+ * @param {any} [params.xmtp]
+ * @param {Array<number|string>} [params.consentStates]
+ * @param {Array<'all'|'group'|'sync'>} [params.conversationTypes]
+ * @returns {Promise<Array<{ conv: any, tags: string[] }>>}
+ */
+export async function listConversationCandidates({
+  xmtp,
+  consentStates,
+  conversationTypes = ['all', 'group', 'sync']
+} = {}) {
+  if (!xmtp?.conversations) return [];
+  const resolvedConsentStates = Array.isArray(consentStates) && consentStates.length
+    ? consentStates
+    : [
+        XMTP_CONSENT_STATES.ALLOWED,
+        XMTP_CONSENT_STATES.UNKNOWN,
+        XMTP_CONSENT_STATES.DENIED
+      ];
+
+  const wants = new Set(
+    Array.isArray(conversationTypes) && conversationTypes.length
+      ? conversationTypes
+      : ['all', 'group', 'sync']
+  );
+
+  const aggregate = new Map();
+  const noteConversation = (tag, conversations) => {
+    if (!Array.isArray(conversations)) return;
+    for (const item of conversations) {
+      if (!item || !item.id) continue;
+      const key = String(item.id);
+      if (!aggregate.has(key)) {
+        aggregate.set(key, { conv: item, tags: new Set([tag]) });
+      } else {
+        aggregate.get(key).tags.add(tag);
+      }
+    }
+  };
+
+  const listAttempts = [];
+  if (wants.has('all')) {
+    listAttempts.push({ tag: 'list(all)', options: { consentStates: resolvedConsentStates } });
+  }
+  if (wants.has('group')) {
+    listAttempts.push({
+      tag: 'list(group)',
+      options: {
+        consentStates: resolvedConsentStates,
+        conversationType: XMTP_CONVERSATION_TYPES.GROUP
+      }
+    });
+  }
+  if (wants.has('sync')) {
+    listAttempts.push({
+      tag: 'list(sync)',
+      options: {
+        consentStates: resolvedConsentStates,
+        conversationType: XMTP_CONVERSATION_TYPES.SYNC
+      }
+    });
+  }
+
+  for (const attempt of listAttempts) {
+    try {
+      const conversations = await xmtp.conversations.list?.(attempt.options) || [];
+      dlog(`${attempt.tag} returned ${conversations.length} conversations; firstIds=`, conversations.slice(0, 3).map((c) => c.id));
+      noteConversation(attempt.tag, conversations);
+    } catch (err) {
+      dlog(`${attempt.tag} failed:`, err?.message || String(err));
+    }
+  }
+
+  if (wants.has('group') && typeof xmtp.conversations.listGroups === 'function') {
+    try {
+      const groups = await xmtp.conversations.listGroups({ consentStates: resolvedConsentStates });
+      dlog('listGroups returned', groups.length, 'conversations; firstIds=', groups.slice(0, 3).map((c) => c.id));
+      noteConversation('listGroups', groups);
+    } catch (err) {
+      dlog('listGroups failed:', err?.message || String(err));
+    }
+  }
+
+  const aggregated = Array.from(aggregate.values()).map(({ conv, tags }) => ({
+    conv,
+    tags: Array.from(tags)
+  }));
+
+  if (aggregated.length) {
+    const preview = aggregated.slice(0, 5).map(({ conv, tags }) => `${conv.id}[${tags.join('+')}]::${conv?.name || ''}`);
+    dlog('Aggregated conversation candidates:', preview);
+  }
+
+  return aggregated;
+}
+
+/**
  * Wait for a conversation by ID, syncing XMTP between attempts.
  * @param {object} params
  * @param {any} params.xmtp XMTP client
  * @param {string} params.groupId Conversation ID to search for
  * @param {number} [params.retries=60] Number of attempts
  * @param {number} [params.delayMs=1000] Delay between attempts in ms
+ * @param {string} [params.expectedName] Optional fallback group name to match
  * @returns {Promise<any|null>} Conversation if found, else null
  */
-export async function waitForConversation({ xmtp, groupId, retries = 60, delayMs = 1000 }) {
+export async function waitForConversation({ xmtp, groupId, retries = 60, delayMs = 1000, expectedName = '' }) {
   // Fast mode for tests/dev
   if (isTemplE2EDebug()) {
     retries = Math.min(retries, 5);
@@ -139,6 +260,12 @@ export async function waitForConversation({ xmtp, groupId, retries = 60, delayMs
       await syncXMTP(xmtp);
       let conv = null;
       let usedMethod = '';
+      const consentFilters = [
+        XMTP_CONSENT_STATES.ALLOWED,
+        XMTP_CONSENT_STATES.UNKNOWN,
+        XMTP_CONSENT_STATES.DENIED
+      ];
+      const targetName = (expectedName || '').toString().trim().toLowerCase();
 
       // Try with exact, 0x-prefixed, and non-0x forms for maximum compatibility
       for (const candidate of candidateIds) {
@@ -155,50 +282,82 @@ export async function waitForConversation({ xmtp, groupId, retries = 60, delayMs
       }
 
       if (!conv) {
-        usedMethod = 'listConversations';
         try {
-          const conversations = await xmtp?.conversations?.list?.({
-            consentStates: [
-              XMTP_CONSENT_STATES.ALLOWED,
-              XMTP_CONSENT_STATES.UNKNOWN,
-              XMTP_CONSENT_STATES.DENIED
-            ],
-            conversationType: XMTP_CONVERSATION_TYPES.GROUP
-          }) || [];
+          const aggregated = await listConversationCandidates({
+            xmtp,
+            consentStates: consentFilters
+          });
 
-          dlog(`Sync attempt: Found ${conversations.length} conversations; firstIds=`, conversations.slice(0,3).map(c => c.id));
-
-          conv = conversations.find((c) => idsMatch(c?.id, groupId)) || null;
-
-          if (conv) {
-            dlog(`Found conversation via ${usedMethod}:`, conv.id);
+          const matchById = aggregated.find(({ conv: candidate }) => idsMatch(candidate?.id, groupId));
+          if (matchById) {
+            conv = matchById.conv;
+            usedMethod = `aggregate:${(matchById.tags || []).join('+') || 'list'}`;
+            dlog(`Found conversation via aggregated lists (${usedMethod}):`, conv.id);
+          } else if (targetName) {
+            const normaliseName = (value) => (value ?? '').toString().trim().toLowerCase();
+            const matchedByName = aggregated.find(({ conv: candidate }) => normaliseName(candidate?.name) === targetName);
+            if (matchedByName) {
+              conv = matchedByName.conv;
+              usedMethod = `name:${(matchedByName.tags || []).join('+') || 'list'}`;
+              dlog(`Found conversation via name match (${usedMethod}):`, conv.id, 'name=', conv.name);
+            } else {
+              // As a last resort, invoke metadata for each candidate and compare creator + name together.
+              for (const entry of aggregated) {
+                if (conv) break;
+                const candidate = entry.conv;
+                if (!candidate || typeof candidate.metadata !== 'function') continue;
+                try {
+                  const meta = await candidate.metadata();
+                  const metaName = (meta?.conversationType ? candidate?.name : candidate?.name) || '';
+                  if (normaliseName(metaName) === targetName) {
+                    conv = candidate;
+                    usedMethod = `metadata-name:${(entry.tags || []).join('+') || 'list'}`;
+                    dlog(`Found conversation via metadata name (${usedMethod}):`, conv.id, 'name=', candidate?.name);
+                    break;
+                  }
+                } catch (errMeta) {
+                  dlog('metadata lookup failed during name match:', errMeta?.message || String(errMeta));
+                }
+              }
+            }
           }
         } catch (err) {
-          dlog('list conversations failed:', err?.message || String(err));
+          dlog('listConversationCandidates failed:', err?.message || String(err));
         }
       }
 
       if (conv) {
-        dlog(`Found group ${conv.id} via ${usedMethod}, consent state:`, conv.consentState);
+        let consentStateValue;
+        try {
+          if (typeof conv?.consentState === 'function') {
+            consentStateValue = await conv.consentState();
+          } else {
+            consentStateValue = conv?.consentState;
+          }
+        } catch (err) {
+          dlog('Failed to read consent state:', err?.message || String(err));
+        }
 
-        // Ensure consent state is allowed
-        const consentState = conv.consentState;
-        const consentLabel = typeof consentState === 'string' ? consentState.toLowerCase() : String(consentState ?? '').toLowerCase();
+        dlog(`Found group ${conv.id} via ${usedMethod}, consent state:`, consentStateValue);
+
+        const consentLabel = typeof consentStateValue === 'string'
+          ? consentStateValue.toLowerCase()
+          : String(consentStateValue ?? '').toLowerCase();
+
         const isAllowed =
-          consentState === XMTP_CONSENT_STATES.ALLOWED ||
+          consentStateValue === XMTP_CONSENT_STATES.ALLOWED ||
           consentLabel === 'allowed';
 
-        if (!isAllowed && typeof conv.updateConsentState === 'function') {
+        if (!isAllowed && typeof conv?.updateConsentState === 'function') {
           const targetLabel = 'allowed';
           const targetEnum = XMTP_CONSENT_STATES.ALLOWED;
-          dlog(`Updating consent state from '${consentState}' to '${targetLabel}' for conversation ${conv.id}`);
+          dlog(`Updating consent state from '${consentStateValue}' to '${targetLabel}' for conversation ${conv.id}`);
           try {
             await conv.updateConsentState(targetEnum);
             dlog('Successfully updated consent state');
           } catch (err) {
             const message = err?.message || String(err);
             dlog('updateConsentState failed:', message);
-            // Fallback to string-based API for legacy SDKs
             try {
               await conv.updateConsentState(targetLabel);
               dlog('Successfully updated consent state using string fallback');

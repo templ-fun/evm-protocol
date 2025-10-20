@@ -1,7 +1,7 @@
 // @ts-check
 import { BACKEND_URL } from '../config.js';
 import { buildCreateTypedData } from '@shared/signing.js';
-import { waitForConversation } from '@shared/xmtp.js';
+import { waitForConversation, deriveTemplGroupName } from '@shared/xmtp.js';
 import { addToTestRegistry, dlog, isDebugEnabled } from './utils.js';
 import { postJson } from './http.js';
 
@@ -263,6 +263,7 @@ export async function deployTempl({
     return { contractAddress, group: null, groupId: null };
   }
   const groupId = String(data.groupId);
+  const expectedGroupName = deriveTemplGroupName(contractAddress);
   // In e2e fast mode, return immediately; conversation discovery can happen later
   try {
     // @ts-ignore - vite injects env on import.meta
@@ -279,10 +280,10 @@ export async function deployTempl({
   dlog('Syncing conversations to find group', groupId);
   const isFast = (() => { try { return import.meta?.env?.VITE_E2E_DEBUG === '1'; } catch { return false; } })();
   // Be more generous in e2e to reduce flakiness on prod XMTP
-  const group = await waitForConversation({ xmtp, groupId, retries: isFast ? 12 : 6, delayMs: isFast ? 500 : 1000 });
+  const group = await waitForConversation({ xmtp, groupId, expectedName: expectedGroupName, retries: isFast ? 12 : 6, delayMs: isFast ? 500 : 1000 });
   if (!group) {
     const resolveConversation = async () => {
-      const fallback = await waitForConversation({ xmtp, groupId, retries: isFast ? 60 : 120, delayMs: isFast ? 500 : 1000 });
+      const fallback = await waitForConversation({ xmtp, groupId, expectedName: expectedGroupName, retries: isFast ? 60 : 120, delayMs: isFast ? 500 : 1000 });
       if (!fallback) return null;
       return fallback;
     };
