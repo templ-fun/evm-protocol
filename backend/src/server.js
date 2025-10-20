@@ -1001,6 +1001,9 @@ async function ensureInitialMembersInGroup({ group, inboxIds, xmtp, logger }) {
   const unique = Array.from(new Set(inboxIds.map(normaliseInboxHex).filter(Boolean)));
   if (!unique.length) return;
 
+  try { await syncXMTP(xmtp); } catch (err) { logger?.debug?.({ err: err?.message || err }, 'syncXMTP before ensuring members failed'); }
+  try { await group?.sync?.(); } catch (err) { logger?.debug?.({ err: err?.message || err }, 'group.sync before ensuring members failed'); }
+
   for (const clean of unique) {
     const candidates = [`0x${clean}`, clean];
     let added = false;
@@ -1039,6 +1042,15 @@ async function ensureInitialMembersInGroup({ group, inboxIds, xmtp, logger }) {
     if (!added) {
       logger?.warn?.({ groupId: group?.id, inboxId: clean }, 'Failed to ensure initial member present in group');
     }
+  }
+
+  try {
+    if (typeof group.publishMessages === 'function') {
+      await group.publishMessages();
+      logger?.info?.({ groupId: group?.id }, 'Published pending group messages after member ensure');
+    }
+  } catch (err) {
+    logger?.warn?.({ groupId: group?.id, err: err?.message || err }, 'Failed to publish pending group messages after member ensure');
   }
 
   try { await syncXMTP(xmtp); } catch (err) { logger?.debug?.({ err: err?.message || err }, 'syncXMTP after ensuring members failed'); }
