@@ -18,6 +18,35 @@ function normaliseHex(value) {
   return String(value || '').replace(/^0x/i, '').toLowerCase();
 }
 
+async function getGroupMemberIds(group, logger) {
+  if (!group) return [];
+  try {
+    if (typeof group.sync === 'function') {
+      try { await group.sync(); } catch {/* ignore sync errors */ }
+    }
+    const rawMembers = typeof group.members === 'function'
+      ? await group.members()
+      : Array.isArray(group.members) ? group.members : [];
+    return rawMembers
+      .map((entry) => {
+        if (!entry) return null;
+        if (typeof entry === 'string') return normaliseHex(entry);
+        if (typeof entry === 'object') {
+          if (entry.inboxId) return normaliseHex(entry.inboxId);
+          if (entry.inbox_id) return normaliseHex(entry.inbox_id);
+        }
+        return null;
+      })
+      .filter(Boolean);
+  } catch (err) {
+    logger?.debug?.({
+      err: err?.message || err,
+      groupId: group?.id
+    }, 'Failed to enumerate group members');
+    return [];
+  }
+}
+
 function parseProvidedInboxId(value) {
   try {
     const raw = String(value || '').trim();
@@ -247,15 +276,15 @@ async function ensureInstallationsReady({ inboxId, xmtp, lastJoin, logger }) {
   }
 }
 
-async function ensureMemberInGroup({ group, inboxId }) {
+async function ensureMemberInGroup({ group, inboxId, logger }) {
   const envOpt = resolveXmtpEnv();
   const fast = isFastEnv();
   const max = fast ? 3 : envOpt === 'local' ? 30 : 60;
   const delay = fast ? 100 : envOpt === 'local' ? 150 : 500;
+  const target = normaliseHex(inboxId);
   for (let i = 0; i < max; i++) {
-    try { await group?.sync?.(); } catch {/* ignore */}
-    const members = Array.isArray(group?.members) ? group.members : [];
-    if (members.some((m) => normaliseHex(m) === normaliseHex(inboxId))) return;
+    const members = await getGroupMemberIds(group, logger);
+    if (members.some((memberId) => memberId === target)) return;
     await new Promise((resolve) => setTimeout(resolve, delay));
   }
 }
@@ -308,12 +337,20 @@ async function addMemberToGroup({ group, inboxId, memberIdentifier, logger }) {
     }
   }, 'Starting member addition to group');
 
+  const normalizedInboxId = String(inboxId || '').replace(/^0x/i, '');
+
   try {
+    if (typeof group.addMembers === 'function') {
+      logger.info({ method: 'addMembers', inboxId: normalizedInboxId }, 'Attempting to add member using addMembers');
+      await group.addMembers([normalizedInboxId]);
+      logger?.info?.({ inboxId: normalizedInboxId, method: 'addMembers' }, 'addMembers([inboxId]) succeeded');
+      return;
+    }
     // Prefer explicit inboxId API if available
     if (typeof group.addMembersByInboxId === 'function') {
-      logger.info({ method: 'addMembersByInboxId', inboxId }, 'Attempting to add member using addMembersByInboxId');
-      await group.addMembersByInboxId([inboxId]);
-      logger?.info?.({ inboxId, method: 'addMembersByInboxId' }, 'addMembersByInboxId([inboxId]) succeeded');
+      logger.info({ method: 'addMembersByInboxId', inboxId: normalizedInboxId }, 'Attempting to add member using addMembersByInboxId');
+      await group.addMembersByInboxId([normalizedInboxId]);
+      logger?.info?.({ inboxId: normalizedInboxId, method: 'addMembersByInboxId' }, 'addMembersByInboxId([inboxId]) succeeded');
       return;
     }
     // Fall back to identifier-based API
@@ -436,11 +473,13 @@ export async function joinTemplWithXmtp(body, context) {
     throw templError('Group not ready yet; retry shortly', 503);
   }
 
+  const membersBefore = await getGroupMemberIds(group, logger);
+
   logger.info({
     contractAddress,
     groupId: group.id,
     groupName: group.name,
-    groupMembersCount: group.members?.length || 0
+    groupMembersCount: membersBefore.length
   }, 'Group hydration successful');
 
   const memberIdentifier = { identifier: memberAddress.toLowerCase(), identifierKind: 0 };
@@ -509,18 +548,20 @@ export async function joinTemplWithXmtp(body, context) {
 
   logger?.info?.(joinMeta, 'Inviting member by inboxId');
 
+  const beforeAddMembers = await getGroupMemberIds(group, logger);
   logger.info({
     inboxId,
     groupId: group.id,
-    groupMembersBefore: group.members?.length || 0
+    groupMembersBefore: beforeAddMembers.length
   }, 'Adding member to XMTP group');
   try { if (typeof group?.sync === 'function') { await group.sync(); } } catch {/* ignore */}
   await addMemberToGroup({ group, inboxId, memberIdentifier, logger });
 
+  const afterAddMembers = await getGroupMemberIds(group, logger);
   logger.info({
     inboxId,
     groupId: group.id,
-    groupMembersAfter: group.members?.length || 0
+    groupMembersAfter: afterAddMembers.length
   }, 'Member addition completed');
 
   try {
@@ -532,7 +573,7 @@ export async function joinTemplWithXmtp(body, context) {
     logger?.warn?.({ err }, 'Server sync after join failed');
   }
 
-  await ensureMemberInGroup({ group, inboxId });
+  await ensureMemberInGroup({ group, inboxId, logger });
 
   try {
     lastJoin.at = Date.now();
