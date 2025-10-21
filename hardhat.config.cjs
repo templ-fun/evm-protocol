@@ -23,15 +23,17 @@ const usingCoverage =
   process.env.SOLIDITY_COVERAGE === "true" ||
   process.env.SOLIDITY_COVERAGE === "1";
 
+const viaIRDefault = process.env.SOLC_VIA_IR === "false" ? false : true;
+
 /** @type import("hardhat/config").HardhatUserConfig */
 const config = {
   solidity: {
     version: "0.8.23",
     settings: {
-      viaIR: true,
+      viaIR: viaIRDefault,
       optimizer: {
         enabled: true,
-        runs: usingCoverage ? 1 : 50
+        runs: usingCoverage ? 1 : 1
       }
     }
   },

@@ -2,7 +2,6 @@
 pragma solidity ^0.8.23;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {TemplErrors} from "./TemplErrors.sol";
@@ -11,7 +10,6 @@ import {CurveConfig, CurveSegment, CurveStyle} from "./TemplCurve.sol";
 /// @title Base templ storage and shared helpers
 /// @notice Hosts shared state, events, and internal helpers used by membership, treasury, and governance modules.
 abstract contract TemplBase is ReentrancyGuard {
-    using SafeERC20 for IERC20;
     using TemplErrors for *;
 
     /// @dev Basis used for fee split math so every percent is represented as an integer.
@@ -34,14 +32,14 @@ abstract contract TemplBase is ReentrancyGuard {
     /// @notice Percent of the entry fee set aside for the member rewards pool.
     uint256 public memberPoolPercent;
     /// @notice Percent of the entry fee forwarded to the protocol on every join.
-    uint256 public immutable protocolPercent;
+    uint256 public protocolPercent;
 
     /// @notice Address empowered to act as the priest (and temporary dictator).
     address public priest;
     /// @notice Address that receives the protocol share during joins and distributions.
-    address public immutable protocolFeeRecipient;
+    address public protocolFeeRecipient;
     /// @notice ERC-20 token required to join the templ.
-    address public immutable accessToken;
+    address public accessToken;
     /// @notice Tracks whether dictatorship mode is enabled.
     bool public priestIsDictator;
     /// @notice Current entry fee denominated in the access token.
@@ -65,7 +63,7 @@ abstract contract TemplBase is ReentrancyGuard {
     /// @notice Seconds governance must wait after quorum before executing a proposal.
     uint256 public executionDelayAfterQuorum;
     /// @notice Address that receives burn allocations.
-    address public immutable burnAddress;
+    address public burnAddress;
     /// @notice Templ metadata surfaced across UIs and off-chain services.
     string public templName;
     string public templDescription;
@@ -313,6 +311,68 @@ abstract contract TemplBase is ReentrancyGuard {
         }
     }
 
+    /// @dev Determines the cumulative rewards baseline for a member given join-time snapshots.
+    function _externalBaselineForMember(
+        ExternalRewardState storage rewards,
+        Member storage memberInfo
+    ) internal view returns (uint256) {
+        RewardCheckpoint[] storage checkpoints = rewards.checkpoints;
+        uint256 len = checkpoints.length;
+        if (len == 0) {
+            return rewards.cumulativeRewards;
+        }
+
+        uint256 memberBlockNumber = memberInfo.blockNumber;
+        uint256 memberTimestamp = memberInfo.timestamp;
+        uint256 low = 0;
+        uint256 high = len;
+
+        while (low < high) {
+            uint256 mid = (low + high) >> 1;
+            RewardCheckpoint storage cp = checkpoints[mid];
+            if (memberBlockNumber < cp.blockNumber) {
+                high = mid;
+            } else if (memberBlockNumber > cp.blockNumber) {
+                low = mid + 1;
+            } else if (memberTimestamp < cp.timestamp) {
+                high = mid;
+            } else {
+                low = mid + 1;
+            }
+        }
+
+        if (low == 0) {
+            return 0;
+        }
+
+        return checkpoints[low - 1].cumulative;
+    }
+
+    /// @dev Distributes any outstanding external reward remainders to existing members before new joins.
+    function _flushExternalRemainders() internal {
+        uint256 currentMembers = memberCount;
+        if (currentMembers == 0) {
+            return;
+        }
+        uint256 tokenCount = externalRewardTokens.length;
+        for (uint256 i = 0; i < tokenCount; i++) {
+            address token = externalRewardTokens[i];
+            ExternalRewardState storage rewards = externalRewards[token];
+            uint256 remainder = rewards.rewardRemainder;
+            if (remainder == 0) {
+                continue;
+            }
+            uint256 perMember = remainder / currentMembers;
+            if (perMember == 0) {
+                continue;
+            }
+            uint256 leftover = remainder % currentMembers;
+            rewards.rewardRemainder = leftover;
+            rewards.cumulativeRewards += perMember;
+            _recordExternalCheckpoint(rewards);
+        }
+    }
+
     /// @notice Sets immutable configuration and initial governance parameters shared across modules.
     /// @param _protocolFeeRecipient Address receiving the protocol share of entry fees.
     /// @param _accessToken ERC-20 token that gates membership.
@@ -329,7 +389,7 @@ abstract contract TemplBase is ReentrancyGuard {
     /// @param _logoLink Initial templ logo link.
     /// @param _proposalCreationFeeBps Proposal creation fee in basis points of the entry fee.
     /// @param _referralShareBps Referral share in basis points of the member pool allocation.
-    constructor(
+    function _initializeTempl(
         address _protocolFeeRecipient,
         address _accessToken,
         uint256 _burnPercent,
@@ -345,7 +405,7 @@ abstract contract TemplBase is ReentrancyGuard {
         string memory _logoLink,
         uint256 _proposalCreationFeeBps,
         uint256 _referralShareBps
-    ) {
+    ) internal {
         if (_protocolFeeRecipient == address(0) || _accessToken == address(0)) {
             revert TemplErrors.InvalidRecipient();
         }
@@ -651,12 +711,6 @@ abstract contract TemplBase is ReentrancyGuard {
         string memory newDescription,
         string memory newLogoLink
     ) internal {
-        bool changed = keccak256(bytes(templName)) != keccak256(bytes(newName)) ||
-            keccak256(bytes(templDescription)) != keccak256(bytes(newDescription)) ||
-            keccak256(bytes(templLogoLink)) != keccak256(bytes(newLogoLink));
-        if (!changed) {
-            return;
-        }
         templName = newName;
         templDescription = newDescription;
         templLogoLink = newLogoLink;
@@ -667,9 +721,6 @@ abstract contract TemplBase is ReentrancyGuard {
     function _setProposalCreationFee(uint256 newFeeBps) internal {
         if (newFeeBps > TOTAL_PERCENT) revert TemplErrors.InvalidPercentage();
         uint256 previous = proposalCreationFeeBps;
-        if (previous == newFeeBps) {
-            return;
-        }
         proposalCreationFeeBps = newFeeBps;
         emit ProposalCreationFeeUpdated(previous, newFeeBps);
     }
@@ -678,11 +729,177 @@ abstract contract TemplBase is ReentrancyGuard {
     function _setReferralShareBps(uint256 newBps) internal {
         if (newBps > TOTAL_PERCENT) revert TemplErrors.InvalidPercentage();
         uint256 previous = referralShareBps;
-        if (previous == newBps) {
-            return;
-        }
         referralShareBps = newBps;
         emit ReferralShareBpsUpdated(previous, newBps);
+    }
+
+    /// @dev Internal helper that executes a treasury withdrawal and emits the corresponding event.
+    function _withdrawTreasury(
+        address token,
+        address recipient,
+        uint256 amount,
+        string memory reason,
+        uint256 proposalId
+    ) internal {
+        if (recipient == address(0)) revert TemplErrors.InvalidRecipient();
+        if (amount == 0) revert TemplErrors.AmountZero();
+
+        if (token == accessToken) {
+            uint256 currentBalance = IERC20(accessToken).balanceOf(address(this));
+            if (currentBalance <= memberPoolBalance) revert TemplErrors.InsufficientTreasuryBalance();
+            uint256 availableBalance = currentBalance - memberPoolBalance;
+            if (amount > availableBalance) revert TemplErrors.InsufficientTreasuryBalance();
+            uint256 debitedFromFees = amount <= treasuryBalance ? amount : treasuryBalance;
+            treasuryBalance -= debitedFromFees;
+
+            _safeTransfer(accessToken, recipient, amount);
+        } else if (token == address(0)) {
+            ExternalRewardState storage rewards = externalRewards[address(0)];
+            uint256 currentBalance = address(this).balance;
+            uint256 reservedForMembers = rewards.poolBalance;
+            uint256 availableBalance = currentBalance > reservedForMembers ? currentBalance - reservedForMembers : 0;
+            if (amount > availableBalance) revert TemplErrors.InsufficientTreasuryBalance();
+            (bool success, ) = payable(recipient).call{value: amount}("");
+            if (!success) revert TemplErrors.ProposalExecutionFailed();
+        } else {
+            ExternalRewardState storage rewards = externalRewards[token];
+            uint256 currentBalance = IERC20(token).balanceOf(address(this));
+            uint256 reservedForMembers = rewards.poolBalance;
+            uint256 availableBalance = currentBalance > reservedForMembers
+                ? currentBalance - reservedForMembers
+                : 0;
+            if (amount > availableBalance) revert TemplErrors.InsufficientTreasuryBalance();
+            _safeTransfer(token, recipient, amount);
+        }
+        emit TreasuryAction(proposalId, token, recipient, amount, reason);
+    }
+
+    /// @dev Applies updates to the entry fee and fee split configuration.
+    function _updateConfig(
+        address _token,
+        uint256 _entryFee,
+        bool _updateFeeSplit,
+        uint256 _burnPercent,
+        uint256 _treasuryPercent,
+        uint256 _memberPoolPercent
+    ) internal {
+        if (_token != address(0) && _token != accessToken) revert TemplErrors.TokenChangeDisabled();
+        if (_entryFee > 0) {
+            _setCurrentEntryFee(_entryFee);
+        }
+        if (_updateFeeSplit) {
+            _setPercentSplit(_burnPercent, _treasuryPercent, _memberPoolPercent);
+        }
+        emit ConfigUpdated(accessToken, entryFee, burnPercent, treasuryPercent, memberPoolPercent, protocolPercent);
+    }
+
+    /// @dev Sets the join pause flag without mutating membership limits during manual resumes.
+    function _setJoinPaused(bool _paused) internal {
+        joinPaused = _paused;
+        emit JoinPauseUpdated(_paused);
+    }
+
+    /// @dev Backend listeners consume PriestChanged to persist the new priest and notify off-chain services.
+    function _changePriest(address newPriest) internal {
+        if (newPriest == address(0)) revert TemplErrors.InvalidRecipient();
+        address old = priest;
+        if (newPriest == old) revert TemplErrors.InvalidCallData();
+        priest = newPriest;
+        emit PriestChanged(old, newPriest);
+    }
+
+    /// @dev Routes treasury balances into member or external pools so members can claim them evenly.
+    function _disbandTreasury(address token, uint256 proposalId) internal {
+        uint256 activeMembers = memberCount;
+        if (activeMembers == 0) revert TemplErrors.NoMembers();
+
+        if (token == accessToken) {
+            uint256 accessTokenBalance = IERC20(accessToken).balanceOf(address(this));
+            if (accessTokenBalance <= memberPoolBalance) revert TemplErrors.NoTreasuryFunds();
+            uint256 accessTokenAmount = accessTokenBalance - memberPoolBalance;
+
+            uint256 debitedFromFees = accessTokenAmount <= treasuryBalance ? accessTokenAmount : treasuryBalance;
+            treasuryBalance -= debitedFromFees;
+
+            memberPoolBalance += accessTokenAmount;
+
+            uint256 poolTotalRewards = accessTokenAmount + memberRewardRemainder;
+            uint256 poolPerMember = poolTotalRewards / activeMembers;
+            uint256 remainder = poolTotalRewards % activeMembers;
+
+            memberRewardRemainder = remainder;
+            cumulativeMemberRewards += poolPerMember;
+            emit TreasuryDisbanded(proposalId, token, accessTokenAmount, poolPerMember, remainder);
+            return;
+        }
+
+        ExternalRewardState storage rewards = externalRewards[token];
+        if (!rewards.exists) revert TemplErrors.NoTreasuryFunds();
+        uint256 tokenBalance;
+        if (token == address(0)) {
+            tokenBalance = address(this).balance;
+        } else {
+            tokenBalance = IERC20(token).balanceOf(address(this));
+        }
+        if (tokenBalance == 0) revert TemplErrors.NoTreasuryFunds();
+
+        uint256 poolBalance = rewards.poolBalance;
+        uint256 totalAmount = tokenBalance > poolBalance ? tokenBalance - poolBalance : 0;
+        if (totalAmount == 0) revert TemplErrors.NoTreasuryFunds();
+
+        uint256 perMember = totalAmount / activeMembers;
+        uint256 remainderExternal = totalAmount % activeMembers;
+
+        rewards.poolBalance += totalAmount;
+        rewards.rewardRemainder += remainderExternal;
+        rewards.cumulativeRewards += perMember;
+        _recordExternalCheckpoint(rewards);
+
+        emit TreasuryDisbanded(proposalId, token, totalAmount, perMember, remainderExternal);
+    }
+
+    function _addActiveProposal(uint256 proposalId) internal {
+        activeProposalIds.push(proposalId);
+        activeProposalIndex[proposalId] = activeProposalIds.length;
+    }
+
+    function _removeActiveProposal(uint256 proposalId) internal {
+        uint256 indexPlusOne = activeProposalIndex[proposalId];
+        if (indexPlusOne == 0) {
+            return;
+        }
+        uint256 index = indexPlusOne - 1;
+        uint256 lastIndex = activeProposalIds.length - 1;
+        if (index != lastIndex) {
+            uint256 movedId = activeProposalIds[lastIndex];
+            activeProposalIds[index] = movedId;
+            activeProposalIndex[movedId] = index + 1;
+        }
+        activeProposalIds.pop();
+        activeProposalIndex[proposalId] = 0;
+    }
+
+    /// @dev Checks whether a member joined after a particular snapshot point, invalidating their vote.
+    function _joinedAfterSnapshot(
+        Member storage memberInfo,
+        uint256 snapshotBlock,
+        uint256 snapshotTimestamp
+    ) internal view returns (bool) {
+        if (snapshotBlock == 0) {
+            return false;
+        }
+        if (memberInfo.blockNumber > snapshotBlock) {
+            return true;
+        }
+        if (memberInfo.blockNumber == snapshotBlock && memberInfo.timestamp > snapshotTimestamp) {
+            return true;
+        }
+        return false;
+    }
+
+    /// @dev Helper that determines if a proposal is still active based on time and execution status.
+    function _isActiveProposal(Proposal storage proposal, uint256 currentTime) internal view returns (bool) {
+        return currentTime < proposal.endTime && !proposal.executed;
     }
 
     /// @dev Pauses new joins when a membership cap is set and already reached.
@@ -691,6 +908,51 @@ abstract contract TemplBase is ReentrancyGuard {
         if (limit > 0 && memberCount >= limit && !joinPaused) {
             joinPaused = true;
             emit JoinPauseUpdated(true);
+        }
+    }
+
+    /// @dev Executes an ERC-20 call and verifies optional boolean return values.
+    function _safeERC20Call(address token, bytes memory data) internal {
+        (bool success, bytes memory returndata) = token.call(data);
+        if (!success) {
+            if (returndata.length > 0) {
+                assembly ("memory-safe") {
+                    revert(add(returndata, 32), mload(returndata))
+                }
+            }
+            revert TemplErrors.TokenTransferFailed();
+        }
+        if (returndata.length != 0 && !abi.decode(returndata, (bool))) {
+            revert TemplErrors.TokenTransferFailed();
+        }
+    }
+
+    /// @dev Transfers tokens from the current contract to `to`, reverting on failure.
+    function _safeTransfer(address token, address to, uint256 amount) internal {
+        if (amount == 0) {
+            return;
+        }
+        _safeERC20Call(token, abi.encodeWithSelector(IERC20.transfer.selector, to, amount));
+    }
+
+    /// @dev Transfers tokens from `from` to `to`, reverting when allowances are insufficient.
+    function _safeTransferFrom(address token, address from, address to, uint256 amount) internal {
+        if (amount == 0) {
+            return;
+        }
+        _safeERC20Call(token, abi.encodeWithSelector(IERC20.transferFrom.selector, from, to, amount));
+    }
+
+    /// @dev Registers a token so external rewards can be enumerated by frontends.
+    function _registerExternalToken(address token) internal {
+        ExternalRewardState storage rewards = externalRewards[token];
+        if (!rewards.exists) {
+            if (externalRewardTokens.length >= MAX_EXTERNAL_REWARD_TOKENS) {
+                revert TemplErrors.ExternalRewardLimitReached();
+            }
+            rewards.exists = true;
+            externalRewardTokens.push(token);
+            externalRewardTokenIndex[token] = externalRewardTokens.length;
         }
     }
 

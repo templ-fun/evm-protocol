@@ -168,13 +168,19 @@ describe("WrapperCoverage (onlyDAO externals)", function () {
     await expect(templ.connect(memberC).join())
       .to.be.revertedWithCustomError(templ, "MemberLimitReached");
 
-    const link = "https://example.templ";
-    await templ.daoSetHomeLink(link);
-    expect(await templ.templHomeLink()).to.equal(link);
+    const metadata = {
+      name: "Example Templ",
+      description: "Example description",
+      logo: "https://example.templ/logo.png"
+    };
+    await templ.daoSetMetadata(metadata.name, metadata.description, metadata.logo);
+    expect(await templ.templName()).to.equal(metadata.name);
+    expect(await templ.templDescription()).to.equal(metadata.description);
+    expect(await templ.templLogoLink()).to.equal(metadata.logo);
 
-    // Same link should short-circuit without emitting events but still succeed
-    await templ.daoSetHomeLink(link);
-    expect(await templ.templHomeLink()).to.equal(link);
+    // Same metadata should no-op but still succeed
+    await templ.daoSetMetadata(metadata.name, metadata.description, metadata.logo);
+    expect(await templ.templLogoLink()).to.equal(metadata.logo);
   });
 
   it("permits dictator priests to call DAO functions directly", async function () {
@@ -187,8 +193,13 @@ describe("WrapperCoverage (onlyDAO externals)", function () {
     await expect(templ.connect(priest).setJoinPausedDAO(false)).to.not.be.reverted;
 
     await expect(templ.connect(priest).setMaxMembersDAO(5)).to.not.be.reverted;
-    await expect(templ.connect(priest).setTemplHomeLinkDAO("https://dictator.templ"))
-      .to.emit(templ, "TemplHomeLinkUpdated");
+    await expect(
+      templ.connect(priest).setTemplMetadataDAO(
+        "Dictator Templ",
+        "Dictator description",
+        "https://dictator.templ/logo.png"
+      )
+    ).to.emit(templ, "TemplMetadataUpdated");
 
     await token.mint(member.address, ENTRY_FEE);
     await token.connect(member).approve(templ.target, ENTRY_FEE);

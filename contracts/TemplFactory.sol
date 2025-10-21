@@ -50,6 +50,9 @@ contract TemplFactory {
 
     address public immutable protocolFeeRecipient;
     uint256 public immutable protocolPercent;
+    address public immutable membershipModule;
+    address public immutable treasuryModule;
+    address public immutable governanceModule;
     address public immutable factoryDeployer;
     bool public permissionless;
     address[] internal templInitCodePointers;
@@ -88,11 +91,23 @@ contract TemplFactory {
     /// @notice Initializes factory-wide protocol recipient and fee percent.
     /// @param _protocolFeeRecipient Address receiving the protocol share for every templ deployed.
     /// @param _protocolPercent Fee percent reserved for the protocol across all templs.
-    constructor(address _protocolFeeRecipient, uint256 _protocolPercent) {
+    constructor(
+        address _protocolFeeRecipient,
+        uint256 _protocolPercent,
+        address _membershipModule,
+        address _treasuryModule,
+        address _governanceModule
+    ) {
         if (_protocolFeeRecipient == address(0)) revert TemplErrors.InvalidRecipient();
         if (_protocolPercent > TOTAL_PERCENT) revert TemplErrors.InvalidPercentageSplit();
+        if (_membershipModule == address(0) || _treasuryModule == address(0) || _governanceModule == address(0)) {
+            revert TemplErrors.InvalidCallData();
+        }
         protocolFeeRecipient = _protocolFeeRecipient;
         protocolPercent = _protocolPercent;
+        membershipModule = _membershipModule;
+        treasuryModule = _treasuryModule;
+        governanceModule = _governanceModule;
         factoryDeployer = msg.sender;
         permissionless = false;
         bytes memory initCode = type(TEMPL).creationCode;
@@ -236,6 +251,9 @@ contract TemplFactory {
             cfg.logoLink,
             cfg.proposalFeeBps,
             cfg.referralShareBps,
+            membershipModule,
+            treasuryModule,
+            governanceModule,
             cfg.curve
         );
         bytes memory templInitCode = _loadTemplInitCode();

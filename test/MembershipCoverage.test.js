@@ -385,7 +385,15 @@ describe("Membership coverage extras", function () {
     const proposalId = await templ.proposalCount();
     await templ
       .connect(memberA)
-      .createProposalUpdateConfig(newEntryFee, 3100, 3100, 2800, true, VOTING_PERIOD);
+      .createProposalUpdateConfig(
+        ethers.ZeroAddress,
+        newEntryFee,
+        3100,
+        3100,
+        2800,
+        true,
+        VOTING_PERIOD
+      );
     await templ.connect(memberA).vote(proposalId, true);
     await ethers.provider.send("evm_increaseTime", [VOTING_PERIOD + DAY]);
     await ethers.provider.send("evm_mine", []);
@@ -403,5 +411,67 @@ describe("Membership coverage extras", function () {
     const expectedRemainder = newEntryFee - distributed;
 
     expect(treasuryAfter - treasuryBefore).to.equal(treasuryPortion + expectedRemainder);
+  });
+
+  it("deducts proposal creation fees and credits the treasury", async function () {
+    const feeBps = 800;
+    const { templ, token, accounts } = await deployTempl({
+      entryFee: ENTRY_FEE,
+      proposalFeeBps: feeBps
+    });
+    const [, , member, voter] = accounts;
+
+    await mintToUsers(token, [member, voter], ENTRY_FEE * 6n);
+    await joinMembers(templ, token, [member, voter]);
+
+    const proposerBalanceBefore = await token.balanceOf(member.address);
+    const treasuryBefore = await templ.treasuryBalance();
+    const expectedFee = (ENTRY_FEE * BigInt(feeBps)) / 10_000n;
+
+    await token.connect(member).approve(await templ.getAddress(), expectedFee);
+    await templ
+      .connect(member)
+      .createProposalSetJoinPaused(true, VOTING_PERIOD, "Pause", "Testing fee");
+
+    expect(await templ.treasuryBalance()).to.equal(treasuryBefore + expectedFee);
+    expect(await token.balanceOf(member.address)).to.equal(proposerBalanceBefore - expectedFee);
+  });
+
+  it("pays referral rewards when eligible and syncs member pool", async function () {
+    const referralShare = 2_000; // 20% of member pool
+    const { templ, token, accounts } = await deployTempl({
+      entryFee: ENTRY_FEE,
+      referralShareBps: referralShare
+    });
+    const [, , referrer, newcomer] = accounts;
+
+    await mintToUsers(token, [referrer, newcomer], ENTRY_FEE * 6n);
+    await joinMembers(templ, token, [referrer]);
+
+    const referralBalanceBefore = await token.balanceOf(referrer.address);
+    const poolBefore = await templ.memberPoolBalance();
+
+    await token.connect(newcomer).approve(await templ.getAddress(), ENTRY_FEE);
+    const tx = await templ.connect(newcomer).joinWithReferral(referrer.address);
+    const receipt = await tx.wait();
+    const referralEvent = receipt.logs
+      .map((log) => {
+        try {
+          return templ.interface.parseLog(log);
+        } catch (_) {
+          return null;
+        }
+      })
+      .find((log) => log && log.name === "ReferralRewardPaid");
+
+    const memberPoolAmount = (ENTRY_FEE * 3_000n) / 10_000n;
+    const expectedReferral = (memberPoolAmount * BigInt(referralShare)) / 10_000n;
+
+    expect(referralEvent?.args?.referral).to.equal(referrer.address);
+    expect(referralEvent?.args?.amount).to.equal(expectedReferral);
+    expect(await token.balanceOf(referrer.address)).to.equal(referralBalanceBefore + expectedReferral);
+
+    const poolAfter = await templ.memberPoolBalance();
+    expect(poolAfter - poolBefore).to.equal(memberPoolAmount - expectedReferral);
   });
 });

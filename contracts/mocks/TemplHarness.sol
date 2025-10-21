@@ -25,7 +25,10 @@ contract TemplHarness is TEMPL {
         string memory _description,
         string memory _logoLink,
         uint256 _proposalCreationFeeBps,
-        uint256 _referralShareBps
+        uint256 _referralShareBps,
+        address _membershipModule,
+        address _treasuryModule,
+        address _governanceModule
     )
         TEMPL(
             _priest,
@@ -46,6 +49,9 @@ contract TemplHarness is TEMPL {
             _logoLink,
             _proposalCreationFeeBps,
             _referralShareBps,
+            _membershipModule,
+            _treasuryModule,
+            _governanceModule,
             CurveConfig({primary: CurveSegment({style: CurveStyle.Static, rateBps: 0})})
         )
     {}

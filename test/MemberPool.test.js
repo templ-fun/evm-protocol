@@ -17,6 +17,11 @@ describe("Member Pool Distribution - Exhaustive Tests", function () {
     const MEMBER_BPS = 3000;
     const PROTOCOL_BPS = 1000;
     const QUORUM_BPS = 3300;
+    const METADATA = {
+        name: "Member Pool Templ",
+        description: "Member pool tests",
+        logo: "https://templ.test/member-pool.png"
+    };
 
     beforeEach(async function () {
         ({ templ, token, accounts } = await deployTempl({ entryFee: ENTRY_FEE }));
@@ -278,7 +283,11 @@ describe("Member Pool Distribution - Exhaustive Tests", function () {
                 "0x000000000000000000000000000000000000dEaD",
                 false,
                 0,
-                "",
+                METADATA.name,
+                METADATA.description,
+                METADATA.logo,
+                0,
+                0,
                 STATIC_CURVE
             );
             await oddTempl.waitForDeployment();

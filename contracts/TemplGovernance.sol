@@ -4,63 +4,10 @@ pragma solidity ^0.8.23;
 import {TemplBase} from "./TemplBase.sol";
 import {TemplErrors} from "./TemplErrors.sol";
 import {CurveConfig} from "./TemplCurve.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 /// @title templ governance module
 /// @notice Adds proposal creation, voting, and execution flows on top of treasury + membership logic.
-abstract contract TemplGovernance is TemplBase {
-    using SafeERC20 for IERC20;
-
-    /// @notice Hook executed when governance-set join pause proposals execute.
-    function _governanceSetJoinPaused(bool _paused) internal virtual;
-
-    /// @notice Hook executed when governance updates templ configuration.
-    function _governanceUpdateConfig(
-        address _token,
-        uint256 _entryFee,
-        bool _updateFeeSplit,
-        uint256 _burnPercent,
-        uint256 _treasuryPercent,
-        uint256 _memberPoolPercent
-    ) internal virtual;
-
-    /// @notice Hook executed when governance withdraws treasury balances.
-    function _governanceWithdrawTreasury(
-        address token,
-        address recipient,
-        uint256 amount,
-        string memory reason,
-        uint256 proposalId
-    ) internal virtual;
-
-    /// @notice Hook executed when governance disbands treasury holdings.
-    function _governanceDisbandTreasury(address token, uint256 proposalId) internal virtual;
-
-    /// @notice Hook executed when governance appoints a new priest.
-    function _governanceChangePriest(address newPriest) internal virtual;
-
-    /// @notice Hook executed when governance toggles dictatorship mode.
-    function _governanceSetDictatorship(bool enabled) internal virtual;
-
-    /// @notice Hook executed when governance adjusts the member cap.
-    function _governanceSetMaxMembers(uint256 newMaxMembers) internal virtual;
-
-    /// @notice Hook executed when governance updates templ metadata.
-    function _governanceUpdateMetadata(
-        string memory newName,
-        string memory newDescription,
-        string memory newLogoLink
-    ) internal virtual;
-
-    /// @notice Hook executed when governance updates the proposal creation fee.
-    function _governanceSetProposalCreationFee(uint256 newFeeBps) internal virtual;
-
-    /// @notice Hook executed when governance updates the referral share basis points.
-    function _governanceSetReferralShareBps(uint256 newBps) internal virtual;
-
-    /// @notice Hook executed when governance updates the pricing curve configuration.
-    function _governanceSetEntryFeeCurve(CurveConfig memory curve, uint256 baseEntryFee) internal virtual;
+contract TemplGovernanceModule is TemplBase {
 
     /// @notice Opens a proposal to pause or resume new member joins.
     /// @param _paused Desired join pause state.
@@ -82,6 +29,7 @@ abstract contract TemplGovernance is TemplBase {
     }
 
     /// @notice Opens a proposal to update entry fee and/or fee split configuration.
+    /// @param _token Optional replacement access token (must match current token or zero address).
     /// @param _newEntryFee Optional new entry fee (0 to keep current).
     /// @param _newBurnPercent New burn percent when `_updateFeeSplit` is true.
     /// @param _newTreasuryPercent New treasury percent when `_updateFeeSplit` is true.
@@ -92,6 +40,7 @@ abstract contract TemplGovernance is TemplBase {
     /// @param _description On-chain description for the proposal.
     /// @return proposalId Newly created proposal identifier.
     function createProposalUpdateConfig(
+        address _token,
         uint256 _newEntryFee,
         uint256 _newBurnPercent,
         uint256 _newTreasuryPercent,
@@ -111,6 +60,7 @@ abstract contract TemplGovernance is TemplBase {
         }
         (uint256 id, Proposal storage p) = _createBaseProposal(_votingPeriod, _title, _description);
         p.action = Action.UpdateConfig;
+        p.token = _token;
         p.newEntryFee = _newEntryFee;
         p.newBurnPercent = _newBurnPercent;
         p.newTreasuryPercent = _newTreasuryPercent;
@@ -457,6 +407,67 @@ abstract contract TemplGovernance is TemplBase {
         _removeActiveProposal(_proposalId);
     }
 
+    function _governanceSetJoinPaused(bool _paused) internal {
+        _setJoinPaused(_paused);
+    }
+
+    function _governanceUpdateConfig(
+        address _token,
+        uint256 _entryFee,
+        bool _updateFeeSplit,
+        uint256 _burnPercent,
+        uint256 _treasuryPercent,
+        uint256 _memberPoolPercent
+    ) internal {
+        _updateConfig(_token, _entryFee, _updateFeeSplit, _burnPercent, _treasuryPercent, _memberPoolPercent);
+    }
+
+    function _governanceWithdrawTreasury(
+        address token,
+        address recipient,
+        uint256 amount,
+        string memory reason,
+        uint256 proposalId
+    ) internal {
+        _withdrawTreasury(token, recipient, amount, reason, proposalId);
+    }
+
+    function _governanceDisbandTreasury(address token, uint256 proposalId) internal {
+        _disbandTreasury(token, proposalId);
+    }
+
+    function _governanceChangePriest(address newPriest) internal {
+        _changePriest(newPriest);
+    }
+
+    function _governanceSetDictatorship(bool enabled) internal {
+        _updateDictatorship(enabled);
+    }
+
+    function _governanceSetMaxMembers(uint256 newMaxMembers) internal {
+        _setMaxMembers(newMaxMembers);
+    }
+
+    function _governanceUpdateMetadata(
+        string memory newName,
+        string memory newDescription,
+        string memory newLogoLink
+    ) internal {
+        _setTemplMetadata(newName, newDescription, newLogoLink);
+    }
+
+    function _governanceSetProposalCreationFee(uint256 newFeeBps) internal {
+        _setProposalCreationFee(newFeeBps);
+    }
+
+    function _governanceSetReferralShareBps(uint256 newBps) internal {
+        _setReferralShareBps(newBps);
+    }
+
+    function _governanceSetEntryFeeCurve(CurveConfig memory curve, uint256 baseEntryFee) internal {
+        _applyCurveUpdate(curve, baseEntryFee);
+    }
+
     /// @notice Returns core metadata for a proposal including vote totals and status.
     /// @param _proposalId Proposal id to inspect.
     /// @return proposer Address that created the proposal.
@@ -644,7 +655,7 @@ abstract contract TemplGovernance is TemplBase {
         if (feeBps > 0) {
             uint256 proposalFee = (entryFee * feeBps) / TOTAL_PERCENT;
             if (proposalFee > 0) {
-                IERC20(accessToken).safeTransferFrom(msg.sender, address(this), proposalFee);
+                _safeTransferFrom(accessToken, msg.sender, address(this), proposalFee);
                 treasuryBalance += proposalFee;
             }
         }
@@ -702,50 +713,6 @@ abstract contract TemplGovernance is TemplBase {
             removed++;
             len = activeProposalIds.length;
         }
-    }
-
-    function _addActiveProposal(uint256 proposalId) internal {
-        activeProposalIds.push(proposalId);
-        activeProposalIndex[proposalId] = activeProposalIds.length;
-    }
-
-    function _removeActiveProposal(uint256 proposalId) internal {
-        uint256 indexPlusOne = activeProposalIndex[proposalId];
-        if (indexPlusOne == 0) {
-            return;
-        }
-        uint256 index = indexPlusOne - 1;
-        uint256 lastIndex = activeProposalIds.length - 1;
-        if (index != lastIndex) {
-            uint256 movedId = activeProposalIds[lastIndex];
-            activeProposalIds[index] = movedId;
-            activeProposalIndex[movedId] = index + 1;
-        }
-        activeProposalIds.pop();
-        activeProposalIndex[proposalId] = 0;
-    }
-
-    /// @dev Checks whether a member joined after a particular snapshot point, invalidating their vote.
-    function _joinedAfterSnapshot(
-        Member storage memberInfo,
-        uint256 snapshotBlock,
-        uint256 snapshotTimestamp
-    ) internal view returns (bool) {
-        if (snapshotBlock == 0) {
-            return false;
-        }
-        if (memberInfo.blockNumber > snapshotBlock) {
-            return true;
-        }
-        if (memberInfo.blockNumber == snapshotBlock && memberInfo.timestamp > snapshotTimestamp) {
-            return true;
-        }
-        return false;
-    }
-
-    /// @dev Helper that determines if a proposal is still active based on time and execution status.
-    function _isActiveProposal(Proposal storage proposal, uint256 currentTime) internal view returns (bool) {
-        return currentTime < proposal.endTime && !proposal.executed;
     }
 
 }

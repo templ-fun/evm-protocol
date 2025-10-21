@@ -2,6 +2,7 @@ const { expect } = require("chai");
 const { ethers } = require("hardhat");
 const { deployTempl, STATIC_CURVE } = require("./utils/deploy");
 const { mintToUsers, joinMembers } = require("./utils/mintAndPurchase");
+const { deployTemplModules } = require("./utils/modules");
 
 describe("Reentrancy protection", function () {
   const ENTRY_FEE = ethers.parseUnits("100", 18);
@@ -10,6 +11,12 @@ describe("Reentrancy protection", function () {
   const MEMBER_BPS = 3000;
   const PROTOCOL_BPS = 1000;
   const QUORUM_BPS = 3300;
+const METADATA = {
+  name: "Reentrancy Templ",
+  description: "Reentrancy test",
+  logo: "https://templ.test/reentrant.png"
+};
+
 
   describe("join", function () {
     let accounts;
@@ -26,8 +33,10 @@ describe("Reentrancy protection", function () {
       token = await ReentrantToken.deploy("Reentrant Token", "RNT");
       await token.waitForDeployment();
 
-      const TEMPL = await ethers.getContractFactory("TEMPL");
-      templ = await TEMPL.deploy(
+      const { membershipModule, treasuryModule, governanceModule } = await deployTemplModules();
+
+      const TemplFactory = await ethers.getContractFactory("TEMPL");
+      templ = await TemplFactory.deploy(
         priest.address,
         priest.address,
         await token.getAddress(),
@@ -41,7 +50,14 @@ describe("Reentrancy protection", function () {
         "0x000000000000000000000000000000000000dEaD",
         false,
         0,
-        "",
+        METADATA.name,
+        METADATA.description,
+        METADATA.logo,
+        0,
+        0,
+        membershipModule,
+        treasuryModule,
+        governanceModule,
         STATIC_CURVE
       );
       await templ.waitForDeployment();
@@ -90,8 +106,10 @@ describe("Reentrancy protection", function () {
       token = await ReentrantToken.deploy("Reentrant Token", "RNT");
       await token.waitForDeployment();
 
-      const TEMPL = await ethers.getContractFactory("TEMPL");
-      templ = await TEMPL.deploy(
+      const { membershipModule, treasuryModule, governanceModule } = await deployTemplModules();
+
+      const TemplFactory = await ethers.getContractFactory("TEMPL");
+      templ = await TemplFactory.deploy(
         priest.address,
         priest.address,
         await token.getAddress(),
@@ -105,7 +123,14 @@ describe("Reentrancy protection", function () {
         "0x000000000000000000000000000000000000dEaD",
         false,
         0,
-        "",
+        METADATA.name,
+        METADATA.description,
+        METADATA.logo,
+        0,
+        0,
+        membershipModule,
+        treasuryModule,
+        governanceModule,
         STATIC_CURVE
       );
       await templ.waitForDeployment();

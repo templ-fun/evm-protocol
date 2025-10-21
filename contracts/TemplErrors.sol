@@ -94,4 +94,6 @@ library TemplErrors {
     error NotFactoryDeployer();
     /// @notice Thrown when attempting to set permissionless mode to its current state.
     error PermissionlessUnchanged();
+    /// @notice Thrown when an ERC-20 token transfer or approval fails.
+    error TokenTransferFailed();
 }
