@@ -38,6 +38,18 @@ async function deployTempl({
     const token = await Token.deploy("Test Token", "TEST", 18);
     await token.waitForDeployment();
 
+    const MembershipModule = await ethers.getContractFactory("TemplMembershipModule");
+    const membershipModule = await MembershipModule.deploy();
+    await membershipModule.waitForDeployment();
+
+    const TreasuryModule = await ethers.getContractFactory("TemplTreasuryModule");
+    const treasuryModule = await TreasuryModule.deploy();
+    await treasuryModule.waitForDeployment();
+
+    const GovernanceModule = await ethers.getContractFactory("TemplGovernanceModule");
+    const governanceModule = await GovernanceModule.deploy();
+    await governanceModule.waitForDeployment();
+
     const TEMPL = await ethers.getContractFactory("TEMPL");
     const protocolRecipient = protocolFeeRecipient || priest.address;
     const templ = await TEMPL.deploy(
@@ -59,6 +71,9 @@ async function deployTempl({
       logoLink,
       proposalFeeBps,
       referralShareBps,
+      await membershipModule.getAddress(),
+      await treasuryModule.getAddress(),
+      await governanceModule.getAddress(),
       curve
     );
     await templ.waitForDeployment();

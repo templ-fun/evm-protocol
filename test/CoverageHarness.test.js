@@ -28,7 +28,11 @@ describe("TemplHarness coverage helpers", function () {
       ethers.ZeroAddress,
       false,
       0,
-      ""
+      "Harness",
+      "Coverage harness",
+      "https://templ.fun/harness.png",
+      0,
+      0
     );
   });
 
@@ -49,7 +53,11 @@ describe("TemplHarness coverage helpers", function () {
         ethers.ZeroAddress,
         false,
         0,
-        ""
+        "Harness",
+        "Coverage harness",
+        "https://templ.fun/harness.png",
+        0,
+        0
       )
     ).to.be.revertedWithCustomError(Harness, "AmountZero");
   });
@@ -70,7 +78,11 @@ describe("TemplHarness coverage helpers", function () {
       ethers.ZeroAddress,
       false,
       7,
-      ""
+      "Harness",
+      "Coverage harness",
+      "https://templ.fun/harness.png",
+      0,
+      0
     );
     expect(await capped.MAX_MEMBERS()).to.equal(7n);
   });

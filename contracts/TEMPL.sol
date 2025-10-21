@@ -2,15 +2,20 @@
 pragma solidity ^0.8.23;
 
 import {TemplBase} from "./TemplBase.sol";
-import {TemplMembership} from "./TemplMembership.sol";
-import {TemplTreasury} from "./TemplTreasury.sol";
-import {TemplGovernance} from "./TemplGovernance.sol";
+import {TemplMembershipModule} from "./TemplMembership.sol";
+import {TemplTreasuryModule} from "./TemplTreasury.sol";
+import {TemplGovernanceModule} from "./TemplGovernance.sol";
 import {TemplErrors} from "./TemplErrors.sol";
 import {CurveConfig} from "./TemplCurve.sol";
 
 /// @title templ.fun core templ implementation
 /// @notice Wires governance, treasury, and membership modules for a single templ instance.
-contract TEMPL is TemplBase, TemplMembership, TemplTreasury, TemplGovernance {
+contract TEMPL is TemplBase {
+    address public immutable membershipModule;
+    address public immutable treasuryModule;
+    address public immutable governanceModule;
+
+    mapping(bytes4 => address) private _moduleForSelector;
     /// @notice Initializes a new templ with the provided configuration and priest.
     /// @param _priest Wallet that oversees configuration changes until governance replaces it.
     /// @param _protocolFeeRecipient Address that receives the protocol share of every entry fee.
@@ -50,9 +55,12 @@ contract TEMPL is TemplBase, TemplMembership, TemplTreasury, TemplGovernance {
         string memory _logoLink,
         uint256 _proposalCreationFeeBps,
         uint256 _referralShareBps,
+        address _membershipModule,
+        address _treasuryModule,
+        address _governanceModule,
         CurveConfig memory _curve
-    )
-        TemplBase(
+    ) {
+        _initializeTempl(
             _protocolFeeRecipient,
             _token,
             _burnPercent,
@@ -68,14 +76,25 @@ contract TEMPL is TemplBase, TemplMembership, TemplTreasury, TemplGovernance {
             _logoLink,
             _proposalCreationFeeBps,
             _referralShareBps
-        )
-    {
+        );
         if (_priest == address(0)) revert TemplErrors.InvalidRecipient();
         if (_entryFee == 0) {
             revert TemplErrors.AmountZero();
         }
         if (_entryFee < 10) revert TemplErrors.EntryFeeTooSmall();
         if (_entryFee % 10 != 0) revert TemplErrors.InvalidEntryFee();
+
+        if (_membershipModule == address(0) || _treasuryModule == address(0) || _governanceModule == address(0)) {
+            revert TemplErrors.InvalidCallData();
+        }
+
+        membershipModule = _membershipModule;
+        treasuryModule = _treasuryModule;
+        governanceModule = _governanceModule;
+
+        _registerMembershipSelectors(_membershipModule);
+        _registerTreasurySelectors(_treasuryModule);
+        _registerGovernanceSelectors(_governanceModule);
 
         priest = _priest;
         joinPaused = false;
@@ -94,80 +113,94 @@ contract TEMPL is TemplBase, TemplMembership, TemplTreasury, TemplGovernance {
 
     /// @notice Accepts ETH so proposals can later disburse it as external rewards.
     receive() external payable {}
-
-    /// @inheritdoc TemplGovernance
-    function _governanceSetJoinPaused(bool _paused) internal override {
-        _setJoinPaused(_paused);
+    /// @notice Exposes the module registered for a given function selector.
+    function getModuleForSelector(bytes4 selector) external view returns (address) {
+        return _moduleForSelector[selector];
     }
 
-    /// @inheritdoc TemplGovernance
-    function _governanceUpdateConfig(
-        address _token,
-        uint256 _entryFee,
-        bool _updateFeeSplit,
-        uint256 _burnPercent,
-        uint256 _treasuryPercent,
-        uint256 _memberPoolPercent
-    ) internal override {
-        _updateConfig(_token, _entryFee, _updateFeeSplit, _burnPercent, _treasuryPercent, _memberPoolPercent);
+    fallback() external payable {
+        address module = _moduleForSelector[msg.sig];
+        if (module == address(0)) revert TemplErrors.InvalidCallData();
+        _delegateTo(module);
     }
 
-    /// @inheritdoc TemplGovernance
-    function _governanceWithdrawTreasury(
-        address token,
-        address recipient,
-        uint256 amount,
-        string memory reason,
-        uint256 proposalId
-    ) internal override {
-        _withdrawTreasury(token, recipient, amount, reason, proposalId);
+    function _delegateTo(address module) internal {
+        assembly ("memory-safe") {
+            calldatacopy(0, 0, calldatasize())
+            let result := delegatecall(gas(), module, 0, calldatasize(), 0, 0)
+            returndatacopy(0, 0, returndatasize())
+            switch result
+            case 0 { revert(0, returndatasize()) }
+            default { return(0, returndatasize()) }
+        }
     }
 
-    /// @inheritdoc TemplGovernance
-    function _governanceDisbandTreasury(address token, uint256 proposalId) internal override {
-        _disbandTreasury(token, proposalId);
+    function _registerMembershipSelectors(address module) internal {
+        bytes4[] memory selectors = new bytes4[](17);
+        selectors[0] = TemplMembershipModule.join.selector;
+        selectors[1] = TemplMembershipModule.joinWithReferral.selector;
+        selectors[2] = TemplMembershipModule.joinFor.selector;
+        selectors[3] = TemplMembershipModule.joinForWithReferral.selector;
+        selectors[4] = TemplMembershipModule.claimMemberRewards.selector;
+        selectors[5] = TemplMembershipModule.claimExternalReward.selector;
+        selectors[6] = TemplMembershipModule.getClaimableMemberRewards.selector;
+        selectors[7] = TemplMembershipModule.getExternalRewardTokens.selector;
+        selectors[8] = TemplMembershipModule.getExternalRewardState.selector;
+        selectors[9] = TemplMembershipModule.getClaimableExternalReward.selector;
+        selectors[10] = TemplMembershipModule.isMember.selector;
+        selectors[11] = TemplMembershipModule.getJoinDetails.selector;
+        selectors[12] = TemplMembershipModule.getTreasuryInfo.selector;
+        selectors[13] = TemplMembershipModule.getConfig.selector;
+        selectors[14] = TemplMembershipModule.getMemberCount.selector;
+        selectors[15] = TemplMembershipModule.getVoteWeight.selector;
+        selectors[16] = TemplMembershipModule.totalJoins.selector;
+        _registerModule(module, selectors);
     }
 
-    /// @inheritdoc TemplGovernance
-    function _governanceChangePriest(address newPriest) internal override {
-        _changePriest(newPriest);
+    function _registerTreasurySelectors(address module) internal {
+        bytes4[] memory selectors = new bytes4[](11);
+        selectors[0] = TemplTreasuryModule.withdrawTreasuryDAO.selector;
+        selectors[1] = TemplTreasuryModule.updateConfigDAO.selector;
+        selectors[2] = TemplTreasuryModule.setJoinPausedDAO.selector;
+        selectors[3] = TemplTreasuryModule.setMaxMembersDAO.selector;
+        selectors[4] = TemplTreasuryModule.disbandTreasuryDAO.selector;
+        selectors[5] = TemplTreasuryModule.changePriestDAO.selector;
+        selectors[6] = TemplTreasuryModule.setDictatorshipDAO.selector;
+        selectors[7] = TemplTreasuryModule.setTemplMetadataDAO.selector;
+        selectors[8] = TemplTreasuryModule.setProposalCreationFeeBpsDAO.selector;
+        selectors[9] = TemplTreasuryModule.setReferralShareBpsDAO.selector;
+        selectors[10] = TemplTreasuryModule.setEntryFeeCurveDAO.selector;
+        _registerModule(module, selectors);
     }
 
-    /// @inheritdoc TemplGovernance
-    function _governanceSetDictatorship(bool enabled) internal override {
-        _updateDictatorship(enabled);
+    function _registerGovernanceSelectors(address module) internal {
+        bytes4[] memory selectors = new bytes4[](19);
+        selectors[0] = TemplGovernanceModule.createProposalSetJoinPaused.selector;
+        selectors[1] = TemplGovernanceModule.createProposalUpdateConfig.selector;
+        selectors[2] = TemplGovernanceModule.createProposalSetMaxMembers.selector;
+        selectors[3] = TemplGovernanceModule.createProposalUpdateMetadata.selector;
+        selectors[4] = TemplGovernanceModule.createProposalSetProposalFeeBps.selector;
+        selectors[5] = TemplGovernanceModule.createProposalSetReferralShareBps.selector;
+        selectors[6] = TemplGovernanceModule.createProposalSetEntryFeeCurve.selector;
+        selectors[7] = TemplGovernanceModule.createProposalWithdrawTreasury.selector;
+        selectors[8] = TemplGovernanceModule.createProposalDisbandTreasury.selector;
+        selectors[9] = TemplGovernanceModule.createProposalChangePriest.selector;
+        selectors[10] = TemplGovernanceModule.createProposalSetDictatorship.selector;
+        selectors[11] = TemplGovernanceModule.vote.selector;
+        selectors[12] = TemplGovernanceModule.executeProposal.selector;
+        selectors[13] = TemplGovernanceModule.getProposal.selector;
+        selectors[14] = TemplGovernanceModule.getProposalSnapshots.selector;
+        selectors[15] = TemplGovernanceModule.hasVoted.selector;
+        selectors[16] = TemplGovernanceModule.getActiveProposals.selector;
+        selectors[17] = TemplGovernanceModule.getActiveProposalsPaginated.selector;
+        selectors[18] = TemplGovernanceModule.pruneInactiveProposals.selector;
+        _registerModule(module, selectors);
     }
 
-    /// @inheritdoc TemplGovernance
-    function _governanceSetMaxMembers(uint256 newMaxMembers) internal override {
-        _setMaxMembers(newMaxMembers);
+    function _registerModule(address module, bytes4[] memory selectors) internal {
+        uint256 len = selectors.length;
+        for (uint256 i = 0; i < len; i++) {
+            _moduleForSelector[selectors[i]] = module;
+        }
     }
-
-    /// @inheritdoc TemplGovernance
-    function _governanceUpdateMetadata(
-        string memory newName,
-        string memory newDescription,
-        string memory newLogoLink
-    ) internal override {
-        _setTemplMetadata(newName, newDescription, newLogoLink);
-    }
-
-    /// @inheritdoc TemplGovernance
-    function _governanceSetProposalCreationFee(uint256 newFeeBps) internal override {
-        _setProposalCreationFee(newFeeBps);
-    }
-
-    /// @inheritdoc TemplGovernance
-    function _governanceSetReferralShareBps(uint256 newBps) internal override {
-        _setReferralShareBps(newBps);
-    }
-
-    /// @inheritdoc TemplGovernance
-    function _governanceSetEntryFeeCurve(
-        CurveConfig memory curve,
-        uint256 baseEntryFeeValue
-    ) internal override {
-        _applyCurveUpdate(curve, baseEntryFeeValue);
-    }
-
 }

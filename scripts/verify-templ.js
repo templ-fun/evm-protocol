@@ -3,8 +3,8 @@ require("dotenv").config();
 
 const FACTORY_EVENT_VARIANTS = [
   {
-    id: 'current',
-    abi: 'event TemplCreated(address indexed templ, address indexed creator, address indexed priest, address token, uint256 entryFee, uint256 burnPercent, uint256 treasuryPercent, uint256 memberPoolPercent, uint256 quorumPercent, uint256 executionDelaySeconds, address burnAddress, bool priestIsDictator, uint256 maxMembers, uint8 curveStyle, uint32 curveRateBps, string homeLink)'
+    id: 'metadata-v2',
+    abi: 'event TemplCreated(address indexed templ, address indexed creator, address indexed priest, address token, uint256 entryFee, uint256 burnPercent, uint256 treasuryPercent, uint256 memberPoolPercent, uint256 quorumPercent, uint256 executionDelaySeconds, address burnAddress, bool priestIsDictator, uint256 maxMembers, uint8 curveStyle, uint32 curveRateBps, string name, string description, string logoLink, uint256 proposalFeeBps, uint256 referralShareBps)'
   },
   {
     id: 'pivoted',
@@ -53,6 +53,54 @@ function toSerializable(value) {
     return value.toString();
   }
   return value;
+}
+
+function toNumberLike(value) {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value === 'number') return value;
+  if (typeof value === 'bigint') return Number(value);
+  const asString = value?.toString?.();
+  if (typeof asString === 'string' && asString !== '') {
+    const parsed = Number(asString);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function normalizeCurveValue(curve) {
+  if (!curve) {
+    return undefined;
+  }
+  if (curve.primary) {
+    const style = toNumberLike(curve.primary.style ?? curve.primary[0]);
+    const rateBps = toNumberLike(curve.primary.rateBps ?? curve.primary[1]);
+    if (style === undefined || rateBps === undefined) return undefined;
+    return { primary: { style, rateBps } };
+  }
+  if (Array.isArray(curve)) {
+    if (curve.length === 0) return undefined;
+    if (Array.isArray(curve[0])) {
+      const [styleRaw, rateRaw] = curve[0];
+      const style = toNumberLike(styleRaw);
+      const rateBps = toNumberLike(rateRaw);
+      if (style === undefined || rateBps === undefined) return undefined;
+      return { primary: { style, rateBps } };
+    }
+    if (curve.length >= 2) {
+      const style = toNumberLike(curve[0]);
+      const rateBps = toNumberLike(curve[1]);
+      if (style === undefined || rateBps === undefined) return undefined;
+      return { primary: { style, rateBps } };
+    }
+  }
+  if ('style' in curve && 'rateBps' in curve) {
+    const style = toNumberLike(curve.style);
+    const rateBps = toNumberLike(curve.rateBps);
+    if (style === undefined || rateBps === undefined) return undefined;
+    return { primary: { style, rateBps } };
+  }
+  return undefined;
 }
 
 function firstDefined(values, { allowEmpty = false } = {}) {
@@ -154,7 +202,12 @@ async function fetchContractSnapshot(contract) {
     burnAddress: await safeCall(contract, 'burnAddress'),
     priestIsDictator: await safeCall(contract, 'priestIsDictator', (value) => Boolean(value)),
     maxMembers: await safeCall(contract, 'MAX_MEMBERS'),
-    templHomeLink: await safeCall(contract, 'templHomeLink')
+    templName: await safeCall(contract, 'templName'),
+    templDescription: await safeCall(contract, 'templDescription'),
+    templLogoLink: await safeCall(contract, 'templLogoLink'),
+    proposalCreationFeeBps: await safeCall(contract, 'proposalCreationFeeBps'),
+    referralShareBps: await safeCall(contract, 'referralShareBps'),
+    entryFeeCurve: await safeCall(contract, 'entryFeeCurve', normalizeCurveValue)
   };
 }
 
@@ -200,7 +253,22 @@ async function fetchEventSnapshot({ provider, factoryAddress, templAddress, from
           burnAddress: args.burnAddress,
           priestIsDictator: Boolean(args.priestIsDictator),
           maxMembers: toSerializable(args.maxMembers),
-          templHomeLink: args.homeLink ?? ''
+          templName: args.name ?? '',
+          templDescription: args.description ?? '',
+          templLogoLink: args.logoLink ?? '',
+          templHomeLink: args.homeLink ?? '',
+          proposalFeeBps: toSerializable(args.proposalFeeBps ?? args.proposalFee),
+          referralShareBps: toSerializable(args.referralShareBps),
+          curveStyle: toNumberLike(
+            args.curveStyle ??
+            args.curvePrimaryStyle ??
+            (Array.isArray(args.curve) ? args.curve[0] : undefined)
+          ),
+          curveRateBps: toNumberLike(
+            args.curveRateBps ??
+            args.curvePrimaryRateBps ??
+            (Array.isArray(args.curve) ? args.curve[1] : undefined)
+          )
         };
       } catch (err) {
         console.warn('[verify-templ] Failed to parse factory log:', err?.message || err);
@@ -266,7 +334,13 @@ async function main() {
     burnAddress: readCliOption(process.argv, ['--burn-address']),
     priestIsDictator: readCliOption(process.argv, ['--dictator', '--priest-is-dictator']),
     maxMembers: readCliOption(process.argv, ['--max-members']),
-    templHomeLink: readCliOption(process.argv, ['--home-link'])
+    templName: readCliOption(process.argv, ['--templ-name', '--name']),
+    templDescription: readCliOption(process.argv, ['--templ-description', '--description']),
+    templLogoLink: readCliOption(process.argv, ['--templ-logo', '--logo-link']),
+    proposalFeeBps: readCliOption(process.argv, ['--proposal-fee-bps']),
+    proposalFeePercent: readCliOption(process.argv, ['--proposal-fee-percent']),
+    referralShareBps: readCliOption(process.argv, ['--referral-share-bps', '--referral-bps']),
+    referralSharePercent: readCliOption(process.argv, ['--referral-share-percent', '--referral-percent'])
   };
 
   const protocolRecipientOverride = firstDefined([
@@ -316,11 +390,17 @@ async function main() {
       resolveBoolean(process.env.PRIEST_IS_DICTATOR)
     ]),
     maxMembers: firstDefined([cliOverrides.maxMembers, process.env.MAX_MEMBERS]),
-    templHomeLink: firstDefined([
-      cliOverrides.templHomeLink,
-      process.env.TEMPL_HOME_LINK,
-      process.env.HOME_LINK
-    ], { allowEmpty: true })
+    templName: firstDefined([cliOverrides.templName, process.env.TEMPL_NAME]),
+    templDescription: firstDefined([cliOverrides.templDescription, process.env.TEMPL_DESCRIPTION]),
+    templLogoLink: firstDefined([cliOverrides.templLogoLink, process.env.TEMPL_LOGO_LINK, process.env.TEMPL_LOGO_URL]),
+    proposalFeeBps: resolvePercentLike({
+      bpsValues: [cliOverrides.proposalFeeBps, process.env.PROPOSAL_FEE_BPS],
+      percentValues: [cliOverrides.proposalFeePercent, process.env.PROPOSAL_FEE_PERCENT, process.env.PROPOSAL_FEE_PCT]
+    }),
+    referralShareBps: resolvePercentLike({
+      bpsValues: [cliOverrides.referralShareBps, process.env.REFERRAL_SHARE_BPS, process.env.REFERRAL_BPS],
+      percentValues: [cliOverrides.referralSharePercent, process.env.REFERRAL_SHARE_PERCENT, process.env.REFERRAL_PERCENT]
+    })
   };
 
   const constructorArgs = {
@@ -415,19 +495,81 @@ async function main() {
       overrideValue: envOverrides.maxMembers,
       normalizer: (value) => toSerializable(value)
     }),
-    templHomeLink: resolveField({
-      label: 'templHomeLink',
-      contractValue: contractSnapshot.templHomeLink,
-      eventValue: eventSnapshot?.templHomeLink,
-      overrideValue: envOverrides.templHomeLink,
+    templName: resolveField({
+      label: 'templName',
+      contractValue: contractSnapshot.templName,
+      eventValue: eventSnapshot?.templName,
+      overrideValue: envOverrides.templName,
+      fallbackValue: 'Templ',
+      normalizer: (value) => String(value),
+      allowEmpty: false
+    }),
+    templDescription: resolveField({
+      label: 'templDescription',
+      contractValue: contractSnapshot.templDescription,
+      eventValue: eventSnapshot?.templDescription,
+      overrideValue: envOverrides.templDescription,
       fallbackValue: '',
       normalizer: (value) => String(value),
       allowEmpty: true
+    }),
+    templLogoLink: resolveField({
+      label: 'templLogoLink',
+      contractValue: contractSnapshot.templLogoLink,
+      eventValue: eventSnapshot?.templLogoLink,
+      overrideValue: envOverrides.templLogoLink,
+      fallbackValue: '',
+      normalizer: (value) => String(value),
+      allowEmpty: true
+    }),
+    proposalFeeBps: resolveField({
+      label: 'proposalFeeBps',
+      contractValue: contractSnapshot.proposalCreationFeeBps,
+      eventValue: eventSnapshot?.proposalFeeBps,
+      overrideValue: envOverrides.proposalFeeBps,
+      fallbackValue: 0,
+      normalizer: (value) => {
+        const numeric = toNumberLike(value);
+        if (numeric === undefined) throw new Error('proposalFeeBps must be numeric');
+        return numeric;
+      }
+    }),
+    referralShareBps: resolveField({
+      label: 'referralShareBps',
+      contractValue: contractSnapshot.referralShareBps,
+      eventValue: eventSnapshot?.referralShareBps,
+      overrideValue: envOverrides.referralShareBps,
+      fallbackValue: 0,
+      normalizer: (value) => {
+        const numeric = toNumberLike(value);
+        if (numeric === undefined) throw new Error('referralShareBps must be numeric');
+        return numeric;
+      }
     })
   };
 
+  let normalizedCurve = normalizeCurveValue(contractSnapshot.entryFeeCurve);
+  if (!normalizedCurve && eventSnapshot) {
+    const style = toNumberLike(eventSnapshot.curveStyle);
+    const rateBps = toNumberLike(eventSnapshot.curveRateBps);
+    if (style !== undefined && rateBps !== undefined) {
+      normalizedCurve = { primary: { style, rateBps } };
+    }
+  }
+  if (!normalizedCurve) {
+    throw new Error('Unable to determine curve configuration; provide deployment details or update verify script overrides.');
+  }
+  const curveArgument = [
+    [normalizedCurve.primary.style, normalizedCurve.primary.rateBps]
+  ];
+
   console.log('Verifying templ with constructor arguments:');
-  console.table(constructorArgs);
+  console.table({
+    ...constructorArgs,
+    curvePrimaryStyle: normalizedCurve.primary.style,
+    curvePrimaryRateBps: normalizedCurve.primary.rateBps
+  });
+  console.log('Curve argument:', curveArgument);
 
   const constructorArguments = [
     constructorArgs.priest,
@@ -443,7 +585,12 @@ async function main() {
     constructorArgs.burnAddress,
     constructorArgs.priestIsDictator,
     constructorArgs.maxMembers,
-    constructorArgs.templHomeLink
+    constructorArgs.templName,
+    constructorArgs.templDescription,
+    constructorArgs.templLogoLink,
+    constructorArgs.proposalFeeBps,
+    constructorArgs.referralShareBps,
+    curveArgument
   ];
 
   try {

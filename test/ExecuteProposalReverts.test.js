@@ -29,7 +29,17 @@ describe("executeProposal reverts", function () {
     await expect(
       templ
         .connect(owner)
-        .createProposalUpdateConfig(5, 0, 0, 0, false, 7 * 24 * 60 * 60, 'Invalid fee', 'Test metadata')
+        .createProposalUpdateConfig(
+          ethers.ZeroAddress,
+          5,
+          0,
+          0,
+          0,
+          false,
+          7 * 24 * 60 * 60,
+          'Invalid fee',
+          'Test metadata'
+        )
     ).to.be.revertedWithCustomError(templ, "EntryFeeTooSmall");
   });
 
@@ -102,6 +112,10 @@ describe("executeProposal reverts", function () {
 
     await mintToUsers(harnessToken, [member1, member2], ENTRY_FEE * 5n);
     await joinMembers(harness, harnessToken, [member1, member2]);
+
+    const harnessAddress = await harness.getAddress();
+    await harnessToken.connect(member1).approve(harnessAddress, ENTRY_FEE * 10n);
+    await harnessToken.connect(member2).approve(harnessAddress, ENTRY_FEE * 10n);
 
     await harness
       .connect(member1)
