@@ -77,6 +77,8 @@ contract TemplMembershipModule is TemplBase {
         joiningMember.joined = true;
         joiningMember.timestamp = block.timestamp;
         joiningMember.blockNumber = block.number;
+        // Snapshot the monotonic join order so governance snapshots can reason about eligibility.
+        uint256 sequence = ++joinSequence;
         memberCount = currentMemberCount + 1;
 
         uint256 distributablePool = memberPoolAmount - referralAmount;
@@ -89,6 +91,7 @@ contract TemplMembershipModule is TemplBase {
         }
 
         joiningMember.rewardSnapshot = cumulativeMemberRewards;
+        joiningMember.joinSequence = sequence;
 
         treasuryBalance += treasuryAmount;
         memberPoolBalance += distributablePool;
