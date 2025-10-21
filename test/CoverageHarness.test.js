@@ -105,27 +105,27 @@ describe("TemplHarness coverage helpers", function () {
     expect(await capped.MAX_MEMBERS()).to.equal(7n);
   });
 
-  it("returns false when snapshot block is zero", async function () {
+  it("returns false when snapshot sequence is zero", async function () {
     const voter = priest.address;
-    await harness.harnessSetMember(voter, 5, 1_000, true);
-    expect(await harness.harnessJoinedAfterSnapshot(voter, 0, 0)).to.equal(false);
+    await harness.harnessSetMember(voter, 5, 1_000, true, 3);
+    expect(await harness.harnessJoinedAfterSnapshot(voter, 0)).to.equal(false);
   });
 
-  it("detects joins after snapshot timestamp in same block", async function () {
+  it("returns false when member joined at snapshot sequence", async function () {
     const voter = priest.address;
-    await harness.harnessSetMember(voter, 10, 2_000, true);
-    expect(await harness.harnessJoinedAfterSnapshot(voter, 10, 1_500)).to.equal(true);
+    await harness.harnessSetMember(voter, 10, 2_000, true, 7);
+    expect(await harness.harnessJoinedAfterSnapshot(voter, 7)).to.equal(false);
   });
 
-  it("detects joins when the member block exceeds the snapshot block", async function () {
+  it("detects joins when the sequence increases after the snapshot", async function () {
     const voter = priest.address;
-    await harness.harnessSetMember(voter, 15, 5_000, true);
-    expect(await harness.harnessJoinedAfterSnapshot(voter, 10, 4_000)).to.equal(true);
+    await harness.harnessSetMember(voter, 15, 5_000, true, 8);
+    expect(await harness.harnessJoinedAfterSnapshot(voter, 7)).to.equal(true);
   });
 
   it("returns cumulative rewards baseline when no checkpoints exist", async function () {
     const member = priest.address;
-    await harness.harnessSetMember(member, 1, 100, true);
+    await harness.harnessSetMember(member, 1, 100, true, 1);
     const tokenKey = ethers.ZeroAddress;
     await harness.harnessResetExternalRewards(tokenKey, 123);
     expect(await harness.harnessExternalBaseline(tokenKey, member)).to.equal(123);
@@ -137,7 +137,7 @@ describe("TemplHarness coverage helpers", function () {
 
   it("handles checkpoint timestamps before member join time", async function () {
     const member = priest.address;
-    await harness.harnessSetMember(member, 50, 4_000, true);
+    await harness.harnessSetMember(member, 50, 4_000, true, 5);
     const tokenKey = ethers.Wallet.createRandom().address;
     await harness.harnessResetExternalRewards(tokenKey, 0);
     await harness.harnessPushCheckpoint(tokenKey, 50, 5_000, 10);
@@ -146,7 +146,7 @@ describe("TemplHarness coverage helpers", function () {
 
   it("handles checkpoint timestamps at or before member join time", async function () {
     const member = priest.address;
-    await harness.harnessSetMember(member, 50, 6_000, true);
+    await harness.harnessSetMember(member, 50, 6_000, true, 5);
     const tokenKey = ethers.Wallet.createRandom().address;
     await harness.harnessResetExternalRewards(tokenKey, 0);
     await harness.harnessPushCheckpoint(tokenKey, 50, 5_000, 10);
@@ -215,7 +215,7 @@ describe("TemplHarness coverage helpers", function () {
     const [, priest, , member] = await ethers.getSigners();
     const entryFee = await harness.entryFee();
     await harness.harnessClearMembers();
-    await harness.harnessSetMember(priest.address, 0, 0, false);
+    await harness.harnessSetMember(priest.address, 0, 0, false, 0);
     await mintToUsers(token, [member], entryFee);
     await joinMembers(harness, token, [member], entryFee);
     expect(await harness.isMember(member.address)).to.equal(true);

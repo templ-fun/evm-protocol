@@ -312,11 +312,11 @@ contract TemplGovernanceModule is TemplBase {
         Member storage memberInfo = members[msg.sender];
 
         if (proposal.quorumReachedAt == 0) {
-            if (_joinedAfterSnapshot(memberInfo, proposal.preQuorumSnapshotBlock, proposal.createdAt)) {
+            if (_joinedAfterSnapshot(memberInfo, proposal.preQuorumJoinSequence)) {
                 revert TemplErrors.JoinedAfterProposal();
             }
         } else {
-            if (_joinedAfterSnapshot(memberInfo, proposal.quorumSnapshotBlock, proposal.quorumReachedAt)) {
+            if (_joinedAfterSnapshot(memberInfo, proposal.quorumJoinSequence)) {
                 revert TemplErrors.JoinedAfterProposal();
             }
         }
@@ -351,6 +351,8 @@ contract TemplGovernanceModule is TemplBase {
                 proposal.quorumReachedAt = block.timestamp;
                 proposal.quorumSnapshotBlock = block.number;
                 proposal.postQuorumEligibleVoters = memberCount;
+                // Lock the join sequence to the current value so later joins cannot swing the vote.
+                proposal.quorumJoinSequence = joinSequence;
                 proposal.endTime = block.timestamp + executionDelayAfterQuorum;
             }
         }
@@ -603,6 +605,20 @@ contract TemplGovernanceModule is TemplBase {
         );
     }
 
+    /// @notice Returns the join sequence snapshots captured for proposal eligibility.
+    /// @param _proposalId Proposal id to inspect.
+    /// @return preQuorumJoinSequence Join sequence recorded when the proposal was created.
+    /// @return quorumJoinSequence Join sequence recorded when quorum was reached (0 if never reached).
+    function getProposalJoinSequences(uint256 _proposalId)
+        external
+        view
+        returns (uint256 preQuorumJoinSequence, uint256 quorumJoinSequence)
+    {
+        if (_proposalId >= proposalCount) revert TemplErrors.InvalidProposal();
+        Proposal storage proposal = proposals[_proposalId];
+        return (proposal.preQuorumJoinSequence, proposal.quorumJoinSequence);
+    }
+
     /// @notice Returns whether a voter participated in a proposal and their recorded choice.
     /// @param _proposalId Proposal id to inspect.
     /// @param _voter Wallet to query.
@@ -723,6 +739,8 @@ contract TemplGovernanceModule is TemplBase {
         proposal.title = _title;
         proposal.description = _description;
         proposal.preQuorumSnapshotBlock = block.number;
+        // Capture the join sequence so only existing members can vote prior to quorum.
+        proposal.preQuorumJoinSequence = joinSequence;
         proposal.executed = false;
         proposal.hasVoted[msg.sender] = true;
         proposal.voteChoice[msg.sender] = true;
@@ -738,6 +756,7 @@ contract TemplGovernanceModule is TemplBase {
             proposal.quorumReachedAt = block.timestamp;
             proposal.quorumSnapshotBlock = block.number;
             proposal.postQuorumEligibleVoters = proposal.eligibleVoters;
+            proposal.quorumJoinSequence = proposal.preQuorumJoinSequence;
             proposal.endTime = block.timestamp + executionDelayAfterQuorum;
         }
         _addActiveProposal(proposalId);

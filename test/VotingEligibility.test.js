@@ -235,6 +235,32 @@ describe("Voting Eligibility Based on Join Time", function () {
                 .to.be.revertedWithCustomError(templ, "ProposalNotPassed");
         });
 
+        it("BUG: Members who join after proposal creation in the same block can still vote", async function () {
+            this.timeout(120000);
+
+            // Member 1 joins so they can open a proposal
+            await token.connect(member1).approve(await templ.getAddress(), ENTRY_FEE);
+            await templ.connect(member1).join();
+
+            await token.connect(lateMember).approve(await templ.getAddress(), ENTRY_FEE);
+
+            const createTx = await templ.connect(member1).createProposalSetJoinPaused(
+                true,
+                7 * 24 * 60 * 60
+            );
+            await createTx.wait();
+
+            const joinTx = await templ.connect(lateMember).join();
+            await joinTx.wait();
+
+            await expect(templ.connect(lateMember).vote(0, true))
+                .to.be.revertedWithCustomError(templ, "JoinedAfterProposal");
+
+            const joinSequences = await templ.getProposalJoinSequences(0);
+            expect(joinSequences.preQuorumJoinSequence).to.equal(2n);
+            expect(joinSequences.quorumJoinSequence).to.equal(joinSequences.preQuorumJoinSequence);
+        });
+
         it("Should handle multiple proposals with changing membership correctly", async function () {
             // Initial 2 members
             await token.connect(member1).approve(await templ.getAddress(), ENTRY_FEE);
