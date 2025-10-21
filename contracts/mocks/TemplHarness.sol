@@ -64,21 +64,19 @@ contract TemplHarness is TEMPL {
         address member,
         uint256 blockNumber,
         uint256 timestamp,
-        bool joined
+        bool joined,
+        uint256 joinSequenceValue
     ) external {
         Member storage info = members[member];
         info.blockNumber = blockNumber;
         info.timestamp = timestamp;
         info.joined = joined;
+        info.joinSequence = joinSequenceValue;
     }
 
     /// @dev Exposes the internal snapshot helper for coverage assertions.
-    function harnessJoinedAfterSnapshot(
-        address member,
-        uint256 snapshotBlock,
-        uint256 snapshotTimestamp
-    ) external view returns (bool) {
-        return _joinedAfterSnapshot(members[member], snapshotBlock, snapshotTimestamp);
+    function harnessJoinedAfterSnapshot(address member, uint256 snapshotJoinSequence) external view returns (bool) {
+        return _joinedAfterSnapshot(members[member], snapshotJoinSequence);
     }
 
     /// @dev Clears checkpoints while keeping rewards active for baseline checks.
@@ -162,6 +160,7 @@ contract TemplHarness is TEMPL {
     /// @dev Clears the member count for zero-member edge tests.
     function harnessClearMembers() external {
         memberCount = 0;
+        joinSequence = 0;
     }
 
     /// @dev Calls the internal disband helper for branch coverage.
