@@ -73,7 +73,8 @@ function resolveCurveConfigFromEnv() {
     return {
       curveProvided: false,
       curve: {
-        primary: { style: CURVE_STYLE_INDEX.static, rateBps: 0 }
+        primary: { style: CURVE_STYLE_INDEX.static, rateBps: 0, length: 0 },
+        additionalSegments: []
       },
       description: 'factory default'
     };
@@ -119,8 +120,10 @@ function resolveCurveConfigFromEnv() {
     curve: {
       primary: {
         style: resolvedStyle,
-        rateBps: resolvedRate
-      }
+        rateBps: resolvedRate,
+        length: 0
+      },
+      additionalSegments: []
     },
     description: `${styleKey} @ ${resolvedRate} bps`
   };

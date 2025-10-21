@@ -27,11 +27,13 @@ describe("TemplFactory", function () {
     };
 
     const defaultCurve = () => ({
-        primary: { style: CURVE_STYLE.Exponential, rateBps: 11_000 },
+        primary: { style: CURVE_STYLE.Exponential, rateBps: 11_000, length: 0 },
+        additionalSegments: []
     });
 
     const zeroCurve = () => ({
-        primary: { style: CURVE_STYLE.Static, rateBps: 0 },
+        primary: { style: CURVE_STYLE.Static, rateBps: 0, length: 0 },
+        additionalSegments: []
     });
 
     async function deployToken(name = "Test", symbol = "TEST") {

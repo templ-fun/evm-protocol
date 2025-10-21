@@ -52,7 +52,10 @@ contract TemplHarness is TEMPL {
             _membershipModule,
             _treasuryModule,
             _governanceModule,
-            CurveConfig({primary: CurveSegment({style: CurveStyle.Static, rateBps: 0})})
+            CurveConfig({
+                primary: CurveSegment({style: CurveStyle.Static, rateBps: 0, length: 0}),
+                additionalSegments: new CurveSegment[](0)
+            })
         )
     {}
 

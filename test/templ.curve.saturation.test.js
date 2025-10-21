@@ -48,7 +48,7 @@ async function setupHighLoadTempl() {
     modules.membershipModule,
     modules.treasuryModule,
     modules.governanceModule,
-    { primary: { style: CurveStyle.Exponential, rateBps: 11_000 } }
+    { primary: { style: CurveStyle.Exponential, rateBps: 11_000, length: 0 }, additionalSegments: [] }
   );
   await templ.waitForDeployment();
   templ = await attachTemplInterface(templ);

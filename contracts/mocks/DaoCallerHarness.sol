@@ -40,7 +40,8 @@ contract DaoCallerHarness is TEMPL {
             treasuryModule,
             governanceModule,
             CurveConfig({
-                primary: CurveSegment({style: CurveStyle.Static, rateBps: 0})
+                primary: CurveSegment({style: CurveStyle.Static, rateBps: 0, length: 0}),
+                additionalSegments: new CurveSegment[](0)
             })
         )
     {}

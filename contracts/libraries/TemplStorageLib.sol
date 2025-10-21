@@ -20,6 +20,7 @@ library TemplStorageLib {
         SetMetadata,
         SetProposalFee,
         SetReferralShare,
+        CallExternal,
         SetEntryFeeCurve,
         Undefined
     }
@@ -66,6 +67,9 @@ library TemplStorageLib {
         uint256 newProposalCreationFeeBps;
         uint256 newReferralShareBps;
         uint256 newMaxMembers;
+        address externalCallTarget;
+        uint256 externalCallValue;
+        bytes externalCallData;
         CurveConfig curveConfig;
         uint256 curveBaseEntryFee;
         uint256 yesVotes;

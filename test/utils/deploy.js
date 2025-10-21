@@ -3,12 +3,40 @@ const { ethers } = require("hardhat");
 const { attachTemplInterface } = require("./templ");
 
 const STATIC_CURVE = {
-  primary: { style: 0, rateBps: 0 }
+  primary: { style: 0, rateBps: 0, length: 0 },
+  additionalSegments: []
 };
 
 const EXPONENTIAL_CURVE = {
-  primary: { style: 2, rateBps: 11_000 }
+  primary: { style: 2, rateBps: 11_000, length: 0 },
+  additionalSegments: []
 };
+
+function normalizeCurve(curve) {
+  if (!curve) {
+    return {
+      primary: { ...STATIC_CURVE.primary },
+      additionalSegments: []
+    };
+  }
+  const normalized = {
+    primary: {
+      style: curve.primary.style,
+      rateBps: curve.primary.rateBps,
+      length: curve.primary.length ?? 0
+    },
+    additionalSegments: []
+  };
+  const extras = curve.additionalSegments || [];
+  if (extras.length > 0) {
+    normalized.additionalSegments = extras.map((segment) => ({
+      style: segment.style,
+      rateBps: segment.rateBps,
+      length: segment.length ?? 0
+    }));
+  }
+  return normalized;
+}
 
 async function deployTemplContracts({
   entryFee = ethers.parseUnits("100", 18),
@@ -52,6 +80,8 @@ async function deployTemplContracts({
 
   const TEMPL = await ethers.getContractFactory("TEMPL");
   const protocolRecipient = protocolFeeRecipient || priest.address;
+  const normalizedCurve = normalizeCurve(curve);
+
   let templ = await TEMPL.deploy(
     priest.address,
     protocolRecipient,
@@ -74,7 +104,7 @@ async function deployTemplContracts({
     await membershipModule.getAddress(),
     await treasuryModule.getAddress(),
     await governanceModule.getAddress(),
-    curve
+    normalizedCurve
   );
   await templ.waitForDeployment();
   templ = await attachTemplInterface(templ);
