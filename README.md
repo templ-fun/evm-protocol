@@ -47,27 +47,27 @@ The canonical workflow deploys shared modules once, followed by a factory and an
 3. **Create a templ instance**
    ```js
    const templTx = await factory.createTemplWithConfig({
-     priest: "0xPriest...",                 // initial administrator
-     token: "0xAccessToken...",             // ERC-20 gatekeeping membership
-     entryFee: ethers.parseUnits("100", 18),
-     burnPercent: -1,                       // use factory defaults (expressed with sentinel -1)
-     treasuryPercent: -1,
-     memberPoolPercent: -1,
-     quorumPercent: 3_300,                  // 33% quorum in basis points
-     executionDelaySeconds: 7 * 24 * 60 * 60,
-     burnAddress: ethers.ZeroAddress,       // defaults to 0x...dEaD
-     priestIsDictator: false,               // if true, priest bypasses normal governance
-     maxMembers: 249,
-     curveProvided: true,
+     priest: "0xPriest...",                 // auto-enrolled administrator (priest)
+     token: "0xAccessToken...",             // ERC-20 used for joins / treasury accounting
+     entryFee: ethers.parseUnits("100", 18),// base entry fee (must be ≥10 and divisible by 10)
+     burnPercent: -1,                       // burn share in %, -1 keeps factory default
+     treasuryPercent: -1,                   // treasury share in %, -1 keeps factory default
+     memberPoolPercent: -1,                 // member pool share in %, -1 keeps factory default
+     quorumPercent: 3_300,                  // YES votes required for quorum (basis points)
+     executionDelaySeconds: 7 * 24 * 60 * 60,// execution delay after quorum (seconds)
+     burnAddress: ethers.ZeroAddress,       // burn destination (defaults to 0x...dEaD)
+     priestIsDictator: false,               // true lets the priest bypass governance
+     maxMembers: 249,                       // optional membership cap (0 = uncapped)
+     curveProvided: true,                   // provide custom curve instead of factory default
      curve: {
-       primary: { style: 2 /* Exponential */, rateBps: 11_000, length: 0 },
-       additionalSegments: []
+       primary: { style: 2, rateBps: 11_000, length: 0 }, // exponential tail (infinite length)
+       additionalSegments: []              // optional extra segments (empty keeps single segment)
      },
-     name: "templ.fun OG",
-     description: "Genesis collective",
+     name: "templ.fun OG",                  // templ metadata surfaced to UIs
+     description: "Genesis collective",     // short description (can be empty)
      logoLink: "https://example.com/logo.png",
-     proposalFeeBps: 0,
-     referralShareBps: 500                  // 5% of the member pool allocation goes to referrers
+     proposalFeeBps: 500,                   // 5% of the current entry fee charged per proposal
+     referralShareBps: 500                  // 5% of the member-pool allocation paid to referrals
    });
    const receipt = await templTx.wait();
    const templAddress = receipt.logs.find(log => log.eventName === "TemplCreated").args.templ;
