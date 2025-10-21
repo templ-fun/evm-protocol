@@ -160,19 +160,12 @@ function parseBlockNumber(value) {
   return Number.isFinite(parsed) ? Math.max(0, parsed) : undefined;
 }
 
-function resolvePercentLike({ bpsValues = [], percentValues = [] }) {
+function resolveBpsLike({ bpsValues = [] }) {
   for (const candidate of bpsValues) {
     if (candidate === undefined || candidate === null || candidate === '') continue;
     const numeric = Number(candidate);
     if (Number.isFinite(numeric)) {
       return String(Math.round(numeric));
-    }
-  }
-  for (const candidate of percentValues) {
-    if (candidate === undefined || candidate === null || candidate === '') continue;
-    const numeric = Number(candidate);
-    if (Number.isFinite(numeric)) {
-      return String(Math.round(numeric * 100));
     }
   }
   return undefined;
@@ -410,22 +403,16 @@ async function main() {
     process.env.PROTOCOL_RECIPIENT
   ]);
 
-  const protocolPercentOverride = resolvePercentLike({
-    bpsValues: [
-      readCliOption(process.argv, ['--protocol-bps']),
-      process.env.PROTOCOL_BP
-    ],
-    percentValues: []
-  });
+  const protocolPercentOverride = resolveBpsLike({ bpsValues: [readCliOption(process.argv, ['--protocol-bps']), process.env.PROTOCOL_BP] });
 
   const envOverrides = {
     priest: firstDefined([cliOverrides.priest, process.env.PRIEST_ADDRESS]),
     accessToken: firstDefined([cliOverrides.accessToken, process.env.TOKEN_ADDRESS]),
     entryFee: firstDefined([cliOverrides.entryFee, process.env.ENTRY_FEE]),
-    burnBps: resolvePercentLike({ bpsValues: [cliOverrides.burnBps, process.env.BURN_BP], percentValues: [] }),
-    treasuryBps: resolvePercentLike({ bpsValues: [cliOverrides.treasuryBps, process.env.TREASURY_BP], percentValues: [] }),
-    memberPoolBps: resolvePercentLike({ bpsValues: [cliOverrides.memberBps, process.env.MEMBER_POOL_BP], percentValues: [] }),
-    quorumBps: resolvePercentLike({ bpsValues: [cliOverrides.quorumBps, process.env.QUORUM_BP], percentValues: [] }),
+    burnBps: resolveBpsLike({ bpsValues: [cliOverrides.burnBps, process.env.BURN_BP] }),
+    treasuryBps: resolveBpsLike({ bpsValues: [cliOverrides.treasuryBps, process.env.TREASURY_BP] }),
+    memberPoolBps: resolveBpsLike({ bpsValues: [cliOverrides.memberBps, process.env.MEMBER_POOL_BP] }),
+    quorumBps: resolveBpsLike({ bpsValues: [cliOverrides.quorumBps, process.env.QUORUM_BP] }),
     executionDelayAfterQuorum: firstDefined([cliOverrides.executionDelay, process.env.EXECUTION_DELAY_SECONDS]),
     burnAddress: firstDefined([cliOverrides.burnAddress, process.env.BURN_ADDRESS]),
     priestIsDictator: firstDefined([
@@ -436,14 +423,8 @@ async function main() {
     templName: firstDefined([cliOverrides.templName, process.env.TEMPL_NAME]),
     templDescription: firstDefined([cliOverrides.templDescription, process.env.TEMPL_DESCRIPTION]),
     templLogoLink: firstDefined([cliOverrides.templLogoLink, process.env.TEMPL_LOGO_LINK, process.env.TEMPL_LOGO_URL]),
-    proposalFeeBps: resolvePercentLike({
-      bpsValues: [cliOverrides.proposalFeeBps, process.env.PROPOSAL_FEE_BPS],
-      percentValues: []
-    }),
-    referralShareBps: resolvePercentLike({
-      bpsValues: [cliOverrides.referralShareBps, process.env.REFERRAL_SHARE_BPS, process.env.REFERRAL_BPS],
-      percentValues: []
-    })
+    proposalFeeBps: resolveBpsLike({ bpsValues: [cliOverrides.proposalFeeBps, process.env.PROPOSAL_FEE_BPS] }),
+    referralShareBps: resolveBpsLike({ bpsValues: [cliOverrides.referralShareBps, process.env.REFERRAL_SHARE_BPS, process.env.REFERRAL_BPS] })
   };
 
   const constructorArgs = {
