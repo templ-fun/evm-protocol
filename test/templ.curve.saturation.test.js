@@ -6,7 +6,7 @@ const { deployTemplModules } = require("./utils/modules");
 const { getTemplAt, attachTemplInterface } = require("./utils/templ");
 
 const MAX_ENTRY_FEE = (1n << 128n) - 1n;
-const TOTAL_JOINS = 100; // not 20k so tests wont take too long for now, will bring back inf future after all refactors are done
+const TOTAL_JOINS = 100; // not 20k so tests wont take too long for now, will bring back in future after all refactors are done
 const TOTAL_PERCENT_BPS = 10_000n;
 const VOTING_PERIOD_SECONDS = 7 * 24 * 60 * 60;
 const CurveStyle = { Static: 0, Linear: 1, Exponential: 2 };
@@ -134,15 +134,28 @@ describe("TEMPL high-load behaviour", function () {
     const templ = await getTemplAt(predictedAddress, ethers.provider);
     expect(await templ.accessToken()).to.equal(tokenAddress);
 
-    const deployedBytecode = await ethers.provider.getCode(predictedAddress);
-    const byteLength = (deployedBytecode.length - 2) / 2;
-    const softLimit = 24_576;
-    if (byteLength > softLimit) {
-      console.warn(
-        `⚠️  TEMPL bytecode size ${byteLength} exceeds the 24,576 byte soft limit. Consider additional optimizations.`
-      );
+    const artifactBase = `${__dirname}/../artifacts/contracts`;
+    const contractArtifacts = [
+      ['TEMPL.sol', 'TEMPL', 'templ router'],
+      ['TemplMembership.sol', 'TemplMembershipModule', 'membership module'],
+      ['TemplTreasury.sol', 'TemplTreasuryModule', 'treasury module'],
+      ['TemplGovernance.sol', 'TemplGovernanceModule', 'governance module']
+    ];
+    const limit = 24_576;
+    const sizes = await Promise.all(contractArtifacts.map(async ([file, name]) => {
+      const artifactPath = require('path').join(artifactBase, file, `${name}.json`);
+      const artifact = JSON.parse(require('fs').readFileSync(artifactPath, 'utf8'));
+      const deployedBytecode = artifact.deployedBytecode || '0x';
+      return (deployedBytecode.length - 2) / 2;
+    }));
+
+    const labels = contractArtifacts.map(([,, label]) => label);
+    const diagnostics = labels.map((label, index) => `${label}: ${sizes[index]} bytes`).join(', ');
+    console.log(`templ bytecode footprint → ${diagnostics}`);
+
+    for (let index = 0; index < sizes.length; index += 1) {
+      expect(sizes[index], `module ${labels[index]} exceeds deployment limit`).to.be.at.most(limit);
     }
-    expect(byteLength).to.be.at.most(30_000);
   });
 
   describe("with 20k members", function () {

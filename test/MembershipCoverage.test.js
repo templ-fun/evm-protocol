@@ -474,4 +474,104 @@ describe("Membership coverage extras", function () {
     const poolAfter = await templ.memberPoolBalance();
     expect(poolAfter - poolBefore).to.equal(memberPoolAmount - expectedReferral);
   });
+
+  it("uses the current entry fee when charging proposal creation fees", async function () {
+    const linearCurve = {
+      primary: { style: 1, rateBps: 1_000, length: 0 },
+      additionalSegments: []
+    };
+    const feeBps = 700;
+    const { templ, token, accounts } = await deployTempl({
+      entryFee: ENTRY_FEE,
+      proposalFeeBps: 0,
+      curve: linearCurve
+    });
+    const [, , proposer, voter] = accounts;
+
+    await mintToUsers(token, [proposer, voter], ENTRY_FEE * 10n);
+    await joinMembers(templ, token, [proposer, voter]);
+
+    const currentEntryFee = await templ.entryFee();
+
+    await templ
+      .connect(proposer)
+      .createProposalSetProposalFeeBps(feeBps, VOTING_PERIOD, "Enable fee", "Charge proposal fee");
+    const proposalId = (await templ.proposalCount()) - 1n;
+    await templ.connect(voter).vote(proposalId, true);
+    const delay = Number(await templ.executionDelayAfterQuorum());
+    await ethers.provider.send("evm_increaseTime", [delay + 1]);
+    await ethers.provider.send("evm_mine", []);
+    await templ.executeProposal(proposalId);
+    expect(await templ.proposalCreationFeeBps()).to.equal(BigInt(feeBps));
+
+    const expectedFee = (currentEntryFee * BigInt(feeBps)) / 10_000n;
+    const treasuryBefore = await templ.treasuryBalance();
+    const proposerBalanceBefore = await token.balanceOf(proposer.address);
+
+    await token.connect(proposer).approve(await templ.getAddress(), expectedFee);
+    await templ
+      .connect(proposer)
+      .createProposalSetReferralShareBps(1_000, VOTING_PERIOD, "Referral", "Placeholder");
+
+    const treasuryAfter = await templ.treasuryBalance();
+    const proposerBalanceAfter = await token.balanceOf(proposer.address);
+    expect(treasuryAfter - treasuryBefore).to.equal(expectedFee);
+    expect(proposerBalanceBefore - proposerBalanceAfter).to.equal(expectedFee);
+  });
+
+  it("calculates referral rewards from the member pool share at the current entry fee", async function () {
+    const linearCurve = {
+      primary: { style: 1, rateBps: 750, length: 0 },
+      additionalSegments: []
+    };
+    const referralShare = 1_500;
+    const { templ, token, accounts } = await deployTempl({
+      entryFee: ENTRY_FEE,
+      referralShareBps: 0,
+      curve: linearCurve
+    });
+    const [, , referrer, voter, newcomer] = accounts;
+
+    await mintToUsers(token, [referrer, voter, newcomer], ENTRY_FEE * 10n);
+    await joinMembers(templ, token, [referrer, voter]);
+
+    const currentEntryFee = await templ.entryFee();
+    const memberPoolPercent = await templ.memberPoolPercent();
+
+    await templ
+      .connect(referrer)
+      .createProposalSetReferralShareBps(referralShare, VOTING_PERIOD, "Set referral", "Enable referral payouts");
+    const referralProposalId = (await templ.proposalCount()) - 1n;
+    await templ.connect(voter).vote(referralProposalId, true);
+    const delay = Number(await templ.executionDelayAfterQuorum());
+    await ethers.provider.send("evm_increaseTime", [delay + 1]);
+    await ethers.provider.send("evm_mine", []);
+    await templ.executeProposal(referralProposalId);
+    expect(await templ.referralShareBps()).to.equal(BigInt(referralShare));
+
+    const memberPoolAmount = (currentEntryFee * memberPoolPercent) / 10_000n;
+    const expectedReferral = (memberPoolAmount * BigInt(referralShare)) / 10_000n;
+
+    const referralBalanceBefore = await token.balanceOf(referrer.address);
+    const poolBefore = await templ.memberPoolBalance();
+
+    await token.connect(newcomer).approve(await templ.getAddress(), currentEntryFee);
+    const receipt = await (await templ.connect(newcomer).joinWithReferral(referrer.address)).wait();
+    const referralEvent = receipt.logs
+      .map((log) => {
+        try {
+          return templ.interface.parseLog(log);
+        } catch (_) {
+          return null;
+        }
+      })
+      .find((log) => log && log.name === "ReferralRewardPaid");
+
+    expect(referralEvent?.args?.referral).to.equal(referrer.address);
+    expect(referralEvent?.args?.amount).to.equal(expectedReferral);
+    expect(await token.balanceOf(referrer.address)).to.equal(referralBalanceBefore + expectedReferral);
+
+    const poolAfter = await templ.memberPoolBalance();
+    expect(poolAfter - poolBefore).to.equal(memberPoolAmount - expectedReferral);
+  });
 });
