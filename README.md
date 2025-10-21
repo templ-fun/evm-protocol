@@ -49,6 +49,37 @@ await templ.vote(id, true);
 await templ.executeProposal(id);
 ```
 
+## Five-Minute Tour
+
+1) Start a local chain and deploy factory + modules
+```bash
+npx hardhat node &
+PROTOCOL_FEE_RECIPIENT=0x000000000000000000000000000000000000dEaD \
+npx hardhat run --network localhost scripts/deploy-factory.cjs
+```
+
+2) Create a templ
+```bash
+FACTORY_ADDRESS=0xFactoryFromPreviousStep \
+TOKEN_ADDRESS=0xYourLocalERC20 \
+ENTRY_FEE=100000000000000000000 \
+TEMPL_NAME="My Templ" \
+TEMPL_DESCRIPTION="Docs demo" \
+npx hardhat run --network localhost scripts/deploy-templ.cjs
+```
+
+3) Join and propose (from Hardhat console)
+```js
+const templ = await ethers.getContractAt('TEMPL', '0xTempl');
+const token = await ethers.getContractAt('IERC20', (await templ.getConfig())[0]);
+await token.approve(templ.target, (await templ.getConfig())[1]);
+await templ.join();
+const id = await templ.createProposalSetJoinPaused(true, 7*24*60*60, 'Pause', 'Cooldown');
+await templ.vote(id, true);
+// fast-forward time on localhost, then
+await templ.executeProposal(id);
+```
+
 ## Protocol At A Glance
 
 - Components: [`TEMPL`](contracts/TEMPL.sol) entrypoint delegating to [`TemplMembershipModule`](contracts/TemplMembership.sol), [`TemplTreasuryModule`](contracts/TemplTreasury.sol), and [`TemplGovernanceModule`](contracts/TemplGovernance.sol) with shared storage in [`TemplBase`](contracts/TemplBase.sol).
@@ -259,6 +290,16 @@ const factory = await ethers.getContractAt("TemplFactory", "0xFactory");
 await factory.setPermissionless(true); // anyone can create templs now
 ```
 
+## Script Env Vars
+- scripts/deploy-factory.cjs
+  - `PROTOCOL_FEE_RECIPIENT` (required)
+  - `PROTOCOL_BP` (optional; default 1000)
+  - `MEMBERSHIP_MODULE_ADDRESS`, `TREASURY_MODULE_ADDRESS`, `GOVERNANCE_MODULE_ADDRESS` (optional; reuse existing)
+  - `FACTORY_ADDRESS` (optional; reuse existing factory; script introspects protocol bps and modules)
+- scripts/deploy-templ.cjs
+  - `FACTORY_ADDRESS`, `TOKEN_ADDRESS`, `ENTRY_FEE`, `TEMPL_NAME`, `TEMPL_DESCRIPTION`, `LOGO_LINK`
+  - Optional: `PRIEST_ADDRESS`, `QUORUM_BPS`, `EXECUTION_DELAY_SECONDS`, `BURN_ADDRESS`, `PRIEST_IS_DICTATOR`, `MAX_MEMBERS`, `PROPOSAL_FEE_BPS`, `REFERRAL_SHARE_BPS`, and curve config (see script for shapes)
+
 ## Module Responsibilities
 
 ### Delegatecall Routing
@@ -427,6 +468,7 @@ await templ.connect(alice).claimExternalReward(otherErc20.target);
 - Member lifecycle: `MemberJoined`, `MemberRewardsClaimed`, `ReferralRewardPaid`
 - Governance: `ProposalCreated`, `VoteCast`, `ProposalExecuted`
 - Treasury/config: `TreasuryAction`, `TreasuryDisbanded`, `ConfigUpdated`, `JoinPauseUpdated`, `MaxMembersUpdated`, `EntryFeeCurveUpdated`, `PriestChanged`, `TemplMetadataUpdated`, `ProposalCreationFeeUpdated`, `ReferralShareBpsUpdated`
+ - Factory: `TemplCreated`, `PermissionlessModeUpdated`
 
 Notes
 - `MemberJoined.joinId` starts at 0 for the first non‑priest joiner and increments per successful join.
@@ -438,6 +480,7 @@ Notes
 - `MAX_ENTRY_FEE = type(uint128).max` — upper safety bound on entry fee
 - Proposal voting window: `DEFAULT_VOTING_PERIOD = 7 days` (`MIN=7 days`, `MAX=30 days`)
 - Default factory splits assume `protocolBps = 1_000`: 3_000/3_000/3_000/1_000; customize via `createTemplWithConfig`
+ - Factory defaults: `DEFAULT_MAX_MEMBERS = 249`, `DEFAULT_CURVE_EXP_RATE_BPS = 11_000`
 
 Formulas
 - Member pool per join: `memberPoolAmount = entryFee * memberPoolBps / 10_000`
@@ -452,12 +495,26 @@ Formulas
 - Segment rules: if there are extras, primary must have `length > 0`; all middle extras must have `length > 0`; the final segment must have `length = 0` (unbounded tail).
 - The contract keeps `baseEntryFee` and recomputes current `entryFee` from the stored curve and completed paid joins after each join.
 
+## Core Invariants
+- Entry fee must be ≥ 10 and divisible by 10 (constructor and updates enforce).
+- Fee splits must sum to 10_000 with protocol share included.
+- Token changes are disabled via governance (create a new templ to migrate tokens).
+- Dictatorship gate allows priest to call `onlyDAO` actions directly while enabled.
+- Membership cap: joins revert upon reaching the cap; unpausing does not lift the cap.
+- External rewards capacity capped by `MAX_EXTERNAL_REWARD_TOKENS`.
+- Fallback routes only registered selectors; unknown selectors revert.
+
 ## Indexing Guide (UIs)
 - Persist `ProposalCreated`, then fetch metadata with `getProposal(id)` and `getProposalSnapshots(id)` to drive state.
 - Use `getActiveProposals()` for quick lists; `getActiveProposalsPaginated(offset,limit)` for pagination.
 - Track `VoteCast` and `ProposalExecuted` for live updates.
 - For treasury views, either derive from `getTreasuryInfo()` or track `TreasuryAction`/`TreasuryDisbanded` with access-token balance deltas.
 - Use `EntryFeeCurveUpdated` to reflect curve changes without recomputing from storage.
+
+Compatibility
+- Node: `>=22.18.0` (see `package.json:engines`)
+- Solidity: `0.8.23`
+- Hardhat: `^2.19.2`, ethers v6
 
 See event definitions in [`contracts/TemplBase.sol`](contracts/TemplBase.sol) and usage across modules; tests assert on these logs throughout `test/*.test.js` (e.g. `test/MembershipCoverage.test.js`, `test/GovernanceCoverage.test.js`).
 
@@ -523,6 +580,18 @@ Each section of this README links to the exact contracts that implement the desc
 - Fee-on-transfer tokens: unsupported. Accounting assumes vanilla ERC‑20 semantics (see comment in [`contracts/TemplMembership.sol`](contracts/TemplMembership.sol)).
 - Quorum math: quorum is computed against eligible voters at snapshot; losing quorum post‑snapshot prevents execution.
 - Dictatorship: when enabled, `onlyDAO` gates accept calls from the priest or the contract itself. Disabling restores governance‑only.
+
+## FAQ
+- Can the access token be changed later?
+  - No. Governance rejects token changes (`TokenChangeDisabled`). Deploy a new templ if you need a different token.
+- Why must the entry fee be divisible by 10?
+  - To avoid rounding issues in fee distributions and keep math predictable on-chain.
+- What happens if quorum is never reached?
+  - The proposal cannot be executed. Consider priest-initiated disband proposals which are quorum-exempt to safely unwind inactive templs.
+- How do referrals work?
+  - The referral is paid from the member pool slice of each join, as `memberPoolAmount * referralShareBps / 10_000`, only if the referral is a member and distinct from the new joiner.
+- Can I enumerate external reward tokens?
+  - Yes: `getExternalRewardTokens()` and `getExternalRewardState(token)`; remove exhausted tokens via `cleanupExternalRewardToken` (DAO-only).
 
 ## Troubleshooting (Common Errors)
 - `InvalidEntryFee` / `EntryFeeTooSmall`: entry fee must be ≥10 and divisible by 10.
