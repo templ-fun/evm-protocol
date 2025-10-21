@@ -173,6 +173,34 @@ contract TemplGovernanceModule is TemplBase {
         return id;
     }
 
+    /// @notice Opens a proposal to perform an arbitrary external call through the templ.
+    /// @param _target Destination contract for the call.
+    /// @param _value ETH value to forward along with the call.
+    /// @param _selector Function selector to invoke on the target.
+    /// @param _params ABI-encoded arguments appended to the selector.
+    /// @param _votingPeriod Optional custom voting duration (seconds).
+    /// @param _title On-chain title for the proposal.
+    /// @param _description On-chain description for the proposal.
+    function createProposalCallExternal(
+        address _target,
+        uint256 _value,
+        bytes4 _selector,
+        bytes calldata _params,
+        uint256 _votingPeriod,
+        string calldata _title,
+        string calldata _description
+    ) external returns (uint256) {
+        if (priestIsDictator) revert TemplErrors.DictatorshipEnabled();
+        if (_target == address(0)) revert TemplErrors.InvalidRecipient();
+        bytes memory callData = abi.encodePacked(_selector, _params);
+        (uint256 id, Proposal storage p) = _createBaseProposal(_votingPeriod, _title, _description);
+        p.action = Action.CallExternal;
+        p.externalCallTarget = _target;
+        p.externalCallValue = _value;
+        p.externalCallData = callData;
+        return id;
+    }
+
     /// @notice Opens a proposal to withdraw treasury or external funds to a recipient.
     /// @param _token Token to withdraw (`address(0)` for ETH).
     /// @param _recipient Destination wallet for the funds.
@@ -363,6 +391,8 @@ contract TemplGovernanceModule is TemplBase {
             activeProposalId[proposerAddr] = 0;
         }
 
+        bytes memory returnData = hex"";
+
         if (proposal.action == Action.SetJoinPaused) {
             _governanceSetJoinPaused(proposal.joinPaused);
         } else if (proposal.action == Action.UpdateConfig) {
@@ -399,11 +429,13 @@ contract TemplGovernanceModule is TemplBase {
         } else if (proposal.action == Action.SetEntryFeeCurve) {
             CurveConfig memory curve = proposal.curveConfig;
             _governanceSetEntryFeeCurve(curve, proposal.curveBaseEntryFee);
+        } else if (proposal.action == Action.CallExternal) {
+            returnData = _governanceCallExternal(proposal);
         } else {
             revert TemplErrors.InvalidCallData();
         }
 
-        emit ProposalExecuted(_proposalId, true, hex"");
+        emit ProposalExecuted(_proposalId, true, returnData);
         _removeActiveProposal(_proposalId);
     }
 
@@ -466,6 +498,22 @@ contract TemplGovernanceModule is TemplBase {
 
     function _governanceSetEntryFeeCurve(CurveConfig memory curve, uint256 baseEntryFee) internal {
         _applyCurveUpdate(curve, baseEntryFee);
+    }
+
+    function _governanceCallExternal(Proposal storage proposal) internal returns (bytes memory) {
+        address target = proposal.externalCallTarget;
+        if (target == address(0)) revert TemplErrors.InvalidRecipient();
+        bytes memory callData = proposal.externalCallData;
+        if (callData.length == 0) revert TemplErrors.InvalidCallData();
+        uint256 callValue = proposal.externalCallValue;
+        (bool success, bytes memory returndata) = target.call{value: callValue}(callData);
+        if (!success) {
+            assembly ("memory-safe") {
+                revert(add(returndata, 32), mload(returndata))
+            }
+        }
+        delete proposal.externalCallData;
+        return returndata;
     }
 
     /// @notice Returns core metadata for a proposal including vote totals and status.

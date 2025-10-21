@@ -84,8 +84,13 @@ contract TemplFactory {
     event PermissionlessModeUpdated(bool enabled);
 
     function _defaultCurveConfig() internal pure returns (CurveConfig memory) {
-        CurveSegment memory primary = CurveSegment({style: CurveStyle.Exponential, rateBps: DEFAULT_CURVE_EXP_RATE_BPS});
-        return CurveConfig({primary: primary});
+        CurveSegment memory primary = CurveSegment({
+            style: CurveStyle.Exponential,
+            rateBps: DEFAULT_CURVE_EXP_RATE_BPS,
+            length: 0
+        });
+        CurveSegment[] memory extras = new CurveSegment[](0);
+        return CurveConfig({primary: primary, additionalSegments: extras});
     }
 
     /// @notice Initializes factory-wide protocol recipient and fee percent.

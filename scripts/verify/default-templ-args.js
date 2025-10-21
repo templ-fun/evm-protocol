@@ -18,6 +18,7 @@ module.exports = [
   0,                                             // proposal fee (bps)
   0,                                             // referral share (bps)
   [
-    [2, 10094]                                   // curveConfig.primary: style=2 (Exponential), rateBps=10094
+    [2, 10094, 0],                               // curveConfig.primary
+    []
   ]
 ];

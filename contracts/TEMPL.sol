@@ -175,7 +175,7 @@ contract TEMPL is TemplBase {
     }
 
     function _registerGovernanceSelectors(address module) internal {
-        bytes4[] memory selectors = new bytes4[](19);
+        bytes4[] memory selectors = new bytes4[](20);
         selectors[0] = TemplGovernanceModule.createProposalSetJoinPaused.selector;
         selectors[1] = TemplGovernanceModule.createProposalUpdateConfig.selector;
         selectors[2] = TemplGovernanceModule.createProposalSetMaxMembers.selector;
@@ -183,18 +183,19 @@ contract TEMPL is TemplBase {
         selectors[4] = TemplGovernanceModule.createProposalSetProposalFeeBps.selector;
         selectors[5] = TemplGovernanceModule.createProposalSetReferralShareBps.selector;
         selectors[6] = TemplGovernanceModule.createProposalSetEntryFeeCurve.selector;
-        selectors[7] = TemplGovernanceModule.createProposalWithdrawTreasury.selector;
-        selectors[8] = TemplGovernanceModule.createProposalDisbandTreasury.selector;
-        selectors[9] = TemplGovernanceModule.createProposalChangePriest.selector;
-        selectors[10] = TemplGovernanceModule.createProposalSetDictatorship.selector;
-        selectors[11] = TemplGovernanceModule.vote.selector;
-        selectors[12] = TemplGovernanceModule.executeProposal.selector;
-        selectors[13] = TemplGovernanceModule.getProposal.selector;
-        selectors[14] = TemplGovernanceModule.getProposalSnapshots.selector;
-        selectors[15] = TemplGovernanceModule.hasVoted.selector;
-        selectors[16] = TemplGovernanceModule.getActiveProposals.selector;
-        selectors[17] = TemplGovernanceModule.getActiveProposalsPaginated.selector;
-        selectors[18] = TemplGovernanceModule.pruneInactiveProposals.selector;
+        selectors[7] = TemplGovernanceModule.createProposalCallExternal.selector;
+        selectors[8] = TemplGovernanceModule.createProposalWithdrawTreasury.selector;
+        selectors[9] = TemplGovernanceModule.createProposalDisbandTreasury.selector;
+        selectors[10] = TemplGovernanceModule.createProposalChangePriest.selector;
+        selectors[11] = TemplGovernanceModule.createProposalSetDictatorship.selector;
+        selectors[12] = TemplGovernanceModule.vote.selector;
+        selectors[13] = TemplGovernanceModule.executeProposal.selector;
+        selectors[14] = TemplGovernanceModule.getProposal.selector;
+        selectors[15] = TemplGovernanceModule.getProposalSnapshots.selector;
+        selectors[16] = TemplGovernanceModule.hasVoted.selector;
+        selectors[17] = TemplGovernanceModule.getActiveProposals.selector;
+        selectors[18] = TemplGovernanceModule.getActiveProposalsPaginated.selector;
+        selectors[19] = TemplGovernanceModule.pruneInactiveProposals.selector;
         _registerModule(module, selectors);
     }
 

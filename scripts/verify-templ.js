@@ -75,30 +75,34 @@ function normalizeCurveValue(curve) {
   if (curve.primary) {
     const style = toNumberLike(curve.primary.style ?? curve.primary[0]);
     const rateBps = toNumberLike(curve.primary.rateBps ?? curve.primary[1]);
+    const length = toNumberLike(curve.primary.length ?? curve.primary[2] ?? 0);
     if (style === undefined || rateBps === undefined) return undefined;
-    return { primary: { style, rateBps } };
+    return { primary: { style, rateBps, length: length ?? 0 }, additionalSegments: [] };
   }
   if (Array.isArray(curve)) {
     if (curve.length === 0) return undefined;
     if (Array.isArray(curve[0])) {
-      const [styleRaw, rateRaw] = curve[0];
+      const [styleRaw, rateRaw, lengthRaw] = curve[0];
       const style = toNumberLike(styleRaw);
       const rateBps = toNumberLike(rateRaw);
+      const length = toNumberLike(lengthRaw ?? 0);
       if (style === undefined || rateBps === undefined) return undefined;
-      return { primary: { style, rateBps } };
+      return { primary: { style, rateBps, length: length ?? 0 }, additionalSegments: [] };
     }
     if (curve.length >= 2) {
       const style = toNumberLike(curve[0]);
       const rateBps = toNumberLike(curve[1]);
+      const length = toNumberLike(curve[2] ?? 0);
       if (style === undefined || rateBps === undefined) return undefined;
-      return { primary: { style, rateBps } };
+      return { primary: { style, rateBps, length: length ?? 0 }, additionalSegments: [] };
     }
   }
   if ('style' in curve && 'rateBps' in curve) {
     const style = toNumberLike(curve.style);
     const rateBps = toNumberLike(curve.rateBps);
+    const length = toNumberLike(curve.length ?? 0);
     if (style === undefined || rateBps === undefined) return undefined;
-    return { primary: { style, rateBps } };
+    return { primary: { style, rateBps, length: length ?? 0 }, additionalSegments: [] };
   }
   return undefined;
 }
@@ -553,21 +557,31 @@ async function main() {
     const style = toNumberLike(eventSnapshot.curveStyle);
     const rateBps = toNumberLike(eventSnapshot.curveRateBps);
     if (style !== undefined && rateBps !== undefined) {
-      normalizedCurve = { primary: { style, rateBps } };
+      normalizedCurve = { primary: { style, rateBps, length: 0 }, additionalSegments: [] };
     }
   }
   if (!normalizedCurve) {
     throw new Error('Unable to determine curve configuration; provide deployment details or update verify script overrides.');
   }
   const curveArgument = [
-    [normalizedCurve.primary.style, normalizedCurve.primary.rateBps]
+    [
+      normalizedCurve.primary.style,
+      normalizedCurve.primary.rateBps,
+      normalizedCurve.primary.length ?? 0
+    ],
+    (normalizedCurve.additionalSegments || []).map((segment) => [
+      segment.style,
+      segment.rateBps,
+      segment.length ?? 0
+    ])
   ];
 
   console.log('Verifying templ with constructor arguments:');
   console.table({
     ...constructorArgs,
     curvePrimaryStyle: normalizedCurve.primary.style,
-    curvePrimaryRateBps: normalizedCurve.primary.rateBps
+    curvePrimaryRateBps: normalizedCurve.primary.rateBps,
+    curvePrimaryLength: normalizedCurve.primary.length ?? 0
   });
   console.log('Curve argument:', curveArgument);
 

@@ -122,6 +122,9 @@ abstract contract TemplBase is ReentrancyGuard {
         uint256 newProposalCreationFeeBps;
         uint256 newReferralShareBps;
         uint256 newMaxMembers;
+        address externalCallTarget;
+        uint256 externalCallValue;
+        bytes externalCallData;
         CurveConfig curveConfig;
         uint256 curveBaseEntryFee;
         uint256 yesVotes;
@@ -162,6 +165,7 @@ abstract contract TemplBase is ReentrancyGuard {
         SetMetadata,
         SetProposalFee,
         SetReferralShare,
+        CallExternal,
         SetEntryFeeCurve,
         Undefined
     }
@@ -222,8 +226,9 @@ abstract contract TemplBase is ReentrancyGuard {
     event JoinPauseUpdated(bool joinPaused);
     event MaxMembersUpdated(uint256 maxMembers);
     event EntryFeeCurveUpdated(
-        uint8 primaryStyle,
-        uint32 primaryRateBps
+        uint8[] styles,
+        uint32[] rateBps,
+        uint32[] lengths
     );
     event PriestChanged(address indexed oldPriest, address indexed newPriest);
     event TreasuryDisbanded(
@@ -497,7 +502,7 @@ abstract contract TemplBase is ReentrancyGuard {
     function _setCurrentEntryFee(uint256 targetEntryFee) internal {
         _validateEntryFeeAmount(targetEntryFee);
         uint256 paidJoins = _currentPaidJoins();
-        CurveConfig memory curve = entryFeeCurve;
+        CurveConfig memory curve = _copyCurveConfig(entryFeeCurve);
         if (paidJoins == 0 || !_curveHasGrowth(curve)) {
             baseEntryFee = targetEntryFee;
             entryFee = targetEntryFee;
@@ -518,6 +523,18 @@ abstract contract TemplBase is ReentrancyGuard {
         }
     }
 
+    /// @dev Creates a memory copy of a curve stored on-chain.
+    function _copyCurveConfig(CurveConfig storage stored) internal view returns (CurveConfig memory cfg) {
+        CurveSegment[] storage extras = stored.additionalSegments;
+        uint256 len = extras.length;
+        CurveSegment[] memory extraCopy = new CurveSegment[](len);
+        for (uint256 i = 0; i < len; i++) {
+            extraCopy[i] = extras[i];
+        }
+        cfg.primary = stored.primary;
+        cfg.additionalSegments = extraCopy;
+    }
+
     /// @dev Recomputes the entry fee for the next join in response to membership changes.
     function _advanceEntryFeeAfterJoin() internal {
         _refreshEntryFeeFromState();
@@ -528,7 +545,7 @@ abstract contract TemplBase is ReentrancyGuard {
         if (baseEntryFee == 0) {
             return;
         }
-        entryFee = _priceForPaidJoins(baseEntryFee, entryFeeCurve, _currentPaidJoins());
+        entryFee = _priceForPaidJoinsFromStorage(baseEntryFee, entryFeeCurve, _currentPaidJoins());
     }
 
     /// @dev Returns the number of paid joins that have occurred (excludes the auto-enrolled priest).
@@ -541,10 +558,19 @@ abstract contract TemplBase is ReentrancyGuard {
 
     /// @dev Reports whether any curve segment introduces dynamic pricing.
     function _curveHasGrowth(CurveConfig memory curve) internal pure returns (bool) {
-        return curve.primary.style != CurveStyle.Static;
+        if (curve.primary.style != CurveStyle.Static) {
+            return true;
+        }
+        uint256 len = curve.additionalSegments.length;
+        for (uint256 i = 0; i < len; i++) {
+            if (curve.additionalSegments[i].style != CurveStyle.Static) {
+                return true;
+            }
+        }
+        return false;
     }
 
-    /// @dev Computes the entry fee for a given number of completed paid joins.
+    /// @dev Computes the entry fee for a given number of completed paid joins (memory curve).
     function _priceForPaidJoins(
         uint256 baseFee,
         CurveConfig memory curve,
@@ -553,8 +579,44 @@ abstract contract TemplBase is ReentrancyGuard {
         if (paidJoins == 0) {
             return baseFee;
         }
+        uint256 remaining = paidJoins;
+        uint256 amount = baseFee;
+        (amount, remaining) = _consumeSegment(amount, curve.primary, remaining, true);
+        if (remaining == 0) {
+            return amount;
+        }
+        CurveSegment[] memory extras = curve.additionalSegments;
+        uint256 len = extras.length;
+        for (uint256 i = 0; i < len && remaining > 0; i++) {
+            (amount, remaining) = _consumeSegment(amount, extras[i], remaining, true);
+        }
+        if (remaining > 0) revert TemplErrors.InvalidCurveConfig();
+        return amount;
+    }
 
-        return _applySegment(baseFee, curve.primary, paidJoins, true);
+    /// @dev Computes the entry fee for a given number of completed paid joins (storage curve).
+    function _priceForPaidJoinsFromStorage(
+        uint256 baseFee,
+        CurveConfig storage curve,
+        uint256 paidJoins
+    ) internal view returns (uint256) {
+        if (paidJoins == 0) {
+            return baseFee;
+        }
+        uint256 remaining = paidJoins;
+        uint256 amount = baseFee;
+        (amount, remaining) = _consumeSegment(amount, curve.primary, remaining, true);
+        if (remaining == 0) {
+            return amount;
+        }
+        CurveSegment[] storage extras = curve.additionalSegments;
+        uint256 len = extras.length;
+        for (uint256 i = 0; i < len && remaining > 0; i++) {
+            CurveSegment memory seg = extras[i];
+            (amount, remaining) = _consumeSegment(amount, seg, remaining, true);
+        }
+        if (remaining > 0) revert TemplErrors.InvalidCurveConfig();
+        return amount;
     }
 
     /// @dev Derives the base entry fee that produces a target price after `paidJoins` joins.
@@ -566,8 +628,41 @@ abstract contract TemplBase is ReentrancyGuard {
         if (paidJoins == 0) {
             return targetPrice;
         }
+        uint256 remaining = paidJoins;
+        uint256 amount = targetPrice;
+        (amount, remaining) = _consumeSegment(amount, curve.primary, remaining, false);
+        if (remaining == 0) {
+            return amount;
+        }
+        CurveSegment[] memory extras = curve.additionalSegments;
+        uint256 len = extras.length;
+        for (uint256 i = 0; i < len && remaining > 0; i++) {
+            (amount, remaining) = _consumeSegment(amount, extras[i], remaining, false);
+        }
+        if (remaining > 0) revert TemplErrors.InvalidCurveConfig();
+        return amount;
+    }
 
-        return _applySegment(targetPrice, curve.primary, paidJoins, false);
+    /// @dev Applies a curve segment for up to `remaining` steps and returns the updated amount + remaining steps.
+    function _consumeSegment(
+        uint256 amount,
+        CurveSegment memory segment,
+        uint256 remaining,
+        bool forward
+    ) internal pure returns (uint256, uint256) {
+        if (remaining == 0) {
+            return (amount, remaining);
+        }
+        uint256 segmentLength = uint256(segment.length);
+        uint256 steps = segmentLength == 0 ? remaining : _min(remaining, segmentLength);
+        if (steps > 0) {
+            amount = _applySegment(amount, segment, steps, forward);
+            remaining -= steps;
+        }
+        if (segmentLength == 0) {
+            remaining = 0;
+        }
+        return (amount, remaining);
     }
 
     /// @dev Applies a curve segment forward or inverse for the specified number of steps.
@@ -652,9 +747,35 @@ abstract contract TemplBase is ReentrancyGuard {
         return (result, false);
     }
 
+    function _min(uint256 a, uint256 b) internal pure returns (uint256) {
+        return a < b ? a : b;
+    }
+
     /// @dev Validates curve configuration input.
     function _validateCurveConfig(CurveConfig memory curve) internal pure {
         _validateCurveSegment(curve.primary);
+        CurveSegment[] memory extras = curve.additionalSegments;
+        uint256 extrasLen = extras.length;
+        if (extrasLen == 0) {
+            if (curve.primary.length != 0) {
+                revert TemplErrors.InvalidCurveConfig();
+            }
+            return;
+        }
+        if (curve.primary.length == 0) {
+            revert TemplErrors.InvalidCurveConfig();
+        }
+        for (uint256 i = 0; i < extrasLen; i++) {
+            CurveSegment memory segment = extras[i];
+            bool isLast = i == extrasLen - 1;
+            _validateCurveSegment(segment);
+            if (!isLast && segment.length == 0) {
+                revert TemplErrors.InvalidCurveConfig();
+            }
+            if (isLast && segment.length != 0) {
+                revert TemplErrors.InvalidCurveConfig();
+            }
+        }
     }
 
     /// @dev Validates a single curve segment.
@@ -682,8 +803,22 @@ abstract contract TemplBase is ReentrancyGuard {
 
     /// @dev Emits the standardized curve update event with the current configuration.
     function _emitEntryFeeCurveUpdated() internal {
-        CurveConfig memory cfg = entryFeeCurve;
-        emit EntryFeeCurveUpdated(uint8(cfg.primary.style), cfg.primary.rateBps);
+        CurveConfig storage cfg = entryFeeCurve;
+        uint256 additional = cfg.additionalSegments.length;
+        uint256 segmentCount = 1 + additional;
+        uint8[] memory styles = new uint8[](segmentCount);
+        uint32[] memory rates = new uint32[](segmentCount);
+        uint32[] memory lengths = new uint32[](segmentCount);
+        styles[0] = uint8(cfg.primary.style);
+        rates[0] = cfg.primary.rateBps;
+        lengths[0] = cfg.primary.length;
+        for (uint256 i = 0; i < additional; i++) {
+            CurveSegment storage seg = cfg.additionalSegments[i];
+            styles[i + 1] = uint8(seg.style);
+            rates[i + 1] = seg.rateBps;
+            lengths[i + 1] = seg.length;
+        }
+        emit EntryFeeCurveUpdated(styles, rates, lengths);
     }
 
     /// @dev Toggles dictatorship governance mode, emitting an event when the state changes.
