@@ -1,6 +1,6 @@
 # templ.fun Protocol Overview
 
-<img width="985" height="237" alt="Screenshot 2025-10-21 at 18 19 13" src="https://github.com/user-attachments/assets/ef8bfc49-5f8d-44ac-ac96-6901723f3ccf" />
+<img width="100%" alt="templ.fun banner image" src="https://github.com/user-attachments/assets/ef8bfc49-5f8d-44ac-ac96-6901723f3ccf" />
 
 ## What It Does
 - templ.fun lets communities spin up private “templ” groups that collect an access-token treasury, stream rewards to existing members, and govern configuration or payouts on-chain.
@@ -22,10 +22,10 @@
 
 ```mermaid
 graph TD
-  A[TEMPL (router)] -->|delegatecall by selector| M[TemplMembershipModule]
-  A -->|delegatecall by selector| T[TemplTreasuryModule]
-  A -->|delegatecall by selector| G[TemplGovernanceModule]
-  B[(TemplBase shared storage)] --- M
+  A["TEMPL (router)"] -->|delegatecall by selector| M["TemplMembershipModule"]
+  A -->|delegatecall by selector| T["TemplTreasuryModule"]
+  A -->|delegatecall by selector| G["TemplGovernanceModule"]
+  B["TemplBase shared storage"] --- M
   B --- T
   B --- G
 ```
@@ -53,8 +53,8 @@ Distribution and accounting:
 - Balances:
   - `treasuryBalance += treasuryAmount` (access token only)
   - `memberPoolBalance += distributablePool` (reserved for claims)
- - Unsupported tokens: fee‑on‑transfer or rebasing access tokens are not supported.
- - Code: splits and transfers in `TemplMembershipModule._join` (contracts/TemplMembership.sol:58).
+- Unsupported tokens: fee‑on‑transfer or rebasing access tokens are not supported.
+- Code: splits and transfers in `TemplMembershipModule._join` ([contracts/TemplMembership.sol#L58](contracts/TemplMembership.sol#L58)).
 
 ```mermaid
 flowchart TD
@@ -68,10 +68,10 @@ flowchart TD
   P -.->|transfer protocolAmount| Protocol
   P -.->|transfer memberPoolAmount + treasuryAmount| R
   Pool -->|optional referralShareBps| Ref[referral]
-  R -->|update| Bal[treasuryBalance + memberPoolBalance]
-  R -->|distribute to existing members| Acc[cumulativeMemberRewards + remainder]
-  R -->|record| Snap[rewardSnapshot + joinSequence]
-  R -->|recompute| Fee[next entryFee via curve]
+  R -->|update| Bal["treasuryBalance + memberPoolBalance"]
+  R -->|distribute to existing members| Acc["cumulativeMemberRewards + remainder"]
+  R -->|record| Snap["rewardSnapshot + joinSequence"]
+  R -->|recompute| Fee["next entryFee via curve"]
 ```
 
 ## Proposal Creation Fee
@@ -95,11 +95,11 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-  X[executeProposal: DisbandTreasury(token)] -->|token == accessToken| A[Move to memberPoolBalance]
-  A -->|even split| AR[cumulativeMemberRewards + remainder]
+  X["executeProposal: DisbandTreasury(token)"] -->|token == accessToken| A[Move to memberPoolBalance]
+  A -->|even split| AR["cumulativeMemberRewards + remainder"]
   X -->|token == ETH/ERC20| E[Increase external pool]
-  E --> EC[external cumulative + checkpoint]
-  EC --> Members[Members claim via claimExternalReward(token)]
+  E --> EC["external cumulative + checkpoint"]
+  EC --> Members["Members claim via claimExternalReward(token)"]
 ```
 
 ## Deployment Flow & Public Interfaces
@@ -293,8 +293,8 @@ These components share `TemplBase`, which contains storage, shared helpers (entr
 ```mermaid
 flowchart LR
   C[Create proposal] -->|endTime = now + votingPeriod| Pre[Pre-quorum voting]
-  Pre -->|quorum reached| Q[Record quorumReachedAt + snapshots\nendTime = now + executionDelay]
-  Q --> Delay[Post-quorum delay\n(voting allowed)]
+  Pre -->|quorum reached| Q["Record quorumReachedAt + snapshots<br/>endTime = now + executionDelay"]
+  Q --> Delay["Post-quorum delay<br/>(voting allowed)"]
   Delay -->|time >= quorumReachedAt + executionDelay\nAND quorum maintained\nAND YES > NO| Exec[executeProposal()]
   Pre -->|endTime reached without quorum| Fail[Not executable: QuorumNotReached]
 ```
