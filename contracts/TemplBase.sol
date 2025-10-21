@@ -334,7 +334,8 @@ abstract contract TemplBase is ReentrancyGuard {
 
     /// @dev Encodes an external reward snapshot value with the active cleanup nonce.
     function _encodeExternalSnapshot(uint256 nonce, uint256 value) internal pure returns (uint256) {
-        return (nonce << EXTERNAL_SNAPSHOT_NONCE_SHIFT) | value;
+        // Mask the value to prevent corrupting the nonce field when cumulative exceeds the mask
+        return (nonce << EXTERNAL_SNAPSHOT_NONCE_SHIFT) | (value & EXTERNAL_SNAPSHOT_VALUE_MASK);
     }
 
     /// @dev Persists a new external reward checkpoint so future joins can baseline correctly.
