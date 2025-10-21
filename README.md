@@ -78,7 +78,7 @@ The canonical workflow deploys shared modules once, followed by a factory and an
    - `token`: ERC-20 used for joins, rewards, and treasury balances.
    - `entryFee`: initial fee (must be ≥10 and divisible by 10). The pricing curve adjusts the next `entryFee` after each successful join.
    - `burnBps/treasuryBps/memberPoolBps`: fee split (basis points) between burn address, templ treasury, and member rewards pool. Must sum with `protocolBps` to 10_000.
-   - `quorumBps`: minimum YES percentage (basis points) to satisfy quorum. Values ≤100 are automatically scaled to basis points.
+   - `quorumBps`: minimum YES threshold (basis points) to satisfy quorum.
    - `executionDelaySeconds`: waiting period after quorum before execution can occur.
    - `burnAddress`: recipient of the burned allocation (default: `0x...dEaD`).
    - `priestIsDictator`: if true, governance functions are priest-only until the dictator disables it.
