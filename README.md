@@ -175,3 +175,20 @@ These components share `TemplBase`, which contains storage, shared helpers (entr
 - Dictatorship mode (`priestIsDictator`): when enabled, the priest can call DAO‑only functions directly. Otherwise, they must be executed via proposals.
 - External-call proposals: allow arbitrary calls/value and can drain treasury; ensure UIs warn voters appropriately.
 - Cleanup of external rewards: `cleanupExternalRewardToken(address)` is now DAO‑only. It can only remove tokens whose external reward pool and remainder are fully settled; otherwise it reverts.
+
+### Quorum & Timeouts
+- Pre‑quorum voting window:
+  - On creation, proposals set `endTime = block.timestamp + votingPeriod` (7–30 days).
+  - Members may vote until `endTime`; attempts after that revert with `VotingEnded` (contracts/TemplGovernance.sol:319).
+  - If quorum is never reached by `endTime`, the proposal cannot be executed (`QuorumNotReached`).
+- When quorum is reached:
+  - Records `quorumReachedAt`, `quorumSnapshotBlock`, and locks join eligibility via a join‑sequence snapshot.
+  - Resets `endTime = block.timestamp + executionDelayAfterQuorum` and leaves voting open during this delay window (contracts/TemplGovernance.sol:353).
+  - After the delay, proposals are executable if both conditions hold:
+    - Quorum maintained: `yesVotes * 10_000 >= quorumBps * eligibleVoters` (uses the pre‑quorum eligible voter count at creation).
+    - Majority yes: `yesVotes > noVotes`.
+  - Execute guard checks: contracts/TemplGovernance.sol:367.
+  - Note for indexers/UIs: the “active proposals” list uses `endTime` to decide activeness. After the delay passes (and the proposal becomes executable), it will drop from the active list even though it can still be executed; query individual proposals via `getProposal()` to surface execution‑ready items.
+- Quorum‑exempt proposals (priest’s `DisbandTreasury`):
+  - Do not use the execution delay; they require waiting until the original `votingPeriod` elapses, then a simple majority (`yesVotes > noVotes`).
+  - Execute guard for quorum‑exempt: contracts/TemplGovernance.sol:375.
