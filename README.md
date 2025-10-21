@@ -1,5 +1,8 @@
 # templ.fun Protocol Overview
 
+<img width="100%" alt="Screenshot 2025-10-21 at 18 19 13" src="https://github.com/user-attachments/assets/ef8bfc49-5f8d-44ac-ac96-6901723f3ccf" />
+
+
 ## What It Does
 - templ.fun lets communities spin up private “templ” groups that collect an access-token treasury, stream rewards to existing members, and govern configuration or payouts on-chain.
 - Each templ is composed from three delegatecall modules – membership, treasury, and governance – orchestrated by the root [`TEMPL`](contracts/TEMPL.sol) contract. All persistent state lives in [`TemplBase`](contracts/TemplBase.sol), so modules share storage and act like facets of a single contract.
