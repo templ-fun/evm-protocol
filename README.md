@@ -6,7 +6,7 @@
 ## What It Does
 - templ.fun lets communities spin up private “templ” groups that collect an access-token treasury, stream rewards to existing members, and govern configuration or payouts on-chain.
 - Each templ is composed from three delegatecall modules – membership, treasury, and governance – orchestrated by the root [`TEMPL`](contracts/TEMPL.sol) contract. All persistent state lives in [`TemplBase`](contracts/TemplBase.sol), so modules share storage and act like facets of a single contract.
-- Deployers can apply join-fee curves, referral rewards, proposal fees, and dictatorship (priest) overrides. Governance maintains control after launch by voting on configuration changes or treasury actions.
+ - Deployers can apply join-fee curves, referral rewards, proposal fees, and an optional dictatorship (priest) override. By default, governance controls all DAO actions and the priest is a regular member.
 
 ## Quickstart
 
@@ -88,7 +88,7 @@ await templ.executeProposal(id);
 - Fees: `proposalCreationFeeBps` and `referralShareBps` configurable via governance.
 - Governance: default `quorumBps`=3_300; `executionDelayAfterQuorum`=7 days; one vote per member; join‑sequence snapshots enforce eligibility; dictatorship toggle via priest.
 - Limits/Pauses: optional `maxMembers` (factory default 249); auto‑pauses at cap; `joinPaused` toggleable.
-- Treasury Ops: withdraw/disband, config/split/entry fee/curve updates, metadata, priest changes.
+- Treasury Ops: withdraw/disband (disband disperses the treasury equally across members), config/split/entry fee/curve updates, metadata, priest changes.
 - Factory: [`TemplFactory`](contracts/TemplFactory.sol) with `setPermissionless`, `createTempl`, `createTemplFor`, `createTemplWithConfig`.
 
 Learn-by-reading map (each claim backed by code/tests):
@@ -135,9 +135,9 @@ Architecture map (see more at [Module Responsibilities](#module-responsibilities
  - Priest role: Stored in shared storage and used by onlyDAO gating; see Dictatorship Gate for behavior (#dictatorship-gate-onlydao).
 
 Key terms
-- Priest: privileged address set at deploy; auto-enrolled as member at `joinSequence=1`.
+- Priest: address set at deploy; auto‑enrolled as a member at `joinSequence=1`. Not privileged unless dictatorship mode is enabled.
 - Member pool: portion of each join streamed to existing members pro‑rata.
-- Treasury: funds held by the templ and controlled by governance/priest (in dictatorship).
+- Treasury: funds held by the templ and controlled by governance (or by the priest only when dictatorship is enabled).
 - Quorum: YES threshold in bps relative to eligible voters before execution delay starts.
 
 What “TemplBase Shared Storage” means
@@ -208,7 +208,7 @@ sequenceDiagram
 3. **Create a templ instance**
    ```js
    const templTx = await factory.createTemplWithConfig({
-     priest: "0xPriest...",                 // auto-enrolled administrator (priest)
+     priest: "0xPriest...",                 // auto-enrolled 'priest' address
      token: "0xAccessToken...",             // ERC-20 used for joins / treasury accounting
      entryFee: ethers.parseUnits("100", 18),// base entry fee (must be ≥10 and divisible by 10)
      burnBps: -1,                           // burn share (bps), -1 keeps factory default
@@ -235,7 +235,7 @@ sequenceDiagram
    ```
 
    Key configuration knobs (resolved inside [`TemplFactory`](contracts/TemplFactory.sol) and [`TEMPL`](contracts/TEMPL.sol)):
-   - `priest`: auto-enrolled member with the ability to toggle dictatorship or act before governance is active.
+   - `priest`: auto-enrolled member. When `priestIsDictator` is true, the priest can call `onlyDAO` functions directly until dictatorship is disabled.
    - `token`: ERC-20 used for joins, rewards, and treasury balances.
    - `entryFee`: initial fee (must be ≥10 and divisible by 10). The pricing curve adjusts the next `entryFee` after each successful join.
    - `burnBps/treasuryBps/memberPoolBps`: fee split (basis points) between burn address, templ treasury, and member rewards pool. Must sum with `protocolBps` to 10_000.
@@ -462,7 +462,7 @@ await templ.connect(alice).claimExternalReward(otherErc20.target);
 - Dictatorship mode (`priestIsDictator`) allows the priest to call `onlyDAO` functions directly. Otherwise, all `onlyDAO` actions are executed by governance via `executeProposal`.
 - `maxMembers` caps membership. When the cap is reached, `joinPaused` auto-enables; unpausing doesn’t remove the cap.
 - External-call proposals can execute arbitrary calls with optional ETH; they should be used cautiously.
-- Only priest-initiated disband proposals are quorum‑exempt; this exists to safely unwind inactive templs without bricking governance, distributing treasury evenly across members (still requires YES greater than NO).
+- Only priest-initiated disband proposals are quorum‑exempt; this exists to safely unwind inactive templs without bricking governance. Disband distributes the treasury evenly across members (still requires YES greater than NO).
 
 ## Events
 - Member lifecycle: `MemberJoined`, `MemberRewardsClaimed`, `ReferralRewardPaid`
@@ -542,6 +542,7 @@ flowchart TD
   C --> E[perform action]
   D --> E
 ```
+
 
 ### Snapshot-Based Voting Eligibility (example)
 
