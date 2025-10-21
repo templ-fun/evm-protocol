@@ -6,7 +6,7 @@
 ## What It Does
 - templ.fun lets communities spin up private “templ” groups that collect an access-token treasury, stream rewards to existing members, and govern configuration or payouts on-chain.
 - Each templ is composed from three delegatecall modules – membership, treasury, and governance – orchestrated by the root [`TEMPL`](contracts/TEMPL.sol) contract. All persistent state lives in [`TemplBase`](contracts/TemplBase.sol), so modules share storage and act like facets of a single contract.
- - Deployers can apply join-fee curves, referral rewards, proposal fees, and an optional dictatorship (priest) override. By default, governance controls all DAO actions and the priest is a regular member.
+- Deployers can apply join-fee curves, referral rewards, proposal fees, and an optional dictatorship (priest) override. By default, governance controls all DAO actions and the priest is a regular member.
 
 ## Quickstart
 
