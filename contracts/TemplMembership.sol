@@ -184,6 +184,16 @@ contract TemplMembershipModule is TemplBase {
         );
         if (snapshotNonce != cleanupNonce) {
             snapshotValue = 0;
+        } else if (snapshotValue != 0) {
+            // Reconstruct high bits lost during encoding so comparisons use the correct 256-bit value.
+            // We assume monotonic growth of cumulative rewards and at most one wrap across 192 bits.
+            uint256 high = accrued >> EXTERNAL_SNAPSHOT_NONCE_SHIFT;
+            uint256 reconstructed = (high << EXTERNAL_SNAPSHOT_NONCE_SHIFT) | snapshotValue;
+            if (reconstructed > accrued) {
+                // If lower bits from the snapshot exceed current lower bits, it belonged to the previous era.
+                reconstructed -= (uint256(1) << EXTERNAL_SNAPSHOT_NONCE_SHIFT);
+            }
+            snapshotValue = reconstructed;
         }
         uint256 floor = baseline;
         if (snapshotValue > floor) {

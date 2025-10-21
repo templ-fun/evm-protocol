@@ -1,91 +1,58 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
-const { deployTemplModules } = require("./utils/modules");
-const { attachTemplInterface } = require("./utils/templ");
-const { mintToUsers, joinMembers } = require("./utils/mintAndPurchase");
+// This test uses a dedicated harness to simulate overflow with a reduced mask width.
 
 describe("External snapshot masking regression", function () {
-  it("prevents double-claim when cumulative exceeds mask", async function () {
-    const signers = await ethers.getSigners();
-    const [, priest, protocol, member] = signers;
-
-    // Deploy access token and modules
-    const Token = await ethers.getContractFactory("contracts/mocks/TestToken.sol:TestToken");
-    const accessToken = await Token.deploy("Access", "ACC", 18);
-    const modules = await deployTemplModules();
-
-    // Deploy harnessed TEMPL instance
-    const Harness = await ethers.getContractFactory("TemplHarness");
-    let templ = await Harness.deploy(
-      priest.address,
-      protocol.address,
-      accessToken.target,
-      1_000_000n,
-      3000,
-      3000,
-      3000,
-      1000,
-      3300,
-      7 * 24 * 60 * 60,
-      ethers.ZeroAddress,
-      false,
-      0,
-      "Masking Harness",
-      "",
-      "",
-      0,
-      0,
-      modules.membershipModule,
-      modules.treasuryModule,
-      modules.governanceModule
-    );
-    await templ.waitForDeployment();
-    templ = await attachTemplInterface(templ);
-
-    // Join one additional member so there are at least 2 members
-    const entryFee = await templ.entryFee();
-    await mintToUsers(accessToken, [member], entryFee);
-    await joinMembers(templ, accessToken, [member]);
-
-    // Deploy an external reward token
+  it("preserves claims for pre-checkpoint members after overflow (reduced mask harness)", async function () {
+    const [owner, memberA, memberB] = await ethers.getSigners();
     const RewardToken = await ethers.getContractFactory("contracts/mocks/TestToken.sol:TestToken");
     const rewardToken = await RewardToken.deploy("Reward", "RWD", 18);
 
-    // Build external reward state where cumulative has high bits beyond 192
-    const SHIFT = 192n;
-    const HUGE = 1n << SHIFT; // exactly one bit beyond the mask
-    const tokenKey = rewardToken.target;
+    const Harness = await ethers.getContractFactory("ExternalRewardsMaskingHarness");
+    const h = await Harness.deploy();
+    await h.waitForDeployment();
 
-    // Seed a huge cumulative and a checkpoint BEFORE the member's join time so baseline = HUGE
-    await templ.harnessResetExternalRewards(tokenKey, HUGE);
-    await templ.harnessPushCheckpoint(tokenKey, 10, 1_000, HUGE);
+    // Seed two members. Place memberB before first checkpoint to get baseline=0 later.
+    await h.seedMembers(memberA.address, memberB.address, 0, 0, 0, 0);
 
-    // Force member metadata to reflect a join after the checkpoint
-    await templ.harnessSetMember(member.address, 20, 2_000, true, 2);
+    // First small disband pre-overflow
+    const members = 2n;
+    const firstDeposit = ethers.parseUnits("10", 18);
+    await rewardToken.mint(owner.address, firstDeposit);
+    await rewardToken.transfer(await h.getAddress(), firstDeposit);
+    await h.disband(rewardToken.target, firstDeposit);
 
-    // Deposit some rewards and disband into the external pool
-    const deposit = ethers.parseUnits("10", 18);
-    await rewardToken.mint(signers[0].address, deposit);
-    const templAddress = await templ.getAddress();
-    await rewardToken.transfer(templAddress, deposit);
-    // Use the harness internal path to bypass onlyDAO
-    await templ.harnessDisbandTreasury(tokenKey);
+    // MemberB claims once (pre-overflow)
+    const before1 = await h.getClaimableExternalReward(memberB.address, rewardToken.target);
+    expect(before1).to.be.gt(0n);
+    const b0 = await rewardToken.balanceOf(memberB.address);
+    await h.connect(memberB).claimExternalReward(rewardToken.target);
+    const b1 = await rewardToken.balanceOf(memberB.address);
+    expect(b1 - b0).to.equal(before1);
 
-    // With baseline = HUGE and accrued = HUGE + perMember, claimable should equal perMember
-    const before = await templ.getClaimableExternalReward(member.address, tokenKey);
-    expect(before).to.be.gt(0n);
+    // Drive cumulative near the 32-bit boundary with a large disband, then cross it by 1 token
+    const SHIFT = 32n;
+    const ONE = 10n ** 18n;
+    const [ , cum0 ] = await h.getExternalRewardState(rewardToken.target);
+    const near = ((1n << SHIFT) - 1n) * ONE; // per-member near-boundary cumulative (scaled)
+    const perMemberDelta = near - cum0; // amount to reach near boundary
+    const bigDeposit = perMemberDelta * members;
+    await rewardToken.mint(owner.address, bigDeposit);
+    await rewardToken.transfer(await h.getAddress(), bigDeposit);
+    await h.disband(rewardToken.target, bigDeposit);
 
-    // First claim succeeds and records an encoded snapshot with the huge value
-    const balBefore = await rewardToken.balanceOf(member.address);
-    await templ.connect(member).claimExternalReward(tokenKey);
-    const balAfterFirst = await rewardToken.balanceOf(member.address);
-    const firstClaim = balAfterFirst - balBefore;
-    expect(firstClaim).to.equal(before);
+    const tiny = ethers.parseUnits("1", 18);
+    await rewardToken.mint(owner.address, tiny);
+    await rewardToken.transfer(await h.getAddress(), tiny);
+    await h.disband(rewardToken.target, tiny);
 
-    // Due to missing mask, decode observes a mismatched nonce and resets snapshot value to 0,
-    // allowing the member to immediately claim the same amount again.
-    const again = await templ.getClaimableExternalReward(member.address, tokenKey);
-    // After the fix, snapshot nonce/value remain valid and re-claim is not possible immediately.
-    expect(again).to.equal(0n);
+    // First claim after overflow should succeed
+    const before2 = await h.getClaimableExternalReward(memberB.address, rewardToken.target);
+    expect(before2).to.be.gt(0n);
+    await h.connect(memberB).claimExternalReward(rewardToken.target);
+
+    // Immediately after, claimable must be zero (no 2^shift ballooning / no bricking)
+    const after = await h.getClaimableExternalReward(memberB.address, rewardToken.target);
+    expect(after).to.equal(0n);
   });
 });
