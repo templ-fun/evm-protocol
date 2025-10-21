@@ -83,9 +83,10 @@ The canonical workflow deploys shared modules once, followed by a factory and an
    - `burnAddress`: recipient of the burned allocation (default: `0x...dEaD`).
    - `priestIsDictator`: if true, governance functions are priest-only until the dictator disables it.
    - `maxMembers`: optional membership cap that auto-pauses joins when reached.
-   - `curve`: `CurveConfig` describing how the entry fee evolves. The factory ships an exponential default; additional segments can model piecewise-linear or static phases. See [`contracts/TemplCurve.sol`](contracts/TemplCurve.sol) for enum definitions.
-   - `proposalFeeBps`: optional fee paid in the access token to open proposals (credited to the templ treasury).
-   - `referralShareBps`: portion of the member pool allocation paid to a referrer on each join.
+   - `curveProvided`: set to `true` when supplying a custom `CurveConfig`; otherwise the factory default is applied.
+    - `curve`: `CurveConfig` describing how the entry fee evolves. The factory ships an exponential default; additional segments can model piecewise-linear or static phases. See [`contracts/TemplCurve.sol`](contracts/TemplCurve.sol) for enum definitions.
+   - `proposalFeeBps`: optional fee (basis points) deducted from the proposer’s wallet and credited to the templ treasury when a proposal is created.
+    - `referralShareBps`: portion of the member pool allocation paid to a referrer on each join.
 
 Once the templ is live, all user interactions flow through the deployed `TEMPL` address (`contracts/TEMPL.sol`), which delegates to the module responsible for the invoked selector. The `TemplFactory` can be toggled to permissionless mode (see `setPermissionless`) to allow anyone to deploy new templs.
 
