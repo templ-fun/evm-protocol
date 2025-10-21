@@ -20,7 +20,7 @@ contract TemplTreasuryModule is TemplBase {
         address recipient,
         uint256 amount,
         string memory reason
-    ) external onlyDAO {
+    ) external onlyDAO nonReentrant {
         _withdrawTreasury(token, recipient, amount, reason, 0);
     }
 
@@ -56,7 +56,7 @@ contract TemplTreasuryModule is TemplBase {
 
     /// @notice Governance action that moves treasury balances into the member or external reward pools.
     /// @param token Asset to disband (`address(0)` for ETH).
-    function disbandTreasuryDAO(address token) external onlyDAO {
+    function disbandTreasuryDAO(address token) external onlyDAO nonReentrant {
         _disbandTreasury(token, 0);
     }
 
