@@ -2,6 +2,7 @@
 pragma solidity ^0.8.23;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {TemplErrors} from "./TemplErrors.sol";
@@ -11,6 +12,7 @@ import {CurveConfig, CurveSegment, CurveStyle} from "./TemplCurve.sol";
 /// @notice Hosts shared state, events, and internal helpers used by membership, treasury, and governance modules.
 abstract contract TemplBase is ReentrancyGuard {
     using TemplErrors for *;
+    using SafeERC20 for IERC20;
 
     /// @dev Basis used for fee split math so every percent is represented as an integer.
     uint256 internal constant TOTAL_PERCENT = 10_000;
@@ -82,6 +84,8 @@ abstract contract TemplBase is ReentrancyGuard {
         uint256 blockNumber;
         /// @notice Reward checkpoint captured when the member joined.
         uint256 rewardSnapshot;
+        /// @notice Monotonic join sequence assigned at the time of entry (0 when never joined).
+        uint256 joinSequence;
     }
 
     mapping(address => Member) public members;
@@ -91,6 +95,8 @@ abstract contract TemplBase is ReentrancyGuard {
     uint256 public cumulativeMemberRewards;
     /// @notice Remainder carried forward when rewards do not divide evenly across members.
     uint256 public memberRewardRemainder;
+    /// @notice Incrementing counter tracking the order of member joins (starts at 1 for the priest).
+    uint256 public joinSequence;
 
     struct RewardCheckpoint {
         /// @notice Block number when the checkpoint was recorded.
@@ -144,6 +150,10 @@ abstract contract TemplBase is ReentrancyGuard {
         bool quorumExempt;
         bool updateFeeSplit;
         uint256 preQuorumSnapshotBlock;
+        /// @notice Join sequence recorded when the proposal was created.
+        uint256 preQuorumJoinSequence;
+        /// @notice Join sequence recorded when quorum was reached (0 if quorum never satisfied).
+        uint256 quorumJoinSequence;
         bool setDictatorship;
     }
 
@@ -1025,22 +1035,25 @@ abstract contract TemplBase is ReentrancyGuard {
         activeProposalIndex[proposalId] = 0;
     }
 
-    /// @dev Checks whether a member joined after a particular snapshot point, invalidating their vote.
-    function _joinedAfterSnapshot(
-        Member storage memberInfo,
-        uint256 snapshotBlock,
-        uint256 snapshotTimestamp
-    ) internal view returns (bool) {
-        if (snapshotBlock == 0) {
+    /// @dev Checks whether a member joined after a particular snapshot point using join sequences.
+    /// @param memberInfo Stored membership record to inspect.
+    /// @param snapshotJoinSequence Join sequence captured in the proposal snapshot (0 when unused).
+    /// @return joinedAfter True when the member joined strictly after the snapshot sequence.
+    function _joinedAfterSnapshot(Member storage memberInfo, uint256 snapshotJoinSequence)
+        internal
+        view
+        returns (bool joinedAfter)
+    {
+        if (snapshotJoinSequence == 0) {
             return false;
         }
-        if (memberInfo.blockNumber > snapshotBlock) {
+        if (!memberInfo.joined) {
             return true;
         }
-        if (memberInfo.blockNumber == snapshotBlock && memberInfo.timestamp > snapshotTimestamp) {
+        if (memberInfo.joinSequence == 0) {
             return true;
         }
-        return false;
+        return memberInfo.joinSequence > snapshotJoinSequence;
     }
 
     /// @dev Helper that determines if a proposal is still active based on time and execution status.
@@ -1058,27 +1071,12 @@ abstract contract TemplBase is ReentrancyGuard {
     }
 
     /// @dev Executes an ERC-20 call and verifies optional boolean return values.
-    function _safeERC20Call(address token, bytes memory data) internal {
-        (bool success, bytes memory returndata) = token.call(data);
-        if (!success) {
-            if (returndata.length > 0) {
-                assembly ("memory-safe") {
-                    revert(add(returndata, 32), mload(returndata))
-                }
-            }
-            revert TemplErrors.TokenTransferFailed();
-        }
-        if (returndata.length != 0 && !abi.decode(returndata, (bool))) {
-            revert TemplErrors.TokenTransferFailed();
-        }
-    }
-
     /// @dev Transfers tokens from the current contract to `to`, reverting on failure.
     function _safeTransfer(address token, address to, uint256 amount) internal {
         if (amount == 0) {
             return;
         }
-        _safeERC20Call(token, abi.encodeWithSelector(IERC20.transfer.selector, to, amount));
+        IERC20(token).safeTransfer(to, amount);
     }
 
     /// @dev Transfers tokens from `from` to `to`, reverting when allowances are insufficient.
@@ -1086,7 +1084,7 @@ abstract contract TemplBase is ReentrancyGuard {
         if (amount == 0) {
             return;
         }
-        _safeERC20Call(token, abi.encodeWithSelector(IERC20.transferFrom.selector, from, to, amount));
+        IERC20(token).safeTransferFrom(from, to, amount);
     }
 
     /// @dev Registers a token so external rewards can be enumerated by frontends.

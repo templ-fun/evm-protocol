@@ -103,6 +103,8 @@ contract TEMPL is TemplBase {
         priestMember.timestamp = block.timestamp;
         priestMember.blockNumber = block.number;
         priestMember.rewardSnapshot = cumulativeMemberRewards;
+        joinSequence = 1;
+        priestMember.joinSequence = 1;
         memberCount = 1;
         if (_maxMembers != 0) {
             _setMaxMembers(_maxMembers);
@@ -175,7 +177,7 @@ contract TEMPL is TemplBase {
     }
 
     function _registerGovernanceSelectors(address module) internal {
-        bytes4[] memory selectors = new bytes4[](20);
+        bytes4[] memory selectors = new bytes4[](21);
         selectors[0] = TemplGovernanceModule.createProposalSetJoinPaused.selector;
         selectors[1] = TemplGovernanceModule.createProposalUpdateConfig.selector;
         selectors[2] = TemplGovernanceModule.createProposalSetMaxMembers.selector;
@@ -196,6 +198,7 @@ contract TEMPL is TemplBase {
         selectors[17] = TemplGovernanceModule.getActiveProposals.selector;
         selectors[18] = TemplGovernanceModule.getActiveProposalsPaginated.selector;
         selectors[19] = TemplGovernanceModule.pruneInactiveProposals.selector;
+        selectors[20] = TemplGovernanceModule.getProposalJoinSequences.selector;
         _registerModule(module, selectors);
     }
 
