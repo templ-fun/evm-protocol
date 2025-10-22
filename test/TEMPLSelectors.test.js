@@ -38,5 +38,51 @@ describe("TEMPL selector → module introspection", function () {
     const unknownSel = "0x12345678";
     expect(await templ.getModuleForSelector(unknownSel)).to.equal(ethers.ZeroAddress);
   });
-});
 
+  it("maps new treasury/governance selectors including payload getters", async function () {
+    const { templ } = await deployTempl();
+    const treasury = await templ.treasuryModule();
+    const governance = await templ.governanceModule();
+
+    const sel = (name) => templ.interface.getFunction(name).selector;
+
+    // Treasury DAO setters
+    for (const fn of [
+      "setQuorumBpsDAO",
+      "setExecutionDelayAfterQuorumDAO",
+      "setBurnAddressDAO",
+    ]) {
+      expect(await templ.getModuleForSelector(sel(fn))).to.equal(treasury);
+    }
+
+    // Governance proposal creators
+    for (const fn of [
+      "createProposalSetQuorumBps",
+      "createProposalSetExecutionDelay",
+      "createProposalSetBurnAddress",
+    ]) {
+      expect(await templ.getModuleForSelector(sel(fn))).to.equal(governance);
+    }
+
+    // Governance payload getters (new ones only)
+    for (const fn of [
+      "getProposalSetQuorumBpsPayload",
+      "getProposalSetExecutionDelayPayload",
+      "getProposalSetBurnAddressPayload",
+    ]) {
+      expect(await templ.getModuleForSelector(sel(fn))).to.equal(governance);
+    }
+  });
+
+  it("reverts InvalidCallData for non-existent payload getters", async function () {
+    const { templ, accounts } = await deployTempl();
+    const [owner] = accounts;
+    // Craft a call to a payload getter that isn't implemented (trimmed to keep code size under the limit)
+    const badIface = new ethers.Interface([
+      "function getProposalUpdateConfigPayload(uint256)"
+    ]);
+    const data = badIface.encodeFunctionData("getProposalUpdateConfigPayload", [0]);
+    await expect(owner.sendTransaction({ to: await templ.getAddress(), data }))
+      .to.be.revertedWithCustomError(templ, "InvalidCallData");
+  });
+});

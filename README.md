@@ -87,6 +87,7 @@ await templ.executeProposal(id);
 - Fee Splits: burn/treasury/member plus protocol must sum to 10_000 bps; defaults (with `protocolBps`=1_000) are 3_000/3_000/3_000/1_000.
 - Fees: `proposalCreationFeeBps` and `referralShareBps` configurable via governance.
 - Governance: `quorumBps` and `executionDelayAfterQuorum` are governable (defaults: 3_300 bps and 7 days). One vote per member; join‑sequence snapshots enforce eligibility; dictatorship toggle via priest.
+  - Quorum setter accepts either 0–100 (interpreted as %) or 0–10_000 (basis points).
 - Limits/Pauses: optional `maxMembers` (factory default 249); auto‑pauses at cap; `joinPaused` toggleable.
 - Treasury Ops: withdraw/disband (disband disperses the treasury equally across members), config/split/entry fee/curve updates, metadata, priest changes.
 - Factory: [`TemplFactory`](contracts/TemplFactory.sol) with `setPermissionless`, `createTempl`, `createTemplFor`, `createTemplWithConfig`.
@@ -111,7 +112,26 @@ Learn-by-reading map (each claim backed by code/tests):
 - Quorum threshold and post‑quorum execution delay, and the burn address are adjustable via proposals or `onlyDAO` calls.
 
 ### Proposal Payload Getters
-Frontends can read proposal payloads directly on‑chain via dedicated getters in [`TemplGovernanceModule`](contracts/TemplGovernance.sol), e.g. `getProposalCallExternalPayload`, `getProposalSetEntryFeeCurvePayload`, `getProposalUpdateConfigPayload`, and more for each action.
+Frontends can read select proposal payloads directly on‑chain via getters in [`TemplGovernanceModule`](contracts/TemplGovernance.sol):
+- `getProposalSetQuorumBpsPayload(uint256)`
+- `getProposalSetExecutionDelayPayload(uint256)`
+- `getProposalSetBurnAddressPayload(uint256)`
+For other proposal types, use the standard `getProposal(...)` plus off‑chain context or indexation.
+
+### Proposal Execution Rules
+- Eligibility snapshots:
+  - On creation: store `eligibleVoters` (member count) and `preQuorumJoinSequence`.
+  - On quorum: record `quorumReachedAt`, `quorumSnapshotBlock`, and freeze `quorumJoinSequence`. Members who joined after the relevant snapshot cannot vote on that proposal.
+- Pre‑quorum window:
+  - Voting is open until `endTime = createdAt + votingPeriod`.
+  - Quorum is reached when `YES * 10_000 >= quorumBps * eligibleVoters` (eligibleVoters is the baseline captured at creation).
+- Post‑quorum delay (timelock):
+  - When quorum is reached, `endTime` is reset to `block.timestamp + executionDelayAfterQuorum`.
+  - Voting remains allowed during this delay window; join eligibility stays frozen by `quorumJoinSequence`.
+- Execution checks:
+  - Quorum‑exempt proposals (priest‑initiated Disband only): require `(block.timestamp >= endTime)` and `YES > NO`.
+  - All other proposals: require quorum was reached, `block.timestamp >= quorumReachedAt + executionDelayAfterQuorum`, `YES > NO`, and quorum still maintained vs. the baseline: `YES * 10_000 >= quorumBps * eligibleVoters`.
+  - On success, the proposal executes once and is marked `executed`.
 - External rewards: accounting in [`contracts/TemplBase.sol`](contracts/TemplBase.sol); tests in `test/RewardWithdrawals.test.js`, `test/MembershipCoverage.test.js`.
 
 ### Architecture Overview

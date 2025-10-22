@@ -129,8 +129,11 @@ abstract contract TemplBase is ReentrancyGuard {
         uint256 newProposalCreationFeeBps;
         uint256 newReferralShareBps;
         uint256 newMaxMembers;
+        /// @notice Quorum threshold proposed (bps). Accepts 0-100 or 0-10_000 format.
         uint256 newQuorumBps;
+        /// @notice Execution delay proposed (seconds) after quorum is reached.
         uint256 newExecutionDelay;
+        /// @notice Burn address proposed to receive burn allocations.
         address newBurnAddress;
         /// @notice Target contract invoked when executing an external call proposal.
         address externalCallTarget;
