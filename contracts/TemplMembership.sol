@@ -115,12 +115,7 @@ contract TemplMembershipModule is TemplBase {
             totalBurned += burnAmount;
         }
         _safeTransferFrom(accessToken, payer, burnAddress, burnAmount);
-        uint256 balBefore = IERC20(accessToken).balanceOf(address(this));
         _safeTransferFrom(accessToken, payer, address(this), toContract);
-        uint256 balAfter = IERC20(accessToken).balanceOf(address(this));
-        if (balAfter < balBefore || balAfter - balBefore != toContract) {
-            revert TemplErrors.UnsupportedToken();
-        }
         _safeTransferFrom(accessToken, payer, protocolFeeRecipient, protocolAmount);
 
         if (referralAmount > 0) {
