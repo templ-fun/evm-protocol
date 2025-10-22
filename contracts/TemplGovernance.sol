@@ -118,6 +118,10 @@ contract TemplGovernanceModule is TemplBase {
 
     /// @notice Opens a proposal to update the quorum threshold (bps).
     /// @param _newQuorumBps New quorum threshold (accepts 0-100 or 0-10_000 values).
+    /// @param _votingPeriod Optional custom voting duration (seconds).
+    /// @param _title On-chain title for the proposal.
+    /// @param _description On-chain description for the proposal.
+    /// @return proposalId Newly created proposal identifier.
     function createProposalSetQuorumBps(
         uint256 _newQuorumBps,
         uint256 _votingPeriod,
@@ -172,6 +176,11 @@ contract TemplGovernanceModule is TemplBase {
     }
 
     /// @notice Opens a proposal to update the proposal creation fee basis points.
+    /// @param _newFeeBps New proposal creation fee (bps of current entry fee).
+    /// @param _votingPeriod Optional custom voting duration (seconds).
+    /// @param _title On-chain title for the proposal.
+    /// @param _description On-chain description for the proposal.
+    /// @return proposalId Newly created proposal identifier.
     function createProposalSetProposalFeeBps(
         uint256 _newFeeBps,
         uint256 _votingPeriod,
