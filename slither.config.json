@@ -6,5 +6,5 @@
   "detectors_to_exclude": [
     "arbitrary-send-eth"
   ],
-  "solc_args": "--via-ir --optimize --optimize-runs 200"
+  "solc_args": "--via-ir --optimize --optimize-runs 500"
 }
