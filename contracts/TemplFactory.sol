@@ -4,7 +4,7 @@ pragma solidity ^0.8.23;
 import {TEMPL} from "./TEMPL.sol";
 import {TemplErrors} from "./TemplErrors.sol";
 import {CurveConfig, CurveSegment, CurveStyle} from "./TemplCurve.sol";
-import {SSTORE2} from "./libraries/SSTORE2.sol";
+import {TemplDefaults} from "./TemplDefaults.sol";
 
 /// @title Templ Factory
 /// @notice Deploys Templ contracts with shared protocol configuration and optional custom splits.
@@ -18,14 +18,14 @@ contract TemplFactory {
     uint256 internal constant DEFAULT_BURN_BPS = 3_000;
     uint256 internal constant DEFAULT_TREASURY_BPS = 3_000;
     uint256 internal constant DEFAULT_MEMBER_POOL_BPS = 3_000;
-    uint256 internal constant DEFAULT_QUORUM_BPS = 3_300;
-    uint256 internal constant DEFAULT_EXECUTION_DELAY = 7 days;
-    address internal constant DEFAULT_BURN_ADDRESS = 0x000000000000000000000000000000000000dEaD;
+    uint256 internal constant DEFAULT_QUORUM_BPS = TemplDefaults.DEFAULT_QUORUM_BPS;
+    uint256 internal constant DEFAULT_EXECUTION_DELAY = TemplDefaults.DEFAULT_EXECUTION_DELAY;
+    address internal constant DEFAULT_BURN_ADDRESS = TemplDefaults.DEFAULT_BURN_ADDRESS;
     int256 internal constant USE_DEFAULT_BPS = -1;
     uint256 internal constant DEFAULT_MAX_MEMBERS = 249;
     uint32 internal constant DEFAULT_CURVE_EXP_RATE_BPS = 11_000;
     uint256 internal constant DEFAULT_PROPOSAL_FEE_BPS = 0;
-    uint256 internal constant MAX_INIT_CODE_CHUNK_SIZE = 24_000;
+    // Init code chunking removed; deploy directly via new TEMPL(...)
 
     /// @notice Full templ creation configuration. Use `createTemplWithConfig` to apply.
     struct CreateConfig {
@@ -74,8 +74,7 @@ contract TemplFactory {
     address public immutable governanceModule;
     address public immutable factoryDeployer;
     bool public permissionless;
-    address[] internal templInitCodePointers;
-    uint256 internal templInitCodeLength;
+    // SSTORE2 pointers removed
 
     /// @notice Emitted after deploying a new templ instance.
     /// @param templ Address of the deployed templ.
@@ -162,9 +161,6 @@ contract TemplFactory {
         governanceModule = _governanceModule;
         factoryDeployer = msg.sender;
         permissionless = false;
-        bytes memory initCode = type(TEMPL).creationCode;
-        templInitCodeLength = initCode.length;
-        templInitCodePointers = _writeInitCodeChunks(initCode);
     }
 
     /// @notice Toggles permissionless mode for templ creation.
@@ -289,7 +285,7 @@ contract TemplFactory {
         if (cfg.proposalFeeBps > BPS_DENOMINATOR) revert TemplErrors.InvalidPercentage();
         if (cfg.referralShareBps > BPS_DENOMINATOR) revert TemplErrors.InvalidPercentage();
 
-        bytes memory constructorArgs = abi.encode(
+        TEMPL deployed = new TEMPL(
             cfg.priest,
             protocolFeeRecipient,
             cfg.token,
@@ -313,18 +309,7 @@ contract TemplFactory {
             governanceModule,
             cfg.curve
         );
-        bytes memory templInitCode = _loadTemplInitCode();
-        if (templInitCode.length == 0) revert TemplErrors.DeploymentFailed();
-        bytes memory initCode = abi.encodePacked(templInitCode, constructorArgs);
-
-        address deployed;
-        assembly ("memory-safe") {
-            let dataPtr := add(initCode, 0x20)
-            let dataLen := mload(initCode)
-            deployed := create(0, dataPtr, dataLen)
-        }
-        if (deployed == address(0)) revert TemplErrors.DeploymentFailed();
-        templAddress = deployed;
+        templAddress = address(deployed);
         uint256 extraLen = cfg.curve.additionalSegments.length;
         uint8[] memory curveStyles = new uint8[](extraLen + 1);
         uint32[] memory curveRates = new uint32[](extraLen + 1);
@@ -363,43 +348,7 @@ contract TemplFactory {
         );
     }
 
-    function _writeInitCodeChunks(bytes memory initCode) internal returns (address[] memory pointers) {
-        uint256 totalLength = initCode.length;
-        if (totalLength == 0) revert TemplErrors.DeploymentFailed();
-        uint256 chunkCount = (totalLength + MAX_INIT_CODE_CHUNK_SIZE - 1) / MAX_INIT_CODE_CHUNK_SIZE;
-        pointers = new address[](chunkCount);
-        for (uint256 i = 0; i < chunkCount; ++i) {
-            uint256 offset = i * MAX_INIT_CODE_CHUNK_SIZE;
-            uint256 remaining = totalLength - offset;
-            uint256 chunkSize = remaining > MAX_INIT_CODE_CHUNK_SIZE ? MAX_INIT_CODE_CHUNK_SIZE : remaining;
-            bytes memory chunk = new bytes(chunkSize);
-            for (uint256 j = 0; j < chunkSize; ++j) {
-                chunk[j] = initCode[offset + j];
-            }
-            pointers[i] = SSTORE2.write(chunk);
-        }
-    }
-
-    function _loadTemplInitCode() internal view returns (bytes memory initCode) {
-        address[] storage pointers = templInitCodePointers;
-        uint256 pointerCount = pointers.length;
-        uint256 expectedLength = templInitCodeLength;
-        if (pointerCount == 0 || expectedLength == 0) revert TemplErrors.DeploymentFailed();
-        initCode = new bytes(expectedLength);
-        uint256 offset = 0;
-        for (uint256 i = 0; i < pointerCount; ++i) {
-            bytes memory chunk = SSTORE2.read(pointers[i]);
-            uint256 chunkLength = chunk.length;
-            if (chunkLength == 0 || offset + chunkLength > expectedLength) {
-                revert TemplErrors.DeploymentFailed();
-            }
-            for (uint256 j = 0; j < chunkLength; ++j) {
-                initCode[offset + j] = chunk[j];
-            }
-            offset += chunkLength;
-        }
-        if (offset != expectedLength) revert TemplErrors.DeploymentFailed();
-    }
+    // SSTORE2 chunking helpers removed
 
     /// @dev Resolves a potentially sentinel-encoded bps value to its final value.
     /// @param rawBps Raw basis points supplied by callers (-1 requests the default value).

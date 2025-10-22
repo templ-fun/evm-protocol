@@ -161,41 +161,33 @@ describe("TemplHarness coverage helpers", function () {
     expect(cumulative).to.equal(42);
   });
 
-  it("flushes seeded external remainders across existing members", async function () {
+  it("rolls external remainders forward at disband time", async function () {
     const signers = await ethers.getSigners();
-    const [,, , memberA, memberB, memberC] = signers;
+    const [,, , memberA, memberB] = signers;
     const entryFee = await harness.entryFee();
-    await mintToUsers(token, [memberA, memberB, memberC], entryFee);
+    await mintToUsers(token, [memberA, memberB], entryFee);
     await joinMembers(harness, token, [memberA, memberB], entryFee);
 
-    const tokenKey = ethers.Wallet.createRandom().address;
-    await harness.harnessSeedExternalRemainder(tokenKey, 10, 5);
+    const RewardToken = await ethers.getContractFactory("contracts/mocks/TestToken.sol:TestToken");
+    const reward = await RewardToken.deploy("Reward", "RWD", 18);
+    await reward.waitForDeployment();
 
-    await harness.harnessFlushExternalRemainders();
+    const rewardAddr = reward.target;
+    await harness.harnessSeedExternalRemainder(rewardAddr, 10, 5);
+    await reward.mint(await harness.getAddress(), 2n);
+    await harness.harnessDisbandTreasury(rewardAddr);
 
-    const [, cumulative, remainder] = await harness.getExternalRewardState(tokenKey);
-    expect(cumulative).to.equal(8);
-    expect(remainder).to.equal(1);
-
-    const latest = await harness.harnessGetLatestCheckpoint(tokenKey);
-    expect(latest[2]).to.equal(8);
-
-    await joinMembers(harness, token, [memberC], entryFee);
+    const [, cumulative, remainder] = await harness.getExternalRewardState(rewardAddr);
+    // Members: priest + memberA + memberB = 3. (10 + 2) / 3 = 4 per member, 0 remainder
+    expect(cumulative).to.equal(9); // was 5, plus 4 per-member added
+    expect(remainder).to.equal(0n);
   });
 
   it("ignores inactive ids when removing proposals for coverage", async function () {
     await expect(harness.harnessRemoveActiveProposal(999)).to.not.be.reverted;
   });
 
-  it("returns early when flushing with no members", async function () {
-    const tokenKey = ethers.Wallet.createRandom().address;
-    await harness.harnessClearMembers();
-    await harness.harnessSeedExternalRemainder(tokenKey, 5, 0);
-    await harness.harnessFlushExternalRemainders();
-    const [, cumulative, remainder] = await harness.getExternalRewardState(tokenKey);
-    expect(cumulative).to.equal(0);
-    expect(remainder).to.equal(5n);
-  });
+  // Disbanding with no members is covered elsewhere (reverts NoMembers)
 
   it("returns zero total joins when the membership counter resets", async function () {
     await harness.harnessClearMembers();

@@ -140,7 +140,7 @@ contract TEMPL is TemplBase {
     }
 
     function _registerMembershipSelectors(address module) internal {
-        bytes4[] memory selectors = new bytes4[](17);
+        bytes4[] memory selectors = new bytes4[](18);
         selectors[0] = TemplMembershipModule.join.selector;
         selectors[1] = TemplMembershipModule.joinWithReferral.selector;
         selectors[2] = TemplMembershipModule.joinFor.selector;
@@ -158,6 +158,7 @@ contract TEMPL is TemplBase {
         selectors[14] = TemplMembershipModule.getMemberCount.selector;
         selectors[15] = TemplMembershipModule.getVoteWeight.selector;
         selectors[16] = TemplMembershipModule.totalJoins.selector;
+        selectors[17] = TemplMembershipModule.getExternalRewardTokensPaginated.selector;
         _registerModule(module, selectors);
     }
 
@@ -210,6 +211,8 @@ contract TEMPL is TemplBase {
         selectors[24] = TemplGovernanceModule.createProposalSetBurnAddress.selector;
         _registerModule(module, selectors);
     }
+
+    // Selector introspection helpers removed to keep bytecode lean and avoid via-IR stack limits.
 
     /// @notice Returns the action and ABI-encoded payload for a proposal.
     /// @dev See README Proposal Views for payload types per action.

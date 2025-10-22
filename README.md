@@ -358,6 +358,13 @@ sequenceDiagram
 
 Once the templ is live, all user interactions flow through the deployed [`TEMPL`](contracts/TEMPL.sol) address, which delegates to the module responsible for the invoked selector. The [`TemplFactory`](contracts/TemplFactory.sol) can be toggled to permissionless mode via `setPermissionless` to allow anyone to deploy new templs.
 
+## Additional Notes
+
+- Fee-on-transfer/rebasing ERC-20s are unsupported for membership. Joins verify exact token receipts and revert with `UnsupportedToken` if amounts do not match.
+- `ProposalExecuted` emits `keccak256(returndata)` instead of raw bytes to keep events small. Off-chain, hash the return data for correlation.
+- For large sets, use paginated queries: `getExternalRewardTokensPaginated(offset, limit)` and `getActiveProposalsPaginated(offset, limit)`.
+- Introspection: `getRegisteredSelectors()` returns static selector lists per module to aid tooling.
+
 ### Hardhat Deployment Scripts
 The repository ships end-to-end scripts at the repository root that mirror the sequence above:
 

@@ -7,21 +7,21 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {TemplErrors} from "./TemplErrors.sol";
 import {CurveConfig, CurveSegment, CurveStyle} from "./TemplCurve.sol";
+import {TemplDefaults} from "./TemplDefaults.sol";
 
 /// @title Base Templ Storage and Helpers
 /// @notice Hosts shared state, events, and internal helpers used by membership, treasury, and governance modules.
 abstract contract TemplBase is ReentrancyGuard {
-    using TemplErrors for *;
     using SafeERC20 for IERC20;
 
     /// @dev Basis for fee split math (basis points per 100%).
     uint256 internal constant BPS_DENOMINATOR = 10_000;
     /// @dev Default quorum threshold (basis points) applied when callers pass zero into constructors.
-    uint256 internal constant DEFAULT_QUORUM_BPS = 3_300;
+    uint256 internal constant DEFAULT_QUORUM_BPS = TemplDefaults.DEFAULT_QUORUM_BPS;
     /// @dev Default post-quorum execution delay used when deployers do not override it.
-    uint256 internal constant DEFAULT_EXECUTION_DELAY = 7 days;
+    uint256 internal constant DEFAULT_EXECUTION_DELAY = TemplDefaults.DEFAULT_EXECUTION_DELAY;
     /// @dev Default burn address used when deployers do not provide a custom sink.
-    address internal constant DEFAULT_BURN_ADDRESS = 0x000000000000000000000000000000000000dEaD;
+    address internal constant DEFAULT_BURN_ADDRESS = TemplDefaults.DEFAULT_BURN_ADDRESS;
     /// @dev Caps the number of external reward tokens tracked to keep join gas bounded.
     uint256 internal constant MAX_EXTERNAL_REWARD_TOKENS = 256;
     /// @dev Maximum entry fee supported before arithmetic would overflow downstream accounting.
@@ -170,7 +170,6 @@ abstract contract TemplBase is ReentrancyGuard {
     mapping(address => bool) public hasActiveProposal;
     uint256[] internal activeProposalIds;
     mapping(uint256 => uint256) internal activeProposalIndex;
-    mapping(address => bool) internal proposalCreationLock;
     uint256 public constant DEFAULT_VOTING_PERIOD = 7 days;
     uint256 public constant MIN_VOTING_PERIOD = 7 days;
     uint256 public constant MAX_VOTING_PERIOD = 30 days;
@@ -240,7 +239,7 @@ abstract contract TemplBase is ReentrancyGuard {
         uint256 timestamp
     );
 
-    event ProposalExecuted(uint256 indexed proposalId, bool success, bytes returnData);
+    event ProposalExecuted(uint256 indexed proposalId, bool success, bytes32 returnDataHash);
 
     event TreasuryAction(
         uint256 indexed proposalId,
@@ -1090,15 +1089,17 @@ abstract contract TemplBase is ReentrancyGuard {
         uint256 totalAmount = tokenBalance > poolBalance ? tokenBalance - poolBalance : 0;
         if (totalAmount == 0) revert TemplErrors.NoTreasuryFunds();
 
-        uint256 perMember = totalAmount / activeMembers;
-        uint256 remainderExternal = totalAmount % activeMembers;
+        uint256 carry = rewards.rewardRemainder;
+        uint256 toSplit = totalAmount + carry;
+        uint256 perMember = toSplit / activeMembers;
+        uint256 newRemainder = toSplit % activeMembers;
 
         rewards.poolBalance += totalAmount;
-        rewards.rewardRemainder += remainderExternal;
+        rewards.rewardRemainder = newRemainder;
         rewards.cumulativeRewards += perMember;
         _recordExternalCheckpoint(rewards);
 
-        emit TreasuryDisbanded(proposalId, token, totalAmount, perMember, remainderExternal);
+        emit TreasuryDisbanded(proposalId, token, totalAmount, perMember, newRemainder);
     }
 
     function _addActiveProposal(uint256 proposalId) internal {

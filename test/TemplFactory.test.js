@@ -844,55 +844,7 @@ describe("TemplFactory", function () {
         expect(await templ.burnAddress()).to.equal("0x000000000000000000000000000000000000dEaD");
     });
 
-    it("reverts with DeploymentFailed when the stored init code is missing", async function () {
-        const [, , protocolRecipient] = await ethers.getSigners();
-        const token = await deployToken("Gas", "GAS");
-        const FactoryHarness = await ethers.getContractFactory(
-            "contracts/mocks/TemplFactoryHarness.sol:TemplFactoryHarness"
-        );
-        const modules = await deployTemplModules();
-        const factory = await FactoryHarness.deploy(
-            protocolRecipient.address,
-            pct(10),
-            modules.membershipModule,
-            modules.treasuryModule,
-            modules.governanceModule
-        );
-        await factory.waitForDeployment();
-
-        const pointers = await factory.exposeInitPointers();
-        expect(pointers.length).to.be.greaterThan(0);
-        const pointer = pointers[0];
-        const originalCode = await ethers.provider.getCode(pointer);
-        await ethers.provider.send("hardhat_setCode", [pointer, "0x"]);
-
-        await expect(
-            factory.createTempl(
-                await token.getAddress(),
-                ENTRY_FEE,
-                DEFAULT_METADATA.name,
-                DEFAULT_METADATA.description,
-                DEFAULT_METADATA.logoLink
-            )
-        )
-            .to.be.revertedWithCustomError(factory, "DeploymentFailed");
-
-        // Restore pointer with creation code that immediately reverts to hit the post-create check
-        const revertInit = "0xfe";
-        await ethers.provider.send("hardhat_setCode", [pointer, revertInit]);
-        await expect(
-            factory.createTempl(
-                await token.getAddress(),
-                ENTRY_FEE,
-                DEFAULT_METADATA.name,
-                DEFAULT_METADATA.description,
-                DEFAULT_METADATA.logoLink
-            )
-        )
-            .to.be.revertedWithCustomError(factory, "DeploymentFailed");
-
-        await ethers.provider.send("hardhat_setCode", [pointer, originalCode]);
-    });
+    // SSTORE2 init code chunking removed; deployment proceeds via direct new TEMPL(...)
 
     it("restricts templ creation to the deployer until permissionless mode is enabled", async function () {
         const [deployer, outsider, protocolRecipient] = await ethers.getSigners();

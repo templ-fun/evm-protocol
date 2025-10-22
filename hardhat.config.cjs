@@ -8,12 +8,20 @@ const path = require("path");
 dotenv.config();
 
 // Allow excluding mock contracts from production builds by setting SKIP_MOCKS=true
-if (process.env.SKIP_MOCKS === "true") {
+if (process.env.SKIP_MOCKS === "true" || process.env.ONLY) {
   subtask(TASK_COMPILE_SOLIDITY_GET_SOURCE_PATHS).setAction(
     async (_, __, runSuper) => {
       const paths = await runSuper();
       const mocksPath = path.join("contracts", "mocks");
-      return paths.filter((p) => !p.includes(mocksPath));
+      let filtered = paths;
+      if (process.env.SKIP_MOCKS === "true") {
+        filtered = filtered.filter((p) => !p.includes(mocksPath));
+      }
+      if (process.env.ONLY) {
+        const needle = process.env.ONLY;
+        filtered = filtered.filter((p) => p.includes(needle));
+      }
+      return filtered;
     }
   );
 }
