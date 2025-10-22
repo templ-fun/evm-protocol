@@ -12,7 +12,7 @@
 
 - Prereqs: Node >=22.18.0, `npm`, Foundry optional.
 - Setup: `npm install`
-- Test: `npx hardhat test` (coverage: `npx hardhat coverage`)
+- Test: `npm test` (Hardhat). Coverage: `npx hardhat coverage`.
 - Static analysis: `npm run slither` (requires Slither in PATH)
 
 Local deploy (scripts mirror production flow):
@@ -108,15 +108,8 @@ Learn-by-reading map (each claim backed by code/tests):
 - Governable quorum/delay/burn address: setters + proposals in contracts; tests in `test/GovernanceAdjustParams.test.js`.
 
 ### Governance Controls (quick list)
-- Pausing joins, membership cap, fee config and curve, metadata, proposal fee, referral share, treasury withdraw/disband/cleanup, priest changes, dictatorship mode.
-- Quorum threshold and post‑quorum execution delay, and the burn address are adjustable via proposals or `onlyDAO` calls.
+- Pausing joins, membership cap, fee config and curve, metadata, proposal fee, referral share, treasury withdraw/disband/cleanup, priest changes, dictatorship mode. Quorum threshold and post‑quorum execution delay, and the burn address are adjustable via proposals or `onlyDAO` calls.
 
-### Proposal Payload Getters
-Frontends can read select proposal payloads directly on‑chain via getters in [`TemplGovernanceModule`](contracts/TemplGovernance.sol):
-- `getProposalSetQuorumBpsPayload(uint256)`
-- `getProposalSetExecutionDelayPayload(uint256)`
-- `getProposalSetBurnAddressPayload(uint256)`
-For other proposal types, use the standard `getProposal(...)` plus off‑chain context or indexation.
 
 ### Proposal Execution Rules
 - Eligibility snapshots:
