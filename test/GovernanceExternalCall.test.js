@@ -61,9 +61,10 @@ describe("Governance external call proposals", function () {
     const proposalId = await executeCallProposal({ selector, params });
 
     const expectedReturn = abiCoder.encode(["uint256"], [124n]);
+    const expectedHash = ethers.keccak256(expectedReturn);
     await expect(templ.executeProposal(Number(proposalId)))
       .to.emit(templ, "ProposalExecuted")
-      .withArgs(proposalId, true, expectedReturn);
+      .withArgs(proposalId, true, expectedHash);
 
     expect(await target.storedValue()).to.equal(123n);
   });
@@ -87,9 +88,11 @@ describe("Governance external call proposals", function () {
     expect(startingBalance).to.equal(0n);
 
     const proposalId = await executeCallProposal({ selector, params, value: callValue });
+    const ret = abiCoder.encode(["uint256"], [777n]);
+    const retHash = ethers.keccak256(ret);
     await expect(templ.executeProposal(Number(proposalId)))
       .to.emit(templ, "ProposalExecuted")
-      .withArgs(proposalId, true, abiCoder.encode(["uint256"], [777n]));
+      .withArgs(proposalId, true, retHash);
 
     const endingBalance = await ethers.provider.getBalance(await target.getAddress());
     expect(endingBalance).to.equal(callValue);

@@ -4,10 +4,21 @@ pragma solidity ^0.8.23;
 import {TemplBase} from "./TemplBase.sol";
 import {TemplErrors} from "./TemplErrors.sol";
 import {CurveConfig} from "./TemplCurve.sol";
+import {TemplTreasuryModule} from "./TemplTreasury.sol";
 
 /// @title Templ Governance Module
 /// @notice Adds proposal creation, voting, and execution flows on top of treasury + membership logic.
 contract TemplGovernanceModule is TemplBase {
+
+    address public immutable SELF;
+
+    constructor() {
+        SELF = address(this);
+    }
+
+    function _requireDelegatecall() internal view {
+        if (address(this) == SELF) revert TemplErrors.DelegatecallOnly();
+    }
 
     /// @notice Opens a proposal to pause or resume new member joins.
     /// @param _paused Desired join pause state.
@@ -20,7 +31,8 @@ contract TemplGovernanceModule is TemplBase {
         uint256 _votingPeriod,
         string calldata _title,
         string calldata _description
-    ) external returns (uint256 proposalId) {
+    ) external nonReentrant returns (uint256 proposalId) {
+        _requireDelegatecall();
         if (priestIsDictator) revert TemplErrors.DictatorshipEnabled();
         (uint256 id, Proposal storage p) = _createBaseProposal(_votingPeriod, _title, _description);
         p.action = Action.SetJoinPaused;
@@ -49,7 +61,8 @@ contract TemplGovernanceModule is TemplBase {
         uint256 _votingPeriod,
         string calldata _title,
         string calldata _description
-    ) external returns (uint256 proposalId) {
+    ) external nonReentrant returns (uint256 proposalId) {
+        _requireDelegatecall();
         if (priestIsDictator) revert TemplErrors.DictatorshipEnabled();
         if (_newEntryFee > 0) {
             if (_newEntryFee < 10) revert TemplErrors.EntryFeeTooSmall();
@@ -80,7 +93,8 @@ contract TemplGovernanceModule is TemplBase {
         uint256 _votingPeriod,
         string calldata _title,
         string calldata _description
-    ) external returns (uint256 proposalId) {
+    ) external nonReentrant returns (uint256 proposalId) {
+        _requireDelegatecall();
         if (priestIsDictator) revert TemplErrors.DictatorshipEnabled();
         if (_newMaxMembers > 0 && _newMaxMembers < memberCount) {
             revert TemplErrors.MemberLimitTooLow();
@@ -106,7 +120,8 @@ contract TemplGovernanceModule is TemplBase {
         uint256 _votingPeriod,
         string calldata _title,
         string calldata _description
-    ) external returns (uint256 proposalId) {
+    ) external nonReentrant returns (uint256 proposalId) {
+        _requireDelegatecall();
         if (priestIsDictator) revert TemplErrors.DictatorshipEnabled();
         (uint256 id, Proposal storage p) = _createBaseProposal(_votingPeriod, _title, _description);
         p.action = Action.SetMetadata;
@@ -127,7 +142,8 @@ contract TemplGovernanceModule is TemplBase {
         uint256 _votingPeriod,
         string calldata _title,
         string calldata _description
-    ) external returns (uint256 proposalId) {
+    ) external nonReentrant returns (uint256 proposalId) {
+        _requireDelegatecall();
         if (priestIsDictator) revert TemplErrors.DictatorshipEnabled();
         if (_newQuorumBps > BPS_DENOMINATOR && _newQuorumBps > 100) {
             revert TemplErrors.InvalidPercentage();
@@ -143,12 +159,14 @@ contract TemplGovernanceModule is TemplBase {
     /// @param _votingPeriod Optional custom voting duration (seconds).
     /// @param _title On-chain title for the proposal.
     /// @param _description On-chain description for the proposal.
+    /// @return proposalId Newly created proposal identifier.
     function createProposalSetExecutionDelay(
         uint256 _newDelaySeconds,
         uint256 _votingPeriod,
         string calldata _title,
         string calldata _description
-    ) external returns (uint256 proposalId) {
+    ) external nonReentrant returns (uint256 proposalId) {
+        _requireDelegatecall();
         if (priestIsDictator) revert TemplErrors.DictatorshipEnabled();
         (uint256 id, Proposal storage p) = _createBaseProposal(_votingPeriod, _title, _description);
         p.action = Action.SetExecutionDelay;
@@ -161,12 +179,14 @@ contract TemplGovernanceModule is TemplBase {
     /// @param _votingPeriod Optional custom voting duration (seconds).
     /// @param _title On-chain title for the proposal.
     /// @param _description On-chain description for the proposal.
+    /// @return proposalId Newly created proposal identifier.
     function createProposalSetBurnAddress(
         address _newBurn,
         uint256 _votingPeriod,
         string calldata _title,
         string calldata _description
-    ) external returns (uint256 proposalId) {
+    ) external nonReentrant returns (uint256 proposalId) {
+        _requireDelegatecall();
         if (priestIsDictator) revert TemplErrors.DictatorshipEnabled();
         if (_newBurn == address(0)) revert TemplErrors.InvalidRecipient();
         (uint256 id, Proposal storage p) = _createBaseProposal(_votingPeriod, _title, _description);
@@ -186,7 +206,8 @@ contract TemplGovernanceModule is TemplBase {
         uint256 _votingPeriod,
         string calldata _title,
         string calldata _description
-    ) external returns (uint256 proposalId) {
+    ) external nonReentrant returns (uint256 proposalId) {
+        _requireDelegatecall();
         if (priestIsDictator) revert TemplErrors.DictatorshipEnabled();
         if (_newFeeBps > BPS_DENOMINATOR) revert TemplErrors.InvalidPercentage();
         (uint256 id, Proposal storage p) = _createBaseProposal(_votingPeriod, _title, _description);
@@ -206,7 +227,8 @@ contract TemplGovernanceModule is TemplBase {
         uint256 _votingPeriod,
         string calldata _title,
         string calldata _description
-    ) external returns (uint256 proposalId) {
+    ) external nonReentrant returns (uint256 proposalId) {
+        _requireDelegatecall();
         if (priestIsDictator) revert TemplErrors.DictatorshipEnabled();
         if (_newReferralBps > BPS_DENOMINATOR) revert TemplErrors.InvalidPercentage();
         (uint256 id, Proposal storage p) = _createBaseProposal(_votingPeriod, _title, _description);
@@ -228,7 +250,8 @@ contract TemplGovernanceModule is TemplBase {
         uint256 _votingPeriod,
         string calldata _title,
         string calldata _description
-    ) external returns (uint256 proposalId) {
+    ) external nonReentrant returns (uint256 proposalId) {
+        _requireDelegatecall();
         if (priestIsDictator) revert TemplErrors.DictatorshipEnabled();
         CurveConfig memory curve = _curve;
         _validateCurveConfig(curve);
@@ -263,7 +286,8 @@ contract TemplGovernanceModule is TemplBase {
         uint256 _votingPeriod,
         string calldata _title,
         string calldata _description
-    ) external returns (uint256 proposalId) {
+    ) external nonReentrant returns (uint256 proposalId) {
+        _requireDelegatecall();
         if (priestIsDictator) revert TemplErrors.DictatorshipEnabled();
         if (_target == address(0)) revert TemplErrors.InvalidRecipient();
         bytes memory callData = abi.encodePacked(_selector, _params);
@@ -294,7 +318,8 @@ contract TemplGovernanceModule is TemplBase {
         uint256 _votingPeriod,
         string calldata _title,
         string calldata _description
-    ) external returns (uint256 proposalId) {
+    ) external nonReentrant returns (uint256 proposalId) {
+        _requireDelegatecall();
         if (priestIsDictator) revert TemplErrors.DictatorshipEnabled();
         (uint256 id, Proposal storage p) = _createBaseProposal(_votingPeriod, _title, _description);
         p.action = Action.WithdrawTreasury;
@@ -316,7 +341,8 @@ contract TemplGovernanceModule is TemplBase {
         uint256 _votingPeriod,
         string calldata _title,
         string calldata _description
-    ) external returns (uint256 proposalId) {
+    ) external nonReentrant returns (uint256 proposalId) {
+        _requireDelegatecall();
         if (priestIsDictator) revert TemplErrors.DictatorshipEnabled();
         (uint256 id, Proposal storage p) = _createBaseProposal(_votingPeriod, _title, _description);
         p.action = Action.DisbandTreasury;
@@ -340,7 +366,8 @@ contract TemplGovernanceModule is TemplBase {
         uint256 _votingPeriod,
         string calldata _title,
         string calldata _description
-    ) external returns (uint256 proposalId) {
+    ) external nonReentrant returns (uint256 proposalId) {
+        _requireDelegatecall();
         if (priestIsDictator) revert TemplErrors.DictatorshipEnabled();
         (uint256 id, Proposal storage p) = _createBaseProposal(_votingPeriod, _title, _description);
         p.action = Action.CleanupExternalRewardToken;
@@ -359,7 +386,8 @@ contract TemplGovernanceModule is TemplBase {
         uint256 _votingPeriod,
         string calldata _title,
         string calldata _description
-    ) external returns (uint256 proposalId) {
+    ) external nonReentrant returns (uint256 proposalId) {
+        _requireDelegatecall();
         if (_newPriest == address(0)) revert TemplErrors.InvalidRecipient();
         if (priestIsDictator) revert TemplErrors.DictatorshipEnabled();
         (uint256 id, Proposal storage p) = _createBaseProposal(_votingPeriod, _title, _description);
@@ -379,7 +407,8 @@ contract TemplGovernanceModule is TemplBase {
         uint256 _votingPeriod,
         string calldata _title,
         string calldata _description
-    ) external returns (uint256 proposalId) {
+    ) external nonReentrant returns (uint256 proposalId) {
+        _requireDelegatecall();
         if (priestIsDictator == _enable) revert TemplErrors.DictatorshipUnchanged();
         (uint256 id, Proposal storage p) = _createBaseProposal(_votingPeriod, _title, _description);
         p.action = Action.SetDictatorship;
@@ -391,6 +420,7 @@ contract TemplGovernanceModule is TemplBase {
     /// @param _proposalId Proposal id to vote on.
     /// @param _support True for YES, false for NO.
     function vote(uint256 _proposalId, bool _support) external onlyMember {
+        _requireDelegatecall();
         if (_proposalId >= proposalCount) revert TemplErrors.InvalidProposal();
         Proposal storage proposal = proposals[_proposalId];
 
@@ -454,6 +484,7 @@ contract TemplGovernanceModule is TemplBase {
     /// @notice Executes a passed proposal after quorum (or voting) requirements are satisfied.
     /// @param _proposalId Proposal id to execute.
     function executeProposal(uint256 _proposalId) external nonReentrant {
+        _requireDelegatecall();
         if (_proposalId >= proposalCount) revert TemplErrors.InvalidProposal();
         Proposal storage proposal = proposals[_proposalId];
 
@@ -471,10 +502,8 @@ contract TemplGovernanceModule is TemplBase {
             if (block.timestamp < proposal.quorumReachedAt + executionDelayAfterQuorum) {
                 revert TemplErrors.ExecutionDelayActive();
             }
-            if (
-                proposal.eligibleVoters != 0 &&
-                proposal.yesVotes * BPS_DENOMINATOR < quorumBps * proposal.eligibleVoters
-            ) {
+            uint256 denom = proposal.postQuorumEligibleVoters;
+            if (denom != 0 && proposal.yesVotes * BPS_DENOMINATOR < quorumBps * denom) {
                 revert TemplErrors.QuorumNotReached();
             }
         }
@@ -490,11 +519,19 @@ contract TemplGovernanceModule is TemplBase {
             activeProposalId[proposerAddr] = 0;
         }
 
-        bytes memory returnData = hex"";
+        bytes memory returnData = _executeActionInternal(_proposalId);
 
+        emit ProposalExecuted(_proposalId, true, keccak256(returnData));
+        _removeActiveProposal(_proposalId);
+    }
+
+    function _executeActionInternal(uint256 _proposalId) internal returns (bytes memory) {
+        Proposal storage proposal = proposals[_proposalId];
         if (proposal.action == Action.SetJoinPaused) {
             _governanceSetJoinPaused(proposal.joinPaused);
-        } else if (proposal.action == Action.UpdateConfig) {
+            return hex"";
+        }
+        if (proposal.action == Action.UpdateConfig) {
             _governanceUpdateConfig(
                 proposal.token,
                 proposal.newEntryFee,
@@ -503,7 +540,9 @@ contract TemplGovernanceModule is TemplBase {
                 proposal.newTreasuryBps,
                 proposal.newMemberPoolBps
             );
-        } else if (proposal.action == Action.WithdrawTreasury) {
+            return hex"";
+        }
+        if (proposal.action == Action.WithdrawTreasury) {
             _governanceWithdrawTreasury(
                 proposal.token,
                 proposal.recipient,
@@ -511,39 +550,61 @@ contract TemplGovernanceModule is TemplBase {
                 proposal.reason,
                 _proposalId
             );
-        } else if (proposal.action == Action.DisbandTreasury) {
-            _governanceDisbandTreasury(proposal.token, _proposalId);
-        } else if (proposal.action == Action.ChangePriest) {
-            _governanceChangePriest(proposal.recipient);
-        } else if (proposal.action == Action.SetDictatorship) {
-            _governanceSetDictatorship(proposal.setDictatorship);
-        } else if (proposal.action == Action.SetMaxMembers) {
-            _governanceSetMaxMembers(proposal.newMaxMembers);
-        } else if (proposal.action == Action.SetMetadata) {
-            _governanceUpdateMetadata(proposal.newTemplName, proposal.newTemplDescription, proposal.newLogoLink);
-        } else if (proposal.action == Action.SetProposalFee) {
-            _governanceSetProposalCreationFee(proposal.newProposalCreationFeeBps);
-        } else if (proposal.action == Action.SetReferralShare) {
-            _governanceSetReferralShareBps(proposal.newReferralShareBps);
-        } else if (proposal.action == Action.SetEntryFeeCurve) {
-            CurveConfig memory curve = proposal.curveConfig;
-            _governanceSetEntryFeeCurve(curve, proposal.curveBaseEntryFee);
-        } else if (proposal.action == Action.CallExternal) {
-            returnData = _governanceCallExternal(proposal);
-        } else if (proposal.action == Action.CleanupExternalRewardToken) {
-            _governanceCleanupExternalRewardToken(proposal.token);
-        } else if (proposal.action == Action.SetQuorumBps) {
-            _governanceSetQuorumBps(proposal.newQuorumBps);
-        } else if (proposal.action == Action.SetExecutionDelay) {
-            _governanceSetExecutionDelay(proposal.newExecutionDelay);
-        } else if (proposal.action == Action.SetBurnAddress) {
-            _governanceSetBurnAddress(proposal.newBurnAddress);
-        } else {
-            revert TemplErrors.InvalidCallData();
+            return hex"";
         }
-
-        emit ProposalExecuted(_proposalId, true, returnData);
-        _removeActiveProposal(_proposalId);
+        if (proposal.action == Action.DisbandTreasury) {
+            _governanceDisbandTreasury(proposal.token, _proposalId);
+            return hex"";
+        }
+        if (proposal.action == Action.ChangePriest) {
+            _governanceChangePriest(proposal.recipient);
+            return hex"";
+        }
+        if (proposal.action == Action.SetDictatorship) {
+            _governanceSetDictatorship(proposal.setDictatorship);
+            return hex"";
+        }
+        if (proposal.action == Action.SetMaxMembers) {
+            _governanceSetMaxMembers(proposal.newMaxMembers);
+            return hex"";
+        }
+        if (proposal.action == Action.SetMetadata) {
+            _governanceUpdateMetadata(proposal.newTemplName, proposal.newTemplDescription, proposal.newLogoLink);
+            return hex"";
+        }
+        if (proposal.action == Action.SetProposalFee) {
+            _governanceSetProposalCreationFee(proposal.newProposalCreationFeeBps);
+            return hex"";
+        }
+        if (proposal.action == Action.SetReferralShare) {
+            _governanceSetReferralShareBps(proposal.newReferralShareBps);
+            return hex"";
+        }
+        if (proposal.action == Action.SetEntryFeeCurve) {
+            CurveConfig memory curve2 = proposal.curveConfig;
+            _governanceSetEntryFeeCurve(curve2, proposal.curveBaseEntryFee);
+            return hex"";
+        }
+        if (proposal.action == Action.CallExternal) {
+            return _governanceCallExternal(proposal);
+        }
+        if (proposal.action == Action.CleanupExternalRewardToken) {
+            _governanceCleanupExternalRewardToken(proposal.token);
+            return hex"";
+        }
+        if (proposal.action == Action.SetQuorumBps) {
+            _governanceSetQuorumBps(proposal.newQuorumBps);
+            return hex"";
+        }
+        if (proposal.action == Action.SetExecutionDelay) {
+            _governanceSetExecutionDelay(proposal.newExecutionDelay);
+            return hex"";
+        }
+        if (proposal.action == Action.SetBurnAddress) {
+            _governanceSetBurnAddress(proposal.newBurnAddress);
+            return hex"";
+        }
+        revert TemplErrors.InvalidCallData();
     }
 
     function _governanceSetJoinPaused(bool _paused) internal {
@@ -662,17 +723,7 @@ contract TemplGovernanceModule is TemplBase {
     ) {
         if (_proposalId >= proposalCount) revert TemplErrors.InvalidProposal();
         Proposal storage proposal = proposals[_proposalId];
-        if (proposal.quorumExempt) {
-            passed = block.timestamp >= proposal.endTime && proposal.yesVotes > proposal.noVotes;
-        } else if (proposal.quorumReachedAt != 0) {
-            bool quorumMaintained = proposal.eligibleVoters == 0 ||
-                proposal.yesVotes * BPS_DENOMINATOR >= quorumBps * proposal.eligibleVoters;
-            passed = (block.timestamp >= (proposal.quorumReachedAt + executionDelayAfterQuorum)) &&
-                quorumMaintained &&
-                (proposal.yesVotes > proposal.noVotes);
-        } else {
-            passed = false;
-        }
+        passed = _proposalPassed(proposal);
 
         return (
             proposal.proposer,
@@ -684,6 +735,25 @@ contract TemplGovernanceModule is TemplBase {
             proposal.title,
             proposal.description
         );
+    }
+
+    function _proposalPassed(Proposal storage proposal) internal view returns (bool) {
+        if (proposal.quorumExempt) {
+            return (block.timestamp >= proposal.endTime && proposal.yesVotes > proposal.noVotes);
+        }
+        if (proposal.quorumReachedAt == 0) {
+            return false;
+        }
+        uint256 denom = proposal.postQuorumEligibleVoters;
+        if (denom != 0) {
+            if (proposal.yesVotes * BPS_DENOMINATOR < quorumBps * denom) {
+                return false;
+            }
+        }
+        if (block.timestamp < proposal.quorumReachedAt + executionDelayAfterQuorum) {
+            return false;
+        }
+        return proposal.yesVotes > proposal.noVotes;
     }
 
     /// @notice Returns quorum-related snapshot data for a proposal.
@@ -749,7 +819,7 @@ contract TemplGovernanceModule is TemplBase {
         return (proposal.hasVoted[_voter], proposal.voteChoice[_voter]);
     }
 
-    // (Deprecated) Per-action payload getters removed in favor of getProposalActionData
+    
 
     /// @notice Lists proposal ids that are still within their active voting/execution window.
     /// @return proposalIds Array of currently active proposal ids.
@@ -827,6 +897,8 @@ contract TemplGovernanceModule is TemplBase {
         string memory _title,
         string memory _description
     ) internal returns (uint256 proposalId, Proposal storage proposal) {
+        _requireDelegatecall();
+        
         if (!members[msg.sender].joined) revert TemplErrors.NotMember();
         if (hasActiveProposal[msg.sender]) {
             uint256 existingId = activeProposalId[msg.sender];
@@ -838,10 +910,6 @@ contract TemplGovernanceModule is TemplBase {
                 activeProposalId[msg.sender] = 0;
             }
         }
-        if (proposalCreationLock[msg.sender]) {
-            revert TemplErrors.ActiveProposalExists();
-        }
-        proposalCreationLock[msg.sender] = true;
         uint256 period = _votingPeriod == 0 ? DEFAULT_VOTING_PERIOD : _votingPeriod;
         if (period < MIN_VOTING_PERIOD) revert TemplErrors.VotingPeriodTooShort();
         if (period > MAX_VOTING_PERIOD) revert TemplErrors.VotingPeriodTooLong();
@@ -886,27 +954,38 @@ contract TemplGovernanceModule is TemplBase {
         hasActiveProposal[msg.sender] = true;
         activeProposalId[msg.sender] = proposalId;
         emit ProposalCreated(proposalId, msg.sender, proposal.endTime, _title, _description);
-        proposalCreationLock[msg.sender] = false;
     }
 
-    /// @notice Removes proposals that are no longer active from the tracked set.
-    /// @param maxRemovals Maximum number of entries to prune in this call.
-    /// @return removed Number of proposals removed from the active index.
-    function pruneInactiveProposals(uint256 maxRemovals) external returns (uint256 removed) {
-        if (maxRemovals == 0) {
-            return 0;
-        }
+    function _pruneInactiveTail(uint256 maxRemovals) internal {
+        if (maxRemovals == 0) return;
         uint256 len = activeProposalIds.length;
-        if (len == 0) {
-            return 0;
-        }
+        if (len == 0) return;
         uint256 currentTime = block.timestamp;
+        uint256 removed;
         while (len > 0 && removed < maxRemovals) {
             uint256 proposalId = activeProposalIds[len - 1];
             Proposal storage proposal = proposals[proposalId];
             if (_isActiveProposal(proposal, currentTime)) {
                 break;
             }
+            _removeActiveProposal(proposalId);
+            removed++;
+            len = activeProposalIds.length;
+        }
+    }
+
+    /// @notice Removes proposals that are no longer active from the tracked set.
+    /// @param maxRemovals Maximum number of entries to prune in this call.
+    /// @return removed Number of proposals removed from the active index.
+    function pruneInactiveProposals(uint256 maxRemovals) external returns (uint256 removed) {
+        _requireDelegatecall();
+        if (maxRemovals == 0) return 0;
+        uint256 len = activeProposalIds.length;
+        if (len == 0) return 0;
+        uint256 currentTime = block.timestamp;
+        while (len > 0 && removed < maxRemovals) {
+            uint256 proposalId = activeProposalIds[len - 1];
+            if (_isActiveProposal(proposals[proposalId], currentTime)) break;
             _removeActiveProposal(proposalId);
             removed++;
             len = activeProposalIds.length;

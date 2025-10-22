@@ -9,6 +9,16 @@ import {CurveConfig} from "./TemplCurve.sol";
 /// @title Templ Treasury Module
 /// @notice Adds treasury controls, fee configuration, and external reward management.
 contract TemplTreasuryModule is TemplBase {
+    address public immutable SELF;
+
+    constructor() {
+        SELF = address(this);
+    }
+
+    modifier onlyDelegatecall() {
+        if (address(this) == SELF) revert TemplErrors.DelegatecallOnly();
+        _;
+    }
 
     /// @notice Governance action that transfers available treasury or external funds to a recipient.
     /// @param token Token to withdraw (`address(0)` for ETH, access token, or arbitrary ERC-20).
@@ -20,7 +30,7 @@ contract TemplTreasuryModule is TemplBase {
         address recipient,
         uint256 amount,
         string memory reason
-    ) external onlyDAO {
+    ) external onlyDAO onlyDelegatecall {
         _withdrawTreasury(token, recipient, amount, reason, 0);
     }
 
@@ -38,37 +48,37 @@ contract TemplTreasuryModule is TemplBase {
         uint256 _burnBps,
         uint256 _treasuryBps,
         uint256 _memberPoolBps
-    ) external onlyDAO {
+    ) external onlyDAO onlyDelegatecall {
         _updateConfig(_token, _entryFee, _updateFeeSplit, _burnBps, _treasuryBps, _memberPoolBps);
     }
 
     /// @notice Governance action that toggles whether new members can join.
     /// @param _paused Desired join pause state to apply.
-    function setJoinPausedDAO(bool _paused) external onlyDAO {
+    function setJoinPausedDAO(bool _paused) external onlyDAO onlyDelegatecall {
         _setJoinPaused(_paused);
     }
 
     /// @notice Governance action that adjusts the membership cap.
     /// @param _maxMembers New membership cap (0 removes the cap).
-    function setMaxMembersDAO(uint256 _maxMembers) external onlyDAO {
+    function setMaxMembersDAO(uint256 _maxMembers) external onlyDAO onlyDelegatecall {
         _setMaxMembers(_maxMembers);
     }
 
     /// @notice Governance action that moves treasury balances into the member or external reward pools.
     /// @param token Asset to disband (`address(0)` for ETH).
-    function disbandTreasuryDAO(address token) external onlyDAO {
+    function disbandTreasuryDAO(address token) external onlyDAO onlyDelegatecall {
         _disbandTreasury(token, 0);
     }
 
     /// @notice Governance action that appoints a new priest.
     /// @param newPriest Address of the incoming priest.
-    function changePriestDAO(address newPriest) external onlyDAO {
+    function changePriestDAO(address newPriest) external onlyDAO onlyDelegatecall {
         _changePriest(newPriest);
     }
 
     /// @notice Governance action that enables or disables dictatorship mode.
     /// @param enabled Target dictatorship state.
-    function setDictatorshipDAO(bool enabled) external onlyDAO {
+    function setDictatorshipDAO(bool enabled) external onlyDAO onlyDelegatecall {
         _updateDictatorship(enabled);
     }
 
@@ -80,51 +90,51 @@ contract TemplTreasuryModule is TemplBase {
         string calldata newName,
         string calldata newDescription,
         string calldata newLogoLink
-    ) external onlyDAO {
+    ) external onlyDAO onlyDelegatecall {
         _setTemplMetadata(newName, newDescription, newLogoLink);
     }
 
     /// @notice Governance action that updates the proposal creation fee expressed in basis points.
     /// @param newFeeBps New proposal creation fee in basis points.
-    function setProposalCreationFeeBpsDAO(uint256 newFeeBps) external onlyDAO {
+    function setProposalCreationFeeBpsDAO(uint256 newFeeBps) external onlyDAO onlyDelegatecall {
         _setProposalCreationFee(newFeeBps);
     }
 
     /// @notice Governance action that updates the referral share basis points.
     /// @param newReferralBps New referral share expressed in basis points.
-    function setReferralShareBpsDAO(uint256 newReferralBps) external onlyDAO {
+    function setReferralShareBpsDAO(uint256 newReferralBps) external onlyDAO onlyDelegatecall {
         _setReferralShareBps(newReferralBps);
     }
 
     /// @notice Governance action that reconfigures the entry fee curve.
     /// @param curve New curve configuration to apply.
     /// @param baseEntryFee Entry fee value referenced by the update (0 keeps the existing base).
-    function setEntryFeeCurveDAO(CurveConfig calldata curve, uint256 baseEntryFee) external onlyDAO {
+    function setEntryFeeCurveDAO(CurveConfig calldata curve, uint256 baseEntryFee) external onlyDAO onlyDelegatecall {
         CurveConfig memory config = curve;
         _applyCurveUpdate(config, baseEntryFee);
     }
 
     /// @notice Removes an empty external reward token so future disbands can reuse the slot.
     /// @param token Asset to remove from the enumeration set.
-    function cleanupExternalRewardToken(address token) external onlyDAO {
+    function cleanupExternalRewardToken(address token) external onlyDAO onlyDelegatecall {
         _cleanupExternalRewardToken(token);
     }
 
     /// @notice Governance action that updates the quorum threshold (bps).
     /// @param newQuorumBps New quorum threshold (accepts 0-100 or 0-10_000 bps values).
-    function setQuorumBpsDAO(uint256 newQuorumBps) external onlyDAO {
+    function setQuorumBpsDAO(uint256 newQuorumBps) external onlyDAO onlyDelegatecall {
         _setQuorumBps(newQuorumBps);
     }
 
     /// @notice Governance action that updates the post-quorum execution delay in seconds.
     /// @param newDelay Seconds to wait after quorum before execution.
-    function setExecutionDelayAfterQuorumDAO(uint256 newDelay) external onlyDAO {
+    function setExecutionDelayAfterQuorumDAO(uint256 newDelay) external onlyDAO onlyDelegatecall {
         _setExecutionDelayAfterQuorum(newDelay);
     }
 
     /// @notice Governance action that updates the burn sink address.
     /// @param newBurn Address to receive burn allocations.
-    function setBurnAddressDAO(address newBurn) external onlyDAO {
+    function setBurnAddressDAO(address newBurn) external onlyDAO onlyDelegatecall {
         _setBurnAddress(newBurn);
     }
 }

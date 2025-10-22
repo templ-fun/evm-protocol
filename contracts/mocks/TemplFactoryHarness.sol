@@ -14,11 +14,5 @@ contract TemplFactoryHarness is TemplFactory {
         TemplFactory(protocolFeeRecipient, protocolBps, membershipModule, treasuryModule, governanceModule)
     {}
 
-    function exposeInitPointers() external view returns (address[] memory) {
-        return templInitCodePointers;
-    }
-
-    function exposeInitCodeLength() external view returns (uint256) {
-        return templInitCodeLength;
-    }
+    
 }

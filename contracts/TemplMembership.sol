@@ -8,6 +8,16 @@ import {TemplErrors} from "./TemplErrors.sol";
 /// @title Templ Membership Module
 /// @notice Handles joins, reward accounting, and member-facing views.
 contract TemplMembershipModule is TemplBase {
+    address public immutable SELF;
+
+    constructor() {
+        SELF = address(this);
+    }
+
+    modifier onlyDelegatecall() {
+        if (address(this) == SELF) revert TemplErrors.DelegatecallOnly();
+        _;
+    }
 
     /// @notice Emitted when a valid referral is credited during a join.
     /// @param referral The referrer wallet that receives the payout.
@@ -16,19 +26,19 @@ contract TemplMembershipModule is TemplBase {
     event ReferralRewardPaid(address indexed referral, address indexed newMember, uint256 amount);
 
     /// @notice Join the templ by paying the configured entry fee on behalf of the caller.
-    function join() external whenNotPaused notSelf nonReentrant {
+    function join() external whenNotPaused notSelf nonReentrant onlyDelegatecall {
         _join(msg.sender, msg.sender, address(0));
     }
 
     /// @notice Join the templ by paying the entry fee on behalf of the caller with a referral.
     /// @param referral Member credited with the referral reward.
-    function joinWithReferral(address referral) external whenNotPaused notSelf nonReentrant {
+    function joinWithReferral(address referral) external whenNotPaused notSelf nonReentrant onlyDelegatecall {
         _join(msg.sender, msg.sender, referral);
     }
 
     /// @notice Join the templ on behalf of another wallet by covering their entry fee.
     /// @param recipient Wallet receiving membership. Must not already be a member.
-    function joinFor(address recipient) external whenNotPaused notSelf nonReentrant {
+    function joinFor(address recipient) external whenNotPaused notSelf nonReentrant onlyDelegatecall {
         _join(msg.sender, recipient, address(0));
     }
 
@@ -40,6 +50,7 @@ contract TemplMembershipModule is TemplBase {
         whenNotPaused
         notSelf
         nonReentrant
+        onlyDelegatecall
     {
         _join(msg.sender, recipient, referral);
     }
@@ -57,9 +68,7 @@ contract TemplMembershipModule is TemplBase {
             revert TemplErrors.MemberLimitReached();
         }
 
-        if (currentMemberCount > 0) {
-            _flushExternalRemainders();
-        }
+        // External reward remainders are rolled forward at disband time; no O(n) join-time flush
 
         uint256 price = entryFee;
 
@@ -106,7 +115,12 @@ contract TemplMembershipModule is TemplBase {
             totalBurned += burnAmount;
         }
         _safeTransferFrom(accessToken, payer, burnAddress, burnAmount);
+        uint256 balBefore = IERC20(accessToken).balanceOf(address(this));
         _safeTransferFrom(accessToken, payer, address(this), toContract);
+        uint256 balAfter = IERC20(accessToken).balanceOf(address(this));
+        if (balAfter < balBefore || balAfter - balBefore != toContract) {
+            revert TemplErrors.UnsupportedToken();
+        }
         _safeTransferFrom(accessToken, payer, protocolFeeRecipient, protocolAmount);
 
         if (referralAmount > 0) {
@@ -192,7 +206,7 @@ contract TemplMembershipModule is TemplBase {
     }
 
     /// @notice Claims the caller's accrued share of the member rewards pool.
-    function claimMemberRewards() external onlyMember nonReentrant {
+    function claimMemberRewards() external onlyMember nonReentrant onlyDelegatecall {
         uint256 claimableAmount = getClaimableMemberRewards(msg.sender);
         if (claimableAmount == 0) revert TemplErrors.NoRewardsToClaim();
         uint256 distributableBalance = memberPoolBalance - memberRewardRemainder;
@@ -209,7 +223,7 @@ contract TemplMembershipModule is TemplBase {
 
     /// @notice Claims the caller's accrued share of an external reward token or ETH.
     /// @param token ERC-20 token address or address(0) for ETH.
-    function claimExternalReward(address token) external onlyMember nonReentrant {
+    function claimExternalReward(address token) external onlyMember nonReentrant onlyDelegatecall {
         if (token == accessToken) revert TemplErrors.InvalidCallData();
         ExternalRewardState storage rewards = externalRewards[token];
         if (!rewards.exists) revert TemplErrors.NoRewardsToClaim();
@@ -236,7 +250,7 @@ contract TemplMembershipModule is TemplBase {
     /// @notice Reports whether a wallet currently counts as a member.
     /// @param user Wallet to inspect.
     /// @return joined True when the wallet has an active membership.
-    function isMember(address user) external view returns (bool joined) {
+    function isMember(address user) external view onlyDelegatecall returns (bool joined) {
         return members[user].joined;
     }
 
@@ -336,6 +350,29 @@ contract TemplMembershipModule is TemplBase {
             return 0;
         }
         return 1;
+    }
+
+    /// @notice Returns external reward tokens with pagination to avoid large arrays.
+    /// @param offset Number of tokens to skip from the start.
+    /// @param limit Maximum number of tokens to return.
+    /// @return tokens Slice of token addresses.
+    /// @return hasMore True when there are additional tokens past the slice.
+    function getExternalRewardTokensPaginated(uint256 offset, uint256 limit)
+        external
+        view
+        returns (address[] memory tokens, bool hasMore)
+    {
+        uint256 len = externalRewardTokens.length;
+        if (offset >= len) {
+            return (new address[](0), false);
+        }
+        uint256 remaining = len - offset;
+        uint256 take = limit < remaining ? limit : remaining;
+        address[] memory out = new address[](take);
+        for (uint256 i = 0; i < take; i++) {
+            out[i] = externalRewardTokens[offset + i];
+        }
+        return (out, offset + take < len);
     }
 
 }
