@@ -129,6 +129,9 @@ abstract contract TemplBase is ReentrancyGuard {
         uint256 newProposalCreationFeeBps;
         uint256 newReferralShareBps;
         uint256 newMaxMembers;
+        uint256 newQuorumBps;
+        uint256 newExecutionDelay;
+        address newBurnAddress;
         /// @notice Target contract invoked when executing an external call proposal.
         address externalCallTarget;
         /// @notice ETH value forwarded when executing the external call.
@@ -183,6 +186,9 @@ abstract contract TemplBase is ReentrancyGuard {
         CallExternal,
         SetEntryFeeCurve,
         CleanupExternalRewardToken,
+        SetQuorumBps,
+        SetExecutionDelay,
+        SetBurnAddress,
         Undefined
     }
 
@@ -283,6 +289,12 @@ abstract contract TemplBase is ReentrancyGuard {
     event TemplMetadataUpdated(string name, string description, string logoLink);
     event ProposalCreationFeeUpdated(uint256 previousFeeBps, uint256 newFeeBps);
     event ReferralShareBpsUpdated(uint256 previousBps, uint256 newBps);
+    /// @notice Emitted when the quorum threshold is updated via governance.
+    event QuorumBpsUpdated(uint256 previousBps, uint256 newBps);
+    /// @notice Emitted when the post-quorum execution delay is updated via governance.
+    event ExecutionDelayAfterQuorumUpdated(uint256 previousDelay, uint256 newDelay);
+    /// @notice Emitted when the burn address is updated via governance.
+    event BurnAddressUpdated(address previousBurn, address newBurn);
 
     struct ExternalRewardState {
         uint256 poolBalance;
@@ -916,6 +928,33 @@ abstract contract TemplBase is ReentrancyGuard {
         uint256 previous = referralShareBps;
         referralShareBps = newBps;
         emit ReferralShareBpsUpdated(previous, newBps);
+    }
+
+    /// @dev Updates the quorum threshold (bps). Accepts either 0-100 or 0-10_000 values.
+    function _setQuorumBps(uint256 newQuorumBps) internal {
+        uint256 normalized = newQuorumBps;
+        if (normalized <= 100) {
+            normalized = normalized * 100;
+        }
+        if (normalized > BPS_DENOMINATOR) revert TemplErrors.InvalidPercentage();
+        uint256 previous = quorumBps;
+        quorumBps = normalized;
+        emit QuorumBpsUpdated(previous, normalized);
+    }
+
+    /// @dev Updates the post-quorum execution delay in seconds.
+    function _setExecutionDelayAfterQuorum(uint256 newDelay) internal {
+        uint256 previous = executionDelayAfterQuorum;
+        executionDelayAfterQuorum = newDelay;
+        emit ExecutionDelayAfterQuorumUpdated(previous, newDelay);
+    }
+
+    /// @dev Updates the burn sink address.
+    function _setBurnAddress(address newBurn) internal {
+        if (newBurn == address(0)) revert TemplErrors.InvalidRecipient();
+        address previous = burnAddress;
+        burnAddress = newBurn;
+        emit BurnAddressUpdated(previous, newBurn);
     }
 
     /// @dev Internal helper that executes a treasury withdrawal and emits the corresponding event.

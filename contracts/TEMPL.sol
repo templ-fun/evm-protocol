@@ -162,7 +162,7 @@ contract TEMPL is TemplBase {
     }
 
     function _registerTreasurySelectors(address module) internal {
-        bytes4[] memory selectors = new bytes4[](12);
+        bytes4[] memory selectors = new bytes4[](15);
         selectors[0] = TemplTreasuryModule.withdrawTreasuryDAO.selector;
         selectors[1] = TemplTreasuryModule.updateConfigDAO.selector;
         selectors[2] = TemplTreasuryModule.setJoinPausedDAO.selector;
@@ -175,11 +175,14 @@ contract TEMPL is TemplBase {
         selectors[9] = TemplTreasuryModule.setReferralShareBpsDAO.selector;
         selectors[10] = TemplTreasuryModule.setEntryFeeCurveDAO.selector;
         selectors[11] = TemplTreasuryModule.cleanupExternalRewardToken.selector;
+        selectors[12] = TemplTreasuryModule.setQuorumBpsDAO.selector;
+        selectors[13] = TemplTreasuryModule.setExecutionDelayAfterQuorumDAO.selector;
+        selectors[14] = TemplTreasuryModule.setBurnAddressDAO.selector;
         _registerModule(module, selectors);
     }
 
     function _registerGovernanceSelectors(address module) internal {
-        bytes4[] memory selectors = new bytes4[](22);
+        bytes4[] memory selectors = new bytes4[](28);
         selectors[0] = TemplGovernanceModule.createProposalSetJoinPaused.selector;
         selectors[1] = TemplGovernanceModule.createProposalUpdateConfig.selector;
         selectors[2] = TemplGovernanceModule.createProposalSetMaxMembers.selector;
@@ -202,6 +205,13 @@ contract TEMPL is TemplBase {
         selectors[19] = TemplGovernanceModule.pruneInactiveProposals.selector;
         selectors[20] = TemplGovernanceModule.getProposalJoinSequences.selector;
         selectors[21] = TemplGovernanceModule.createProposalCleanupExternalRewardToken.selector;
+        selectors[22] = TemplGovernanceModule.createProposalSetQuorumBps.selector;
+        selectors[23] = TemplGovernanceModule.createProposalSetExecutionDelay.selector;
+        selectors[24] = TemplGovernanceModule.createProposalSetBurnAddress.selector;
+        // payload getters for new proposals
+        selectors[25] = TemplGovernanceModule.getProposalSetQuorumBpsPayload.selector;
+        selectors[26] = TemplGovernanceModule.getProposalSetExecutionDelayPayload.selector;
+        selectors[27] = TemplGovernanceModule.getProposalSetBurnAddressPayload.selector;
         _registerModule(module, selectors);
     }
 

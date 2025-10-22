@@ -86,7 +86,7 @@ await templ.executeProposal(id);
 - Token & Join: ERC‑20 `accessToken`; `entryFee` ≥ 10 and divisible by 10; each join updates the next fee via the pricing curve from [`TemplCurve.sol`](contracts/TemplCurve.sol).
 - Fee Splits: burn/treasury/member plus protocol must sum to 10_000 bps; defaults (with `protocolBps`=1_000) are 3_000/3_000/3_000/1_000.
 - Fees: `proposalCreationFeeBps` and `referralShareBps` configurable via governance.
-- Governance: default `quorumBps`=3_300; `executionDelayAfterQuorum`=7 days; one vote per member; join‑sequence snapshots enforce eligibility; dictatorship toggle via priest.
+- Governance: `quorumBps` and `executionDelayAfterQuorum` are governable (defaults: 3_300 bps and 7 days). One vote per member; join‑sequence snapshots enforce eligibility; dictatorship toggle via priest.
 - Limits/Pauses: optional `maxMembers` (factory default 249); auto‑pauses at cap; `joinPaused` toggleable.
 - Treasury Ops: withdraw/disband (disband disperses the treasury equally across members), config/split/entry fee/curve updates, metadata, priest changes.
 - Factory: [`TemplFactory`](contracts/TemplFactory.sol) with `setPermissionless`, `createTempl`, `createTemplFor`, `createTemplWithConfig`.
@@ -104,6 +104,14 @@ Learn-by-reading map (each claim backed by code/tests):
 - Curves: curve math and guards in [`contracts/TemplCurve.sol`](contracts/TemplCurve.sol); tests in `test/EntryFeeCurve.test.js`, `test/templ.curve.saturation.test.js`.
 - Dictatorship and gating: `onlyDAO` gate in [`contracts/TemplBase.sol`](contracts/TemplBase.sol); tests in `test/PriestDictatorship.test.js`.
 - Snapshot voting: lifecycle in [`contracts/TemplGovernance.sol`](contracts/TemplGovernance.sol); tests in `test/VotingEligibility.test.js`, `test/SingleProposal.test.js`.
+- Governable quorum/delay/burn address: setters + proposals in contracts; tests in `test/GovernanceAdjustParams.test.js`.
+
+### Governance Controls (quick list)
+- Pausing joins, membership cap, fee config and curve, metadata, proposal fee, referral share, treasury withdraw/disband/cleanup, priest changes, dictatorship mode.
+- Quorum threshold and post‑quorum execution delay, and the burn address are adjustable via proposals or `onlyDAO` calls.
+
+### Proposal Payload Getters
+Frontends can read proposal payloads directly on‑chain via dedicated getters in [`TemplGovernanceModule`](contracts/TemplGovernance.sol), e.g. `getProposalCallExternalPayload`, `getProposalSetEntryFeeCurvePayload`, `getProposalUpdateConfigPayload`, and more for each action.
 - External rewards: accounting in [`contracts/TemplBase.sol`](contracts/TemplBase.sol); tests in `test/RewardWithdrawals.test.js`, `test/MembershipCoverage.test.js`.
 
 ### Architecture Overview
