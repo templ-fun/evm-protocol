@@ -283,7 +283,7 @@ contract TemplGovernanceModule is TemplBase {
         uint256 _votingPeriod,
         string calldata _title,
         string calldata _description
-    ) external returns (uint256 proposalId) {
+    ) external nonReentrant returns (uint256 proposalId) {
         _requireDelegatecall();
         if (priestIsDictator) revert TemplErrors.DictatorshipEnabled();
         if (_target == address(0)) revert TemplErrors.InvalidRecipient();
