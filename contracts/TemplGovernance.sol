@@ -135,6 +135,10 @@ contract TemplGovernanceModule is TemplBase {
     }
 
     /// @notice Opens a proposal to update the post-quorum execution delay in seconds.
+    /// @param _newDelaySeconds New delay (seconds) applied after quorum before execution.
+    /// @param _votingPeriod Optional custom voting duration (seconds).
+    /// @param _title On-chain title for the proposal.
+    /// @param _description On-chain description for the proposal.
     function createProposalSetExecutionDelay(
         uint256 _newDelaySeconds,
         uint256 _votingPeriod,
@@ -149,6 +153,10 @@ contract TemplGovernanceModule is TemplBase {
     }
 
     /// @notice Opens a proposal to update the burn sink address.
+    /// @param _newBurn Address that will receive burn allocations.
+    /// @param _votingPeriod Optional custom voting duration (seconds).
+    /// @param _title On-chain title for the proposal.
+    /// @param _description On-chain description for the proposal.
     function createProposalSetBurnAddress(
         address _newBurn,
         uint256 _votingPeriod,
@@ -820,6 +828,9 @@ contract TemplGovernanceModule is TemplBase {
     ///  - SetQuorumBps: (uint256 newQuorumBps)
     ///  - SetExecutionDelay: (uint256 newDelaySeconds)
     ///  - SetBurnAddress: (address newBurn)
+    /// @param _proposalId Proposal id to inspect.
+    /// @return action The proposal action enum value.
+    /// @return payload ABI-encoded payload corresponding to `action`.
     function getProposalActionData(uint256 _proposalId) external view returns (Action action, bytes memory payload) {
         if (_proposalId >= proposalCount) revert TemplErrors.InvalidProposal();
         Proposal storage p = proposals[_proposalId];

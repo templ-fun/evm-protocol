@@ -259,7 +259,11 @@ abstract contract TemplBase is ReentrancyGuard {
         uint256 protocolBps
     );
 
+    /// @notice Emitted when joins are paused or resumed.
+    /// @param joinPaused New pause state.
     event JoinPauseUpdated(bool joinPaused);
+    /// @notice Emitted when the membership cap is updated.
+    /// @param maxMembers New maximum member count (0 = uncapped).
     event MaxMembersUpdated(uint256 maxMembers);
     /// @notice Emitted whenever the entry fee curve configuration changes.
     /// @param styles Segment styles in application order (primary first).
@@ -270,6 +274,9 @@ abstract contract TemplBase is ReentrancyGuard {
         uint32[] rateBps,
         uint32[] lengths
     );
+    /// @notice Emitted when the priest address is changed.
+    /// @param oldPriest Previous priest address.
+    /// @param newPriest New priest address.
     event PriestChanged(address indexed oldPriest, address indexed newPriest);
     event TreasuryDisbanded(
         uint256 indexed proposalId,
@@ -344,6 +351,8 @@ abstract contract TemplBase is ReentrancyGuard {
         _;
     }
 
+    /// @notice Emitted when dictatorship mode is toggled.
+    /// @param enabled True when dictatorship is enabled, false when disabled.
     event DictatorshipModeChanged(bool enabled);
 
     /// @dev Persists a new external reward checkpoint so future joins can baseline correctly.
@@ -933,7 +942,9 @@ abstract contract TemplBase is ReentrancyGuard {
         emit ReferralShareBpsUpdated(previous, newBps);
     }
 
-    /// @dev Updates the quorum threshold (bps). Accepts either 0-100 or 0-10_000 values.
+    /// @notice Updates the quorum threshold (bps).
+    /// @dev Accepts either 0-100 (interpreted as %) or 0-10_000 (basis points) values.
+    /// @param newQuorumBps New quorum threshold value.
     function _setQuorumBps(uint256 newQuorumBps) internal {
         uint256 normalized = newQuorumBps;
         if (normalized <= 100) {
@@ -945,14 +956,16 @@ abstract contract TemplBase is ReentrancyGuard {
         emit QuorumBpsUpdated(previous, normalized);
     }
 
-    /// @dev Updates the post-quorum execution delay in seconds.
+    /// @notice Updates the post-quorum execution delay in seconds.
+    /// @param newDelay New delay (seconds) applied after quorum before execution.
     function _setExecutionDelayAfterQuorum(uint256 newDelay) internal {
         uint256 previous = executionDelayAfterQuorum;
         executionDelayAfterQuorum = newDelay;
         emit ExecutionDelayAfterQuorumUpdated(previous, newDelay);
     }
 
-    /// @dev Updates the burn sink address.
+    /// @notice Updates the burn sink address.
+    /// @param newBurn Address that will receive burn allocations.
     function _setBurnAddress(address newBurn) internal {
         if (newBurn == address(0)) revert TemplErrors.InvalidRecipient();
         address previous = burnAddress;
