@@ -334,7 +334,7 @@ async function main() {
   if (BURN_ADDRESS && !hre.ethers.isAddress(BURN_ADDRESS)) {
     throw new Error('BURN_ADDRESS must be a valid address');
   }
-  const DEFAULT_BURN_ADDRESS = '0x000000000000000000000000000000000000dead';
+  const DEFAULT_BURN_ADDRESS = '0x000000000000000000000000000000000000dEaD';
   const effectiveBurnAddress = BURN_ADDRESS || DEFAULT_BURN_ADDRESS;
 
   const quorumPercentBps = QUORUM_BP !== undefined ? Math.round(QUORUM_BP) : 0;

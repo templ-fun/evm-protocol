@@ -140,7 +140,8 @@ async function main() {
     await factory.waitForDeployment();
     factoryAddress = await factory.getAddress();
     console.log("Factory deployed at:", factoryAddress);
-    if (network.chainId !== 31337n) {
+    // Treat both 31337 (Hardhat) and 1337 (common local) as local chains
+    if (network.chainId !== 31337n && network.chainId !== 1337n) {
       console.log("Waiting for confirmations...");
       deploymentReceipt = await factory.deploymentTransaction().wait(2);
     }
