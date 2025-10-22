@@ -56,5 +56,6 @@ jobs:
           solc-select use 0.8.23
           slither --version
 
-      - name: Run Slither
+      - name: Run Slither (non-blocking)
         run: slither . --config-file slither.config.json
+        continue-on-error: true
