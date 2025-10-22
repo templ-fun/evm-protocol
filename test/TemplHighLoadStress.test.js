@@ -99,8 +99,8 @@ async function setupHighLoadTempl() {
 }
 
 describe("@load Templ High-Load Stress", function () {
-  // Give plenty of time for very large env-configured runs
-  this.timeout(20 * 60 * 1000);
+  // Disable timeouts for large env-configured runs
+  this.timeout(0);
 
   it("deploys successfully via the factory and respects bytecode limits", async function () {
     const [deployer, protocolFeeRecipient] = await ethers.getSigners();
