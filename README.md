@@ -9,7 +9,7 @@
 
 ## Quickstart
 
-- Prereqs: Node >=22.18.0, `npm`, Foundry optional.
+- Prereqs: Node >=22, `npm`, Foundry optional.
 - Setup: `npm install`
 - Test: `npm test` (Hardhat). Coverage: `npx hardhat coverage`.
 - Static analysis: `npm run slither` (requires Slither in PATH)
@@ -588,7 +588,7 @@ Notes
 - Use `EntryFeeCurveUpdated` to reflect curve changes without recomputing from storage.
 
 Compatibility
-- Node: `>=22.18.0` (see `package.json:engines`)
+- Node: `>=22` (see `package.json:engines`)
 - Solidity: `0.8.23`
 - Hardhat: `^2.19.2`, ethers v6
 
