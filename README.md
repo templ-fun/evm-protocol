@@ -86,7 +86,7 @@ await templ.executeProposal(id);
 - Token & Join: ERC‑20 `accessToken`; `entryFee` ≥ 10 and divisible by 10; each join updates the next fee via the pricing curve from [`TemplCurve.sol`](contracts/TemplCurve.sol).
 - Fee Splits: burn/treasury/member plus protocol must sum to 10_000 bps; defaults (with `protocolBps`=1_000) are 3_000/3_000/3_000/1_000.
 - Fees: `proposalCreationFeeBps` and `referralShareBps` configurable via governance.
-- Governance: `quorumBps` and `executionDelayAfterQuorum` are governable (defaults: 3_300 bps and 7 days). One vote per member; join‑sequence snapshots enforce eligibility; dictatorship toggle via priest.
+- Governance: `quorumBps` and `executionDelayAfterQuorum` are governable (defaults: 3_300 bps and 7 days). One vote per member; proposer auto‑casts an initial YES; join‑sequence snapshots enforce eligibility; immediate quorum detection can shorten windows to the post‑quorum delay; dictatorship toggle via priest.
   - Quorum setter accepts either 0–100 (interpreted as %) or 0–10_000 (basis points).
 - Limits/Pauses: optional `maxMembers` (factory default 249); auto‑pauses at cap; `joinPaused` toggleable.
 - Treasury Ops: withdraw/disband (disband disperses the treasury equally across members), config/split/entry fee/curve updates, metadata, priest changes.
@@ -125,7 +125,7 @@ await templ.executeProposal(id);
 Learn-by-reading map (each claim backed by code/tests):
 - Entry fee constraints: enforced in constructors and updates: see [`contracts/TemplFactory.sol`](contracts/TemplFactory.sol), [`contracts/TEMPL.sol`](contracts/TEMPL.sol), [`contracts/TemplGovernance.sol`](contracts/TemplGovernance.sol); tests in `test/TemplFactory.test.js`, `test/UpdateConfigDAO.test.js`.
 - Fee split totals: validated in [`contracts/TemplFactory.sol`](contracts/TemplFactory.sol); invariant tests in `test/FeeDistributionInvariant.test.js`.
-- Curves: curve math and guards in [`contracts/TemplCurve.sol`](contracts/TemplCurve.sol); tests in `test/EntryFeeCurve.test.js`, `test/templ.curve.saturation.test.js`.
+- Curves: curve math and guards in [`contracts/TemplCurve.sol`](contracts/TemplCurve.sol); tests in `test/EntryFeeCurve.test.js`, `test/TemplHighLoadStress.test.js`.
 - Dictatorship and gating: `onlyDAO` gate in [`contracts/TemplBase.sol`](contracts/TemplBase.sol); tests in `test/PriestDictatorship.test.js`.
 - Snapshot voting: lifecycle in [`contracts/TemplGovernance.sol`](contracts/TemplGovernance.sol); tests in `test/VotingEligibility.test.js`, `test/SingleProposal.test.js`.
 - Governable quorum/delay/burn address: setters + proposals in contracts; tests in `test/GovernanceAdjustParams.test.js`.
@@ -149,6 +149,11 @@ Learn-by-reading map (each claim backed by code/tests):
   - All other proposals: require quorum was reached, `block.timestamp >= quorumReachedAt + executionDelayAfterQuorum`, `YES > NO`, and quorum still maintained vs. the baseline: `YES * 10_000 >= quorumBps * eligibleVoters`.
   - On success, the proposal executes once and is marked `executed`.
 - External rewards: accounting in [`contracts/TemplBase.sol`](contracts/TemplBase.sol); tests in `test/RewardWithdrawals.test.js`, `test/MembershipCoverage.test.js`.
+
+### Governance Behaviors
+- Proposal creation auto‑casts a YES vote for the proposer.
+- If the immediate YES satisfies quorum relative to the snapshot baseline, the proposal jumps straight into the execution‑delay window and `endTime` is updated accordingly.
+- While dictatorship is enabled, only SetDictatorship proposals can be created and voted; other governance interactions revert and `onlyDAO` actions may be called directly by the priest.
 
 ### Architecture Overview
 
@@ -493,10 +498,10 @@ await templ.connect(alice).claimExternalReward(otherErc20.target);
   - `withdrawTreasuryDAO(address token, address recipient, uint256 amount, string reason)`
   - `disbandTreasuryDAO(address token)`
   - `updateConfigDAO(address tokenOrZero, uint256 newEntryFeeOrZero, bool applySplit, uint256 burnBps, uint256 treasuryBps, uint256 memberPoolBps)`
-  - `setMaxMembersDAO(uint256)`, `setJoinPausedDAO(bool)`, `changePriestDAO(address)`, `setDictatorshipDAO(bool)`, `setTemplMetadataDAO(string,string,string)`, `setProposalCreationFeeBpsDAO(uint256)`, `setReferralShareBpsDAO(uint256)`, `setEntryFeeCurveDAO(CurveConfig,uint256)`
+  - `setMaxMembersDAO(uint256)`, `setJoinPausedDAO(bool)`, `changePriestDAO(address)`, `setDictatorshipDAO(bool)`, `setTemplMetadataDAO(string,string,string)`, `setProposalCreationFeeBpsDAO(uint256)`, `setReferralShareBpsDAO(uint256)`, `setEntryFeeCurveDAO(CurveConfig,uint256)`, `setQuorumBpsDAO(uint256)`, `setExecutionDelayAfterQuorumDAO(uint256)`, `setBurnAddressDAO(address)`
   - DAO-only helper: `cleanupExternalRewardToken(address)` — removes an exhausted external reward token slot once balances are fully settled.
 - Governance (from [`TemplGovernanceModule`](contracts/TemplGovernance.sol)):
-  - Create proposals: `createProposalSetJoinPaused`, `createProposalUpdateConfig`, `createProposalWithdrawTreasury`, `createProposalDisbandTreasury`, `createProposalCleanupExternalRewardToken`, `createProposalChangePriest`, `createProposalSetDictatorship`, `createProposalSetMaxMembers`, `createProposalUpdateMetadata`, `createProposalSetProposalFeeBps`, `createProposalSetReferralShareBps`, `createProposalSetEntryFeeCurve`, `createProposalCallExternal`.
+  - Create proposals: `createProposalSetJoinPaused`, `createProposalUpdateConfig`, `createProposalWithdrawTreasury`, `createProposalDisbandTreasury`, `createProposalCleanupExternalRewardToken`, `createProposalChangePriest`, `createProposalSetDictatorship`, `createProposalSetMaxMembers`, `createProposalUpdateMetadata`, `createProposalSetProposalFeeBps`, `createProposalSetReferralShareBps`, `createProposalSetEntryFeeCurve`, `createProposalCallExternal`, `createProposalSetQuorumBps`, `createProposalSetExecutionDelay`, `createProposalSetBurnAddress`.
   - Vote/execute: `vote(uint256,bool)`, `executeProposal(uint256)`, `pruneInactiveProposals(uint256)`.
   - Views: `getProposal(uint256)`, `getProposalSnapshots(uint256)`, `getProposalJoinSequences(uint256)`, `getActiveProposals()`, `getActiveProposalsPaginated(uint256,uint256)`, `hasVoted(uint256,address)`.
 
@@ -518,8 +523,9 @@ await templ.connect(alice).claimExternalReward(otherErc20.target);
 ## Events
 - Member lifecycle: `MemberJoined`, `MemberRewardsClaimed`, `ReferralRewardPaid`
 - Governance: `ProposalCreated`, `VoteCast`, `ProposalExecuted`
-- Treasury/config: `TreasuryAction`, `TreasuryDisbanded`, `ConfigUpdated`, `JoinPauseUpdated`, `MaxMembersUpdated`, `EntryFeeCurveUpdated`, `PriestChanged`, `TemplMetadataUpdated`, `ProposalCreationFeeUpdated`, `ReferralShareBpsUpdated`
- - Factory: `TemplCreated`, `PermissionlessModeUpdated`
+- Treasury/config/params: `TreasuryAction`, `TreasuryDisbanded`, `ConfigUpdated`, `JoinPauseUpdated`, `MaxMembersUpdated`, `EntryFeeCurveUpdated`, `PriestChanged`, `TemplMetadataUpdated`, `ProposalCreationFeeUpdated`, `ReferralShareBpsUpdated`, `QuorumBpsUpdated`, `ExecutionDelayAfterQuorumUpdated`, `BurnAddressUpdated`, `DictatorshipModeChanged`
+- Rewards: `ExternalRewardClaimed`
+- Factory: `TemplCreated`, `PermissionlessModeUpdated`
 
 Notes
 - `MemberJoined.joinId` starts at 0 for the first non‑priest joiner and increments per successful join.
@@ -529,6 +535,7 @@ Notes
 - `DEFAULT_QUORUM_BPS = 3_300`, `DEFAULT_EXECUTION_DELAY = 7 days`, `DEFAULT_BURN_ADDRESS = 0x…dEaD`
 - `MAX_EXTERNAL_REWARD_TOKENS = 256` — cap on concurrently tracked external reward tokens
 - `MAX_ENTRY_FEE = type(uint128).max` — upper safety bound on entry fee
+- Reward rounding: per‑member splits use integer division; remainders are carried forward and periodically flushed into cumulative rewards to avoid dust loss (applies to member pool and external rewards).
 - Proposal voting window: `DEFAULT_VOTING_PERIOD = 7 days` (`MIN=7 days`, `MAX=30 days`)
 - Default factory splits assume `protocolBps = 1_000`: 3_000/3_000/3_000/1_000; customize via `createTemplWithConfig`
  - Factory defaults: `DEFAULT_MAX_MEMBERS = 249`, `DEFAULT_CURVE_EXP_RATE_BPS = 11_000`
@@ -639,7 +646,7 @@ sequenceDiagram
 - Governance flows: `test/SingleProposal.test.js`, `test/GovernanceCoverage.test.js`, `test/ProposalPagination.test.js`
 - Dictatorship mode: `test/PriestDictatorship.test.js`
 - Treasury actions: `test/TreasuryWithdrawAssets.test.js`, `test/DisbandTreasury.test.js`
-- Entry fee curves: `test/EntryFeeCurve.test.js`, `test/templ.curve.saturation.test.js`
+- Entry fee curves: `test/EntryFeeCurve.test.js`, `test/TemplHighLoadStress.test.js`
 - Security: `test/Reentrancy.test.js`, `test/ProposalFeeReentrancy.test.js`, `test/ExecuteProposalReverts.test.js`
 - Invariants and edge cases: `test/FeeDistributionInvariant.test.js`, `test/TEMPL.test.js`
 
