@@ -14,6 +14,20 @@
 - Test: `npm test` (Hardhat). Coverage: `npx hardhat coverage`.
 - Static analysis: `npm run slither` (requires Slither in PATH)
 
+### High‑Load Stress Test
+- Run only the heavy suite: `npm run test:load`
+- Configure joiner count with a single env var `TEMPL_LOAD` (fallbacks: `TEMPL_JOINERS`, `JOINERS`, legacy `STRESS_JOINS`). Examples:
+  - Moderate: `TEMPL_LOAD=10000 npm run test:load`
+  - Extreme: `TEMPL_LOAD=1000000 npm run test:load`
+
+What it exercises under load (1% quorum to keep voting tractable):
+- 1:1 join flow scaled to `TEMPL_LOAD` joiners (using `joinFor`) with exponential fee curve saturation checks
+- Governance: withdraw treasury, disband treasury, member claims; metadata update; proposal fee set + charged; referral share set + referral join; external call execution
+- Config: fee split update, curve update, member cap toggle (auto‑pause) and uncap
+
+Notes:
+- 1M joiners implies ~1M transactions and will take a long time; progress logs are printed periodically. Ensure ample CPU/RAM, and consider running on a local Hardhat node.
+
 Local deploy (scripts mirror production flow):
 
 ```bash
