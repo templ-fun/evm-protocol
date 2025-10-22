@@ -164,6 +164,8 @@ async function main() {
   await waitForContractCode(factoryAddress, hre.ethers.provider);
   console.log("\n✅ TemplFactory ready at:", factoryAddress);
 
+  console.warn("\n[warn] TEMPL instances expect vanilla ERC-20 access tokens (no transfer fees/rebasing). The factory cannot validate token semantics at this stage; ensure downstream deployments use standard tokens.");
+
   const deploymentInfo = {
     contractVersion: "factory-1.0.0",
     network: network.chainId === 8453n ? "base" : "local",

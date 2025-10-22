@@ -139,7 +139,8 @@ await templ.executeProposal(id);
 - Factory: [`TemplFactory`](contracts/TemplFactory.sol) with `setPermissionless`, `createTempl`, `createTemplFor`, `createTemplWithConfig`.
 
 ### Token Requirements
-- Access token must be a vanilla ERC‑20 (no fee‑on‑transfer, no rebasing). Accounting assumes exact transfer amounts. Non‑standard tokens can desync balances and break claims.
+- Access token must be a vanilla ERC‑20 (no fee‑on‑transfer, no rebasing). Accounting assumes exact transfer amounts. Non‑standard tokens will desync balances and break claims; the contracts do not block them.
+- Deploy scripts and the factory print warnings: choose standard tokens only.
 - If you need to support non‑standard tokens, consider an adapter token or gateway outside this core protocol.
 
 ### Build Settings
