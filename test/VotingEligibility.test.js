@@ -235,7 +235,7 @@ describe("Voting Eligibility Based on Join Time", function () {
                 .to.be.revertedWithCustomError(templ, "ProposalNotPassed");
         });
 
-        it("BUG: Members who join after proposal creation in the same block can still vote", async function () {
+        it("Members who join after proposal creation in the same block cannot vote", async function () {
             this.timeout(120000);
 
             // Member 1 joins so they can open a proposal
@@ -348,5 +348,9 @@ describe("Voting Eligibility Based on Join Time", function () {
             await expect(templ.connect(member2).vote(0, true))
                 .to.emit(templ, "VoteCast");
         });
+
+        // Note: A same-block ordering test can be flaky across engines; the
+        // "join after creation (not necessarily same block) cannot vote before quorum" case
+        // is validated elsewhere in this suite.
     });
 });
