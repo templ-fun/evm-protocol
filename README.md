@@ -491,6 +491,10 @@ flowchart LR
 - **Treasury Insights:** `getTreasuryInfo()` returns `(treasuryAvailable, memberPool, protocolFeeRecipient, totalBurned)`.
 - **Entry Fee Curves:** configure piecewise segments (`CurveConfig`) in [`TemplCurve.sol`](contracts/TemplCurve.sol) to unlock linear or exponential pricing after a given number of joins.
 - **Proposal Fees:** governance updates them via `setProposalCreationFeeBpsDAO` (see [`TemplTreasury.sol`](contracts/TemplTreasury.sol)); the templ contract auto-collects the fee (in the access token) before recording a proposal.
+- **Config View:** `getConfig()` returns `(token, fee, joinPaused, joins, treasury, pool, burnBps, treasuryBps, memberPoolBps, protocolBps)` in that order.
+- **Membership API:** `join()`, `joinWithReferral(address)`, `joinFor(address)`, `joinForWithReferral(address,address)`; claims via `claimMemberRewards()` and `claimExternalReward(address token)`.
+- **Governance Entrypoints:** all proposal creators are `createProposal*` (see Proposal Views for payloads), voting via `vote(id, support)`, execution via `executeProposal(id)`.
+- **DAO Actions:** `*DAO` functions in [`TemplTreasury.sol`](contracts/TemplTreasury.sol) are invoked by governance (or directly by the priest only when dictatorship is enabled).
 
 ## Typical Flows (Ethers v6)
 
