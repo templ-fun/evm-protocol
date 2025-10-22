@@ -16,6 +16,10 @@
 - Static analysis: `npm run slither` (requires Slither in PATH)
 - Property fuzzing: Echidna via Docker (optional; see below)
 
+## Safety & Disclaimers
+- Vanilla ERC‑20 access token only: the access token must be a standard, non‑rebasing ERC‑20 with no transfer‑fees or hooks. Protocol accounting assumes exact transfer amounts; using non‑standard tokens will desync balances and can break claims/withdrawals. The contracts do not enforce this; deploy scripts and the factory print warnings. Choose a vanilla token.
+- No external audit yet: these contracts have not undergone an independent, third‑party audit. Treat deployments as experimental and keep join fees/treasury exposure low until at least one serious audit is completed.
+
 ### High‑Load Stress Test
 - Run only the heavy suite: `npm run test:load`
 - Configure joiner count with `TEMPL_LOAD`. Examples:
