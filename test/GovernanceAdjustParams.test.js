@@ -49,7 +49,9 @@ describe("Governance adjustable params (quorum, delay, burn)", function () {
     // Set quorum proposal
     await templ.connect(member1).createProposalSetQuorumBps(45, 7 * 24 * 60 * 60, "Set quorum", "");
     let id = (await templ.proposalCount()) - 1n;
-    expect(await templ.getProposalSetQuorumBpsPayload(id)).to.equal(45n);
+    const [, quorumPayload] = await templ.getProposalActionData(id);
+    const decodedQuorum = ethers.AbiCoder.defaultAbiCoder().decode(["uint256"], quorumPayload)[0];
+    expect(decodedQuorum).to.equal(45n);
     await templ.connect(member2).vote(id, true);
     await ethers.provider.send("evm_increaseTime", [8 * 24 * 60 * 60]);
     await ethers.provider.send("evm_mine");
@@ -59,7 +61,9 @@ describe("Governance adjustable params (quorum, delay, burn)", function () {
     // Set delay proposal
     await templ.connect(member1).createProposalSetExecutionDelay(2 * 24 * 60 * 60, 7 * 24 * 60 * 60, "Set delay", "");
     let id2 = (await templ.proposalCount()) - 1n;
-    expect(await templ.getProposalSetExecutionDelayPayload(id2)).to.equal(2n * 24n * 60n * 60n);
+    const [, delayPayload] = await templ.getProposalActionData(id2);
+    const decodedDelay = ethers.AbiCoder.defaultAbiCoder().decode(["uint256"], delayPayload)[0];
+    expect(decodedDelay).to.equal(2n * 24n * 60n * 60n);
     await templ.connect(member3).vote(id2, true);
     await ethers.provider.send("evm_increaseTime", [8 * 24 * 60 * 60]);
     await ethers.provider.send("evm_mine");
@@ -70,7 +74,9 @@ describe("Governance adjustable params (quorum, delay, burn)", function () {
     const newBurn = "0x0000000000000000000000000000000000000010";
     await templ.connect(member2).createProposalSetBurnAddress(newBurn, 7 * 24 * 60 * 60, "Set burn", "");
     let id3 = (await templ.proposalCount()) - 1n;
-    expect(await templ.getProposalSetBurnAddressPayload(id3)).to.equal(newBurn);
+    const [, burnPayload] = await templ.getProposalActionData(id3);
+    const decodedBurn = ethers.AbiCoder.defaultAbiCoder().decode(["address"], burnPayload)[0];
+    expect(decodedBurn).to.equal(newBurn);
     await templ.connect(member1).vote(id3, true);
     await ethers.provider.send("evm_increaseTime", [8 * 24 * 60 * 60]);
     await ethers.provider.send("evm_mine");

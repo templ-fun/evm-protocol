@@ -99,6 +99,29 @@ await templ.executeProposal(id);
 ### Build Settings
 - Solidity 0.8.23, via‑IR enabled by default. For production, consider increasing optimizer runs (e.g., 200–500) for lower runtime gas; keep runs=1 for coverage.
 
+### Proposal Views
+- `getProposal(id)`: essential metadata + derived pass status
+- `getProposalSnapshots(id)`: quorum timing + blocks + eligible counts
+- `getProposalJoinSequences(id)`: pre‑quorum and quorum join‑sequence snapshots
+- `getActiveProposals()` / `getActiveProposalsPaginated(offset,limit)`
+- `getProposalActionData(id)`: returns `(Action action, bytes payload)` where `payload` is ABI‑encoded per action:
+  - SetJoinPaused → (bool paused)
+  - UpdateConfig → (address token, uint256 newEntryFee, bool updateFeeSplit, uint256 newBurnBps, uint256 newTreasuryBps, uint256 newMemberPoolBps)
+  - SetMaxMembers → (uint256 newMaxMembers)
+  - SetMetadata → (string name, string description, string logoLink)
+  - SetProposalFee → (uint256 newFeeBps)
+  - SetReferralShare → (uint256 newReferralShareBps)
+  - SetEntryFeeCurve → (CurveConfig curve, uint256 baseEntryFee)
+  - CallExternal → (address target, uint256 value, bytes data)
+  - WithdrawTreasury → (address token, address recipient, uint256 amount, string reason)
+  - DisbandTreasury → (address token)
+  - CleanupExternalRewardToken → (address token)
+  - ChangePriest → (address newPriest)
+  - SetDictatorship → (bool enable)
+  - SetQuorumBps → (uint256 newQuorumBps)
+  - SetExecutionDelay → (uint256 newDelaySeconds)
+  - SetBurnAddress → (address newBurn)
+
 Learn-by-reading map (each claim backed by code/tests):
 - Entry fee constraints: enforced in constructors and updates: see [`contracts/TemplFactory.sol`](contracts/TemplFactory.sol), [`contracts/TEMPL.sol`](contracts/TEMPL.sol), [`contracts/TemplGovernance.sol`](contracts/TemplGovernance.sol); tests in `test/TemplFactory.test.js`, `test/UpdateConfigDAO.test.js`.
 - Fee split totals: validated in [`contracts/TemplFactory.sol`](contracts/TemplFactory.sol); invariant tests in `test/FeeDistributionInvariant.test.js`.
@@ -108,7 +131,7 @@ Learn-by-reading map (each claim backed by code/tests):
 - Governable quorum/delay/burn address: setters + proposals in contracts; tests in `test/GovernanceAdjustParams.test.js`.
 
 ### Governance Controls (quick list)
-- Pausing joins, membership cap, fee config and curve, metadata, proposal fee, referral share, treasury withdraw/disband/cleanup, priest changes, dictatorship mode. Quorum threshold and post‑quorum execution delay, and the burn address are adjustable via proposals or `onlyDAO` calls.
+- Pausing joins, membership cap, fee config and curve, metadata, proposal fee, referral share, treasury withdraw/disband/cleanup, priest changes, dictatorship mode, quorum threshold, post‑quorum execution delay, and burn address. All are adjustable via proposals or `onlyDAO` calls.
 
 
 ### Proposal Execution Rules

@@ -182,7 +182,7 @@ contract TEMPL is TemplBase {
     }
 
     function _registerGovernanceSelectors(address module) internal {
-        bytes4[] memory selectors = new bytes4[](28);
+        bytes4[] memory selectors = new bytes4[](26);
         selectors[0] = TemplGovernanceModule.createProposalSetJoinPaused.selector;
         selectors[1] = TemplGovernanceModule.createProposalUpdateConfig.selector;
         selectors[2] = TemplGovernanceModule.createProposalSetMaxMembers.selector;
@@ -208,10 +208,7 @@ contract TEMPL is TemplBase {
         selectors[22] = TemplGovernanceModule.createProposalSetQuorumBps.selector;
         selectors[23] = TemplGovernanceModule.createProposalSetExecutionDelay.selector;
         selectors[24] = TemplGovernanceModule.createProposalSetBurnAddress.selector;
-        // payload getters for new proposals
-        selectors[25] = TemplGovernanceModule.getProposalSetQuorumBpsPayload.selector;
-        selectors[26] = TemplGovernanceModule.getProposalSetExecutionDelayPayload.selector;
-        selectors[27] = TemplGovernanceModule.getProposalSetBurnAddressPayload.selector;
+        selectors[25] = TemplGovernanceModule.getProposalActionData.selector;
         _registerModule(module, selectors);
     }
 

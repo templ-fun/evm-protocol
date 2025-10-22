@@ -39,7 +39,7 @@ describe("TEMPL selector → module introspection", function () {
     expect(await templ.getModuleForSelector(unknownSel)).to.equal(ethers.ZeroAddress);
   });
 
-  it("maps new treasury/governance selectors including payload getters", async function () {
+  it("maps new treasury/governance selectors including generic payload getter", async function () {
     const { templ } = await deployTempl();
     const treasury = await templ.treasuryModule();
     const governance = await templ.governanceModule();
@@ -64,14 +64,8 @@ describe("TEMPL selector → module introspection", function () {
       expect(await templ.getModuleForSelector(sel(fn))).to.equal(governance);
     }
 
-    // Governance payload getters (new ones only)
-    for (const fn of [
-      "getProposalSetQuorumBpsPayload",
-      "getProposalSetExecutionDelayPayload",
-      "getProposalSetBurnAddressPayload",
-    ]) {
-      expect(await templ.getModuleForSelector(sel(fn))).to.equal(governance);
-    }
+    // Governance generic payload getter
+    expect(await templ.getModuleForSelector(sel("getProposalActionData"))).to.equal(governance);
   });
 
   it("reverts InvalidCallData for non-existent payload getters", async function () {
