@@ -347,7 +347,10 @@ async function main() {
   }
 
   console.log("========================================");
-  console.log("Deploying TemplFactory + TEMPL");
+  const headerAction = FACTORY_ADDRESS_ENV
+    ? "Creating TEMPL via existing factory"
+    : "Deploying TemplFactory and creating TEMPL";
+  console.log(headerAction);
   console.log("========================================");
   console.log("Priest Address:", PRIEST_ADDRESS);
   console.log("Protocol Fee Recipient:", PROTOCOL_FEE_RECIPIENT);
@@ -647,7 +650,7 @@ async function main() {
   console.log("\nContract Address:", contractAddress);
   console.log("\n🗳️ DAO Governance:");
   console.log("- Treasury controlled by member voting");
-  console.log("- Proposals require >50% yes votes to pass");
+  console.log("- Proposals pass when YES > NO and quorum/time checks are met");
   console.log("- Voting period: 7-30 days");
   console.log("- One member = one vote (proposer auto‑YES; votes changeable until deadline)");
   console.log("\n🔒 Security Features:");
