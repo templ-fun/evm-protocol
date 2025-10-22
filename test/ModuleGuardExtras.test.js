@@ -3,11 +3,12 @@ const { ethers } = require("hardhat");
 const { deployTemplModules } = require("./utils/modules");
 
 describe("Module guard extras (treasury/governance)", function () {
-  it("reverts on direct treasury module calls (onlyDelegatecall)", async function () {
+  it("reverts on direct treasury module calls (NotDAO)", async function () {
     const modules = await deployTemplModules();
     const Treasury = await ethers.getContractFactory("TemplTreasuryModule");
     const treasury = Treasury.attach(modules.treasuryModule);
-    await expect(treasury.setJoinPausedDAO(true)).to.be.revertedWithCustomError(treasury, "DelegatecallOnly");
+    // onlyDAO is evaluated before onlyDelegatecall in treasury module; direct calls revert NotDAO
+    await expect(treasury.setJoinPausedDAO(true)).to.be.revertedWithCustomError(treasury, "NotDAO");
   });
 
   it("reverts on direct governance module calls (onlyDelegatecall)", async function () {
@@ -19,4 +20,3 @@ describe("Module guard extras (treasury/governance)", function () {
     ).to.be.revertedWithCustomError(governance, "DelegatecallOnly");
   });
 });
-
