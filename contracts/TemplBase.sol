@@ -129,6 +129,12 @@ abstract contract TemplBase is ReentrancyGuard {
         uint256 newProposalCreationFeeBps;
         uint256 newReferralShareBps;
         uint256 newMaxMembers;
+        /// @notice Quorum threshold proposed (bps). Accepts 0-100 or 0-10_000 format.
+        uint256 newQuorumBps;
+        /// @notice Execution delay proposed (seconds) after quorum is reached.
+        uint256 newExecutionDelay;
+        /// @notice Burn address proposed to receive burn allocations.
+        address newBurnAddress;
         /// @notice Target contract invoked when executing an external call proposal.
         address externalCallTarget;
         /// @notice ETH value forwarded when executing the external call.
@@ -183,6 +189,9 @@ abstract contract TemplBase is ReentrancyGuard {
         CallExternal,
         SetEntryFeeCurve,
         CleanupExternalRewardToken,
+        SetQuorumBps,
+        SetExecutionDelay,
+        SetBurnAddress,
         Undefined
     }
 
@@ -250,7 +259,11 @@ abstract contract TemplBase is ReentrancyGuard {
         uint256 protocolBps
     );
 
+    /// @notice Emitted when joins are paused or resumed.
+    /// @param joinPaused New pause state.
     event JoinPauseUpdated(bool joinPaused);
+    /// @notice Emitted when the membership cap is updated.
+    /// @param maxMembers New maximum member count (0 = uncapped).
     event MaxMembersUpdated(uint256 maxMembers);
     /// @notice Emitted whenever the entry fee curve configuration changes.
     /// @param styles Segment styles in application order (primary first).
@@ -261,6 +274,9 @@ abstract contract TemplBase is ReentrancyGuard {
         uint32[] rateBps,
         uint32[] lengths
     );
+    /// @notice Emitted when the priest address is changed.
+    /// @param oldPriest Previous priest address.
+    /// @param newPriest New priest address.
     event PriestChanged(address indexed oldPriest, address indexed newPriest);
     event TreasuryDisbanded(
         uint256 indexed proposalId,
@@ -283,6 +299,12 @@ abstract contract TemplBase is ReentrancyGuard {
     event TemplMetadataUpdated(string name, string description, string logoLink);
     event ProposalCreationFeeUpdated(uint256 previousFeeBps, uint256 newFeeBps);
     event ReferralShareBpsUpdated(uint256 previousBps, uint256 newBps);
+    /// @notice Emitted when the quorum threshold is updated via governance.
+    event QuorumBpsUpdated(uint256 previousBps, uint256 newBps);
+    /// @notice Emitted when the post-quorum execution delay is updated via governance.
+    event ExecutionDelayAfterQuorumUpdated(uint256 previousDelay, uint256 newDelay);
+    /// @notice Emitted when the burn address is updated via governance.
+    event BurnAddressUpdated(address previousBurn, address newBurn);
 
     struct ExternalRewardState {
         uint256 poolBalance;
@@ -329,6 +351,8 @@ abstract contract TemplBase is ReentrancyGuard {
         _;
     }
 
+    /// @notice Emitted when dictatorship mode is toggled.
+    /// @param enabled True when dictatorship is enabled, false when disabled.
     event DictatorshipModeChanged(bool enabled);
 
     /// @dev Persists a new external reward checkpoint so future joins can baseline correctly.
@@ -916,6 +940,37 @@ abstract contract TemplBase is ReentrancyGuard {
         uint256 previous = referralShareBps;
         referralShareBps = newBps;
         emit ReferralShareBpsUpdated(previous, newBps);
+    }
+
+    /// @notice Updates the quorum threshold (bps).
+    /// @dev Accepts either 0-100 (interpreted as %) or 0-10_000 (basis points) values.
+    /// @param newQuorumBps New quorum threshold value.
+    function _setQuorumBps(uint256 newQuorumBps) internal {
+        uint256 normalized = newQuorumBps;
+        if (normalized <= 100) {
+            normalized = normalized * 100;
+        }
+        if (normalized > BPS_DENOMINATOR) revert TemplErrors.InvalidPercentage();
+        uint256 previous = quorumBps;
+        quorumBps = normalized;
+        emit QuorumBpsUpdated(previous, normalized);
+    }
+
+    /// @notice Updates the post-quorum execution delay in seconds.
+    /// @param newDelay New delay (seconds) applied after quorum before execution.
+    function _setExecutionDelayAfterQuorum(uint256 newDelay) internal {
+        uint256 previous = executionDelayAfterQuorum;
+        executionDelayAfterQuorum = newDelay;
+        emit ExecutionDelayAfterQuorumUpdated(previous, newDelay);
+    }
+
+    /// @notice Updates the burn sink address.
+    /// @param newBurn Address that will receive burn allocations.
+    function _setBurnAddress(address newBurn) internal {
+        if (newBurn == address(0)) revert TemplErrors.InvalidRecipient();
+        address previous = burnAddress;
+        burnAddress = newBurn;
+        emit BurnAddressUpdated(previous, newBurn);
     }
 
     /// @dev Internal helper that executes a treasury withdrawal and emits the corresponding event.

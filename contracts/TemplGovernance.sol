@@ -116,6 +116,61 @@ contract TemplGovernanceModule is TemplBase {
         return id;
     }
 
+    /// @notice Opens a proposal to update the quorum threshold (bps).
+    /// @param _newQuorumBps New quorum threshold (accepts 0-100 or 0-10_000 values).
+    function createProposalSetQuorumBps(
+        uint256 _newQuorumBps,
+        uint256 _votingPeriod,
+        string calldata _title,
+        string calldata _description
+    ) external returns (uint256) {
+        if (priestIsDictator) revert TemplErrors.DictatorshipEnabled();
+        if (_newQuorumBps > BPS_DENOMINATOR && _newQuorumBps > 100) {
+            revert TemplErrors.InvalidPercentage();
+        }
+        (uint256 id, Proposal storage p) = _createBaseProposal(_votingPeriod, _title, _description);
+        p.action = Action.SetQuorumBps;
+        p.newQuorumBps = _newQuorumBps;
+        return id;
+    }
+
+    /// @notice Opens a proposal to update the post-quorum execution delay in seconds.
+    /// @param _newDelaySeconds New delay (seconds) applied after quorum before execution.
+    /// @param _votingPeriod Optional custom voting duration (seconds).
+    /// @param _title On-chain title for the proposal.
+    /// @param _description On-chain description for the proposal.
+    function createProposalSetExecutionDelay(
+        uint256 _newDelaySeconds,
+        uint256 _votingPeriod,
+        string calldata _title,
+        string calldata _description
+    ) external returns (uint256) {
+        if (priestIsDictator) revert TemplErrors.DictatorshipEnabled();
+        (uint256 id, Proposal storage p) = _createBaseProposal(_votingPeriod, _title, _description);
+        p.action = Action.SetExecutionDelay;
+        p.newExecutionDelay = _newDelaySeconds;
+        return id;
+    }
+
+    /// @notice Opens a proposal to update the burn sink address.
+    /// @param _newBurn Address that will receive burn allocations.
+    /// @param _votingPeriod Optional custom voting duration (seconds).
+    /// @param _title On-chain title for the proposal.
+    /// @param _description On-chain description for the proposal.
+    function createProposalSetBurnAddress(
+        address _newBurn,
+        uint256 _votingPeriod,
+        string calldata _title,
+        string calldata _description
+    ) external returns (uint256) {
+        if (priestIsDictator) revert TemplErrors.DictatorshipEnabled();
+        if (_newBurn == address(0)) revert TemplErrors.InvalidRecipient();
+        (uint256 id, Proposal storage p) = _createBaseProposal(_votingPeriod, _title, _description);
+        p.action = Action.SetBurnAddress;
+        p.newBurnAddress = _newBurn;
+        return id;
+    }
+
     /// @notice Opens a proposal to update the proposal creation fee basis points.
     function createProposalSetProposalFeeBps(
         uint256 _newFeeBps,
@@ -468,6 +523,12 @@ contract TemplGovernanceModule is TemplBase {
             returnData = _governanceCallExternal(proposal);
         } else if (proposal.action == Action.CleanupExternalRewardToken) {
             _governanceCleanupExternalRewardToken(proposal.token);
+        } else if (proposal.action == Action.SetQuorumBps) {
+            _governanceSetQuorumBps(proposal.newQuorumBps);
+        } else if (proposal.action == Action.SetExecutionDelay) {
+            _governanceSetExecutionDelay(proposal.newExecutionDelay);
+        } else if (proposal.action == Action.SetBurnAddress) {
+            _governanceSetBurnAddress(proposal.newBurnAddress);
         } else {
             revert TemplErrors.InvalidCallData();
         }
@@ -539,6 +600,18 @@ contract TemplGovernanceModule is TemplBase {
 
     function _governanceCleanupExternalRewardToken(address token) internal {
         _cleanupExternalRewardToken(token);
+    }
+
+    function _governanceSetQuorumBps(uint256 newQuorumBps) internal {
+        _setQuorumBps(newQuorumBps);
+    }
+
+    function _governanceSetExecutionDelay(uint256 newDelay) internal {
+        _setExecutionDelayAfterQuorum(newDelay);
+    }
+
+    function _governanceSetBurnAddress(address newBurn) internal {
+        _setBurnAddress(newBurn);
     }
 
     /// @dev Executes the arbitrary call attached to `proposal` and bubbles up revert data.
@@ -667,6 +740,8 @@ contract TemplGovernanceModule is TemplBase {
         return (proposal.hasVoted[_voter], proposal.voteChoice[_voter]);
     }
 
+    // (Deprecated) Per-action payload getters removed in favor of getProposalActionData
+
     /// @notice Lists proposal ids that are still within their active voting/execution window.
     function getActiveProposals() external view returns (uint256[] memory) {
         uint256 len = activeProposalIds.length;
@@ -734,6 +809,7 @@ contract TemplGovernanceModule is TemplBase {
 
         return (proposalIds, hasMore);
     }
+
 
     /// @dev Creates the base proposal structure, including quorum pre-checks and proposer tracking.
     function _createBaseProposal(

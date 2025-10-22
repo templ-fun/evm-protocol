@@ -12,7 +12,7 @@
 
 - Prereqs: Node >=22.18.0, `npm`, Foundry optional.
 - Setup: `npm install`
-- Test: `npx hardhat test` (coverage: `npx hardhat coverage`)
+- Test: `npm test` (Hardhat). Coverage: `npx hardhat coverage`.
 - Static analysis: `npm run slither` (requires Slither in PATH)
 
 Local deploy (scripts mirror production flow):
@@ -86,7 +86,8 @@ await templ.executeProposal(id);
 - Token & Join: ERC‑20 `accessToken`; `entryFee` ≥ 10 and divisible by 10; each join updates the next fee via the pricing curve from [`TemplCurve.sol`](contracts/TemplCurve.sol).
 - Fee Splits: burn/treasury/member plus protocol must sum to 10_000 bps; defaults (with `protocolBps`=1_000) are 3_000/3_000/3_000/1_000.
 - Fees: `proposalCreationFeeBps` and `referralShareBps` configurable via governance.
-- Governance: default `quorumBps`=3_300; `executionDelayAfterQuorum`=7 days; one vote per member; join‑sequence snapshots enforce eligibility; dictatorship toggle via priest.
+- Governance: `quorumBps` and `executionDelayAfterQuorum` are governable (defaults: 3_300 bps and 7 days). One vote per member; join‑sequence snapshots enforce eligibility; dictatorship toggle via priest.
+  - Quorum setter accepts either 0–100 (interpreted as %) or 0–10_000 (basis points).
 - Limits/Pauses: optional `maxMembers` (factory default 249); auto‑pauses at cap; `joinPaused` toggleable.
 - Treasury Ops: withdraw/disband (disband disperses the treasury equally across members), config/split/entry fee/curve updates, metadata, priest changes.
 - Factory: [`TemplFactory`](contracts/TemplFactory.sol) with `setPermissionless`, `createTempl`, `createTemplFor`, `createTemplWithConfig`.
@@ -98,12 +99,55 @@ await templ.executeProposal(id);
 ### Build Settings
 - Solidity 0.8.23, via‑IR enabled by default. For production, consider increasing optimizer runs (e.g., 200–500) for lower runtime gas; keep runs=1 for coverage.
 
+### Proposal Views
+- `getProposal(id)`: essential metadata + derived pass status
+- `getProposalSnapshots(id)`: quorum timing + blocks + eligible counts
+- `getProposalJoinSequences(id)`: pre‑quorum and quorum join‑sequence snapshots
+- `getActiveProposals()` / `getActiveProposalsPaginated(offset,limit)`
+- `getProposalActionData(id)`: returns `(Action action, bytes payload)` where `payload` is ABI‑encoded per action:
+  - SetJoinPaused → (bool paused)
+  - UpdateConfig → (address token, uint256 newEntryFee, bool updateFeeSplit, uint256 newBurnBps, uint256 newTreasuryBps, uint256 newMemberPoolBps)
+  - SetMaxMembers → (uint256 newMaxMembers)
+  - SetMetadata → (string name, string description, string logoLink)
+  - SetProposalFee → (uint256 newFeeBps)
+  - SetReferralShare → (uint256 newReferralShareBps)
+  - SetEntryFeeCurve → (CurveConfig curve, uint256 baseEntryFee)
+  - CallExternal → (address target, uint256 value, bytes data)
+  - WithdrawTreasury → (address token, address recipient, uint256 amount, string reason)
+  - DisbandTreasury → (address token)
+  - CleanupExternalRewardToken → (address token)
+  - ChangePriest → (address newPriest)
+  - SetDictatorship → (bool enable)
+  - SetQuorumBps → (uint256 newQuorumBps)
+  - SetExecutionDelay → (uint256 newDelaySeconds)
+  - SetBurnAddress → (address newBurn)
+
 Learn-by-reading map (each claim backed by code/tests):
 - Entry fee constraints: enforced in constructors and updates: see [`contracts/TemplFactory.sol`](contracts/TemplFactory.sol), [`contracts/TEMPL.sol`](contracts/TEMPL.sol), [`contracts/TemplGovernance.sol`](contracts/TemplGovernance.sol); tests in `test/TemplFactory.test.js`, `test/UpdateConfigDAO.test.js`.
 - Fee split totals: validated in [`contracts/TemplFactory.sol`](contracts/TemplFactory.sol); invariant tests in `test/FeeDistributionInvariant.test.js`.
 - Curves: curve math and guards in [`contracts/TemplCurve.sol`](contracts/TemplCurve.sol); tests in `test/EntryFeeCurve.test.js`, `test/templ.curve.saturation.test.js`.
 - Dictatorship and gating: `onlyDAO` gate in [`contracts/TemplBase.sol`](contracts/TemplBase.sol); tests in `test/PriestDictatorship.test.js`.
 - Snapshot voting: lifecycle in [`contracts/TemplGovernance.sol`](contracts/TemplGovernance.sol); tests in `test/VotingEligibility.test.js`, `test/SingleProposal.test.js`.
+- Governable quorum/delay/burn address: setters + proposals in contracts; tests in `test/GovernanceAdjustParams.test.js`.
+
+### Governance Controls (quick list)
+- Pausing joins, membership cap, fee config and curve, metadata, proposal fee, referral share, treasury withdraw/disband/cleanup, priest changes, dictatorship mode, quorum threshold, post‑quorum execution delay, and burn address. All are adjustable via proposals or `onlyDAO` calls.
+
+
+### Proposal Execution Rules
+- Eligibility snapshots:
+  - On creation: store `eligibleVoters` (member count) and `preQuorumJoinSequence`.
+  - On quorum: record `quorumReachedAt`, `quorumSnapshotBlock`, and freeze `quorumJoinSequence`. Members who joined after the relevant snapshot cannot vote on that proposal.
+- Pre‑quorum window:
+  - Voting is open until `endTime = createdAt + votingPeriod`.
+  - Quorum is reached when `YES * 10_000 >= quorumBps * eligibleVoters` (eligibleVoters is the baseline captured at creation).
+- Post‑quorum delay (timelock):
+  - When quorum is reached, `endTime` is reset to `block.timestamp + executionDelayAfterQuorum`.
+  - Voting remains allowed during this delay window; join eligibility stays frozen by `quorumJoinSequence`.
+- Execution checks:
+  - Quorum‑exempt proposals (priest‑initiated Disband only): require `(block.timestamp >= endTime)` and `YES > NO`.
+  - All other proposals: require quorum was reached, `block.timestamp >= quorumReachedAt + executionDelayAfterQuorum`, `YES > NO`, and quorum still maintained vs. the baseline: `YES * 10_000 >= quorumBps * eligibleVoters`.
+  - On success, the proposal executes once and is marked `executed`.
 - External rewards: accounting in [`contracts/TemplBase.sol`](contracts/TemplBase.sol); tests in `test/RewardWithdrawals.test.js`, `test/MembershipCoverage.test.js`.
 
 ### Architecture Overview

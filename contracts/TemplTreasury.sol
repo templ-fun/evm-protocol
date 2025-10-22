@@ -109,4 +109,22 @@ contract TemplTreasuryModule is TemplBase {
     function cleanupExternalRewardToken(address token) external onlyDAO {
         _cleanupExternalRewardToken(token);
     }
+
+    /// @notice Governance action that updates the quorum threshold (bps).
+    /// @param newQuorumBps New quorum threshold (accepts 0-100 or 0-10_000 bps values).
+    function setQuorumBpsDAO(uint256 newQuorumBps) external onlyDAO {
+        _setQuorumBps(newQuorumBps);
+    }
+
+    /// @notice Governance action that updates the post-quorum execution delay in seconds.
+    /// @param newDelay Seconds to wait after quorum before execution.
+    function setExecutionDelayAfterQuorumDAO(uint256 newDelay) external onlyDAO {
+        _setExecutionDelayAfterQuorum(newDelay);
+    }
+
+    /// @notice Governance action that updates the burn sink address.
+    /// @param newBurn Address to receive burn allocations.
+    function setBurnAddressDAO(address newBurn) external onlyDAO {
+        _setBurnAddress(newBurn);
+    }
 }
