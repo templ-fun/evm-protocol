@@ -21,6 +21,11 @@ const METADATA = {
 // Allow configuring join count via env for super heavy runs
 const TOTAL_JOINS = Number(process.env.STRESS_JOINS || 500); // default 500; raise to thousands if desired
 
+function progressEvery(total) {
+  const step = Math.max(1, Math.floor(total / 10));
+  return { step };
+}
+
 async function setupHighLoadTempl() {
   const [priest, protocolFeeRecipient, memberA, memberB] = await ethers.getSigners();
   const accessibleMembers = [memberA, memberB];
@@ -67,14 +72,25 @@ async function setupHighLoadTempl() {
   const joinTargets = accessibleMembers.map((m) => m.address);
   const randomWallets = [];
   const additionalMembers = TOTAL_JOINS - accessibleMembers.length;
+  const genProg = progressEvery(additionalMembers);
   for (let i = 0; i < additionalMembers; i += 1) {
     const wallet = ethers.Wallet.createRandom().connect(ethers.provider);
     randomWallets.push(wallet);
     joinTargets.push(wallet.address);
+    if ((i + 1) % genProg.step === 0) {
+      const pct = Math.floor(((i + 1) * 100) / Math.max(1, additionalMembers));
+      console.log(`[load] generated wallets: ${i + 1}/${additionalMembers} (${pct}%)`);
+    }
   }
 
-  for (const target of joinTargets) {
+  const joinProg = progressEvery(joinTargets.length);
+  for (let i = 0; i < joinTargets.length; i += 1) {
+    const target = joinTargets[i];
     await templ.connect(priest).joinFor(target);
+    if ((i + 1) % joinProg.step === 0) {
+      const pct = Math.floor(((i + 1) * 100) / Math.max(1, joinTargets.length));
+      console.log(`[load] joins completed: ${i + 1}/${joinTargets.length} (${pct}%)`);
+    }
   }
 
   expect(await templ.totalJoins()).to.equal(TOTAL_JOINS);
@@ -217,9 +233,15 @@ describe("@load Templ High-Load Stress", function () {
 
       const voterWallets = randomWallets.slice(0, Number(remainingVotes));
       const gasTopUp = ethers.parseEther("0.05");
-      for (const wallet of voterWallets) {
+      const voteProg = progressEvery(voterWallets.length);
+      for (let i = 0; i < voterWallets.length; i += 1) {
+        const wallet = voterWallets[i];
         await priest.sendTransaction({ to: wallet.address, value: gasTopUp });
         await templ.connect(wallet).vote(withdrawProposalId, true);
+        if ((i + 1) % voteProg.step === 0) {
+          const pct = Math.floor(((i + 1) * 100) / Math.max(1, voterWallets.length));
+          console.log(`[load] votes cast: ${i + 1}/${voterWallets.length} (${pct}%)`);
+        }
       }
 
       const withdrawProposal = await templ.getProposal(withdrawProposalId);
@@ -399,4 +421,3 @@ describe("@load Templ High-Load Stress", function () {
     });
   });
 });
-
