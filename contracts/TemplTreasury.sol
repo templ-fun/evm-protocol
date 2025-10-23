@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.23;
 
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {TemplBase} from "./TemplBase.sol";
-import {TemplErrors} from "./TemplErrors.sol";
-import {CurveConfig} from "./TemplCurve.sol";
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { TemplBase } from "./TemplBase.sol";
+import { TemplErrors } from "./TemplErrors.sol";
+import { CurveConfig } from "./TemplCurve.sol";
 
 /// @title Templ Treasury Module
 /// @notice Adds treasury controls, fee configuration, and external reward management.
@@ -155,7 +155,7 @@ contract TemplTreasuryModule is TemplBase {
         for (uint256 i = 0; i < len; i++) {
             address target = targets[i];
             if (target == address(0)) revert TemplErrors.InvalidRecipient();
-            (bool success, bytes memory ret) = target.call{value: values[i]}(calldatas[i]);
+            (bool success, bytes memory ret) = target.call{ value: values[i] }(calldatas[i]);
             if (!success) {
                 assembly ("memory-safe") {
                     revert(add(ret, 32), mload(ret))

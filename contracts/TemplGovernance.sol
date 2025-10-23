@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.23;
-import {TemplBase} from "./TemplBase.sol";
-import {TemplErrors} from "./TemplErrors.sol";
-import {CurveConfig} from "./TemplCurve.sol";
-import {TemplTreasuryModule} from "./TemplTreasury.sol";
+import { TemplBase } from "./TemplBase.sol";
+import { TemplErrors } from "./TemplErrors.sol";
+import { CurveConfig } from "./TemplCurve.sol";
+import { TemplTreasuryModule } from "./TemplTreasury.sol";
 
 /// @title Templ Governance Module
 /// @notice Adds proposal creation, voting, and execution flows on top of treasury + membership logic.
@@ -691,7 +691,7 @@ contract TemplGovernanceModule is TemplBase {
         bytes memory callData = proposal.externalCallData;
         if (callData.length == 0) revert TemplErrors.InvalidCallData();
         uint256 callValue = proposal.externalCallValue;
-        (bool success, bytes memory returndata) = target.call{value: callValue}(callData);
+        (bool success, bytes memory returndata) = target.call{ value: callValue }(callData);
         if (!success) {
             assembly ("memory-safe") {
                 revert(add(returndata, 32), mload(returndata))
@@ -711,16 +711,22 @@ contract TemplGovernanceModule is TemplBase {
     /// @return passed Whether the proposal can be executed based on vote outcomes.
     /// @return title On-chain title string.
     /// @return description On-chain description string.
-    function getProposal(uint256 _proposalId) external view returns (
-        address proposer,
-        uint256 yesVotes,
-        uint256 noVotes,
-        uint256 endTime,
-        bool executed,
-        bool passed,
-        string memory title,
-        string memory description
-    ) {
+    function getProposal(
+        uint256 _proposalId
+    )
+        external
+        view
+        returns (
+            address proposer,
+            uint256 yesVotes,
+            uint256 noVotes,
+            uint256 endTime,
+            bool executed,
+            bool passed,
+            string memory title,
+            string memory description
+        )
+    {
         if (_proposalId >= proposalCount) revert TemplErrors.InvalidProposal();
         Proposal storage proposal = proposals[_proposalId];
         passed = _proposalPassed(proposal);
@@ -794,11 +800,9 @@ contract TemplGovernanceModule is TemplBase {
     /// @param _proposalId Proposal id to inspect.
     /// @return preQuorumJoinSequence Join sequence recorded when the proposal was created.
     /// @return quorumJoinSequence Join sequence recorded when quorum was reached (0 if never reached).
-    function getProposalJoinSequences(uint256 _proposalId)
-        external
-        view
-        returns (uint256 preQuorumJoinSequence, uint256 quorumJoinSequence)
-    {
+    function getProposalJoinSequences(
+        uint256 _proposalId
+    ) external view returns (uint256 preQuorumJoinSequence, uint256 quorumJoinSequence) {
         if (_proposalId >= proposalCount) revert TemplErrors.InvalidProposal();
         Proposal storage proposal = proposals[_proposalId];
         return (proposal.preQuorumJoinSequence, proposal.quorumJoinSequence);
@@ -809,10 +813,7 @@ contract TemplGovernanceModule is TemplBase {
     /// @param _voter Wallet to query.
     /// @return voted True if the voter has cast a ballot.
     /// @return support Recorded support value (false when `voted` is false).
-    function hasVoted(
-        uint256 _proposalId,
-        address _voter
-    ) external view returns (bool voted, bool support) {
+    function hasVoted(uint256 _proposalId, address _voter) external view returns (bool voted, bool support) {
         if (_proposalId >= proposalCount) revert TemplErrors.InvalidProposal();
         Proposal storage proposal = proposals[_proposalId];
 
@@ -847,10 +848,7 @@ contract TemplGovernanceModule is TemplBase {
     function getActiveProposalsPaginated(
         uint256 offset,
         uint256 limit
-    ) external view returns (
-        uint256[] memory proposalIds,
-        bool hasMore
-    ) {
+    ) external view returns (uint256[] memory proposalIds, bool hasMore) {
         if (limit == 0 || limit > 100) revert TemplErrors.LimitOutOfRange();
         uint256 currentTime = block.timestamp;
         uint256 len = activeProposalIds.length;
@@ -937,8 +935,7 @@ contract TemplGovernanceModule is TemplBase {
         proposal.quorumReachedAt = 0;
         proposal.quorumExempt = false;
         if (
-            proposal.eligibleVoters != 0 &&
-            proposal.yesVotes * BPS_DENOMINATOR >= quorumBps * proposal.eligibleVoters
+            proposal.eligibleVoters != 0 && proposal.yesVotes * BPS_DENOMINATOR >= quorumBps * proposal.eligibleVoters
         ) {
             proposal.quorumReachedAt = block.timestamp;
             proposal.quorumSnapshotBlock = block.number;
@@ -987,5 +984,4 @@ contract TemplGovernanceModule is TemplBase {
             len = activeProposalIds.length;
         }
     }
-
 }

@@ -15,7 +15,7 @@ contract BatchExecutor {
         for (uint256 i = 0; i < len; i++) {
             address target = targets[i];
             if (target == address(0)) revert();
-            (bool success, bytes memory ret) = target.call{value: values[i]}(calldatas[i]);
+            (bool success, bytes memory ret) = target.call{ value: values[i] }(calldatas[i]);
             if (!success) {
                 assembly ("memory-safe") {
                     revert(add(ret, 32), mload(ret))
@@ -25,4 +25,3 @@ contract BatchExecutor {
         }
     }
 }
-

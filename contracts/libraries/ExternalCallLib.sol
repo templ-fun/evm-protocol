@@ -6,7 +6,7 @@ pragma solidity ^0.8.23;
 ///      bytecode size of the calling module.
 library ExternalCallLib {
     function perform(address target, uint256 value, bytes memory callData) public returns (bytes memory) {
-        (bool success, bytes memory ret) = target.call{value: value}(callData);
+        (bool success, bytes memory ret) = target.call{ value: value }(callData);
         if (!success) {
             assembly ("memory-safe") {
                 revert(add(ret, 32), mload(ret))
@@ -15,4 +15,3 @@ library ExternalCallLib {
         return ret;
     }
 }
-
