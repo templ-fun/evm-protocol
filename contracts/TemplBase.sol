@@ -114,6 +114,27 @@ abstract contract TemplBase is ReentrancyGuard {
         uint256 cumulative;
     }
 
+    // Reorder: ensure Action enum appears before Proposal struct for consistency
+    enum Action {
+        SetJoinPaused,
+        UpdateConfig,
+        WithdrawTreasury,
+        DisbandTreasury,
+        ChangePriest,
+        SetDictatorship,
+        SetMaxMembers,
+        SetMetadata,
+        SetProposalFee,
+        SetReferralShare,
+        CallExternal,
+        SetEntryFeeCurve,
+        CleanupExternalRewardToken,
+        SetQuorumBps,
+        SetPostQuorumVotingPeriod,
+        SetBurnAddress,
+        Undefined
+    }
+
     /// @notice Governance proposal payload and lifecycle state.
     struct Proposal {
         /// @notice Unique, monotonic proposal id.
@@ -225,25 +246,7 @@ abstract contract TemplBase is ReentrancyGuard {
     /// @notice Default pre‑quorum voting period applied when proposal creators pass zero.
     uint256 public preQuorumVotingPeriod;
 
-    enum Action {
-        SetJoinPaused,
-        UpdateConfig,
-        WithdrawTreasury,
-        DisbandTreasury,
-        ChangePriest,
-        SetDictatorship,
-        SetMaxMembers,
-        SetMetadata,
-        SetProposalFee,
-        SetReferralShare,
-        CallExternal,
-        SetEntryFeeCurve,
-        CleanupExternalRewardToken,
-        SetQuorumBps,
-        SetPostQuorumVotingPeriod,
-        SetBurnAddress,
-        Undefined
-    }
+    
 
     /// @notice Emitted after a successful join.
     /// @param payer Wallet that paid the entry fee.
@@ -396,6 +399,9 @@ abstract contract TemplBase is ReentrancyGuard {
     /// @param previousPeriod Previous default pre‑quorum voting period (seconds).
     /// @param newPeriod New default pre‑quorum voting period (seconds).
     event PreQuorumVotingPeriodUpdated(uint256 indexed previousPeriod, uint256 indexed newPeriod);
+    /// @notice Emitted when dictatorship mode is toggled.
+    /// @param enabled True when dictatorship is enabled, false when disabled.
+    event DictatorshipModeChanged(bool indexed enabled);
 
     struct ExternalRewardState {
         uint256 poolBalance;
@@ -441,9 +447,7 @@ abstract contract TemplBase is ReentrancyGuard {
         _;
     }
 
-    /// @notice Emitted when dictatorship mode is toggled.
-    /// @param enabled True when dictatorship is enabled, false when disabled.
-    event DictatorshipModeChanged(bool indexed enabled);
+    
 
     /// @notice Persists a new external reward checkpoint so future joins can baseline correctly.
     /// @param rewards External reward state to record a checkpoint for.
