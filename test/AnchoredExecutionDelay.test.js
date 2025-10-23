@@ -18,7 +18,7 @@ describe('Anchored execution delay after quorum', function () {
 
     const { membershipModule, treasuryModule, governanceModule } = await deployTemplModules();
 
-    // Use 7 days default execution delay (matching harness), that’s fine — we warp time.
+    // Use a short execution delay (2 seconds) and warp time across checks.
     const Templ = await ethers.getContractFactory('TEMPL');
     let templ = await Templ.deploy(
       priest.address,
@@ -66,7 +66,7 @@ describe('Anchored execution delay after quorum', function () {
     await templ.connect(memberB).join();
 
     const iface = templ.interface;
-    const func = iface.getFunction('setExecutionDelayAfterQuorumDAO');
+    const func = iface.getFunction('setPostQuorumVotingPeriodDAO');
     const selector = func.selector;
     const params = ethers.AbiCoder.defaultAbiCoder().encode(['uint256'], [100_000]);
     await templ

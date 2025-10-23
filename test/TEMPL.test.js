@@ -84,7 +84,7 @@ describe("TEMPL Contract with DAO Governance", function () {
             expect(await templDirect.memberPoolBps()).to.equal(2_000n);
             expect(await templDirect.protocolBps()).to.equal(1_000n);
             expect(await templDirect.quorumBps()).to.equal(3_500n);
-            expect(await templDirect.executionDelayAfterQuorum()).to.equal(12_345);
+            expect(await templDirect.postQuorumVotingPeriod()).to.equal(12_345);
             expect(await templDirect.burnAddress()).to.equal(customBurnAddress.toLowerCase());
         });
 
@@ -213,7 +213,7 @@ describe("TEMPL Contract with DAO Governance", function () {
             templZero = await attachTemplInterface(templZero);
 
             expect(await templZero.quorumBps()).to.equal(QUORUM_BPS);
-            expect(await templZero.executionDelayAfterQuorum()).to.equal(7 * 24 * 60 * 60);
+            expect(await templZero.postQuorumVotingPeriod()).to.equal(36 * 60 * 60);
             expect(await templZero.burnAddress()).to.equal("0x000000000000000000000000000000000000dEaD");
         });
 
@@ -451,7 +451,7 @@ describe("TEMPL Contract with DAO Governance", function () {
         it("Should enforce minimum voting period", async function () {
             await expect(templ.connect(user1).createProposalSetJoinPaused(
                 false,
-                6 * 24 * 60 * 60
+                35 * 60 * 60
             )).to.be.revertedWithCustomError(templ, "VotingPeriodTooShort");
         });
 
@@ -469,7 +469,7 @@ describe("TEMPL Contract with DAO Governance", function () {
                     ""
             );
             const proposal = await templ.proposals(0);
-            const defaultPeriod = await templ.DEFAULT_VOTING_PERIOD();
+            const defaultPeriod = await templ.preQuorumVotingPeriod();
             expect(proposal.endTime - proposal.createdAt).to.equal(defaultPeriod);
         });
 
@@ -684,7 +684,6 @@ describe("TEMPL Contract with DAO Governance", function () {
         it("Should execute config update proposal", async function () {
             const newFee = ethers.parseUnits("200", 18);
             const callData = encodeUpdateConfigDAO(
-                ethers.ZeroAddress, // Don't change token
                 newFee,
                 false,
                 0,
@@ -827,7 +826,6 @@ describe("TEMPL Contract with DAO Governance", function () {
 
         it("Should prevent config changes without DAO approval", async function () {
             await expect(templ.connect(priest).updateConfigDAO(
-                await token.getAddress(),
                 ethers.parseUnits("500", 18),
                 false,
                 0,

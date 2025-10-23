@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.23;
 
-import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import { TemplBase } from "./TemplBase.sol";
-import { TemplErrors } from "./TemplErrors.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {TemplBase} from "./TemplBase.sol";
+import {TemplErrors} from "./TemplErrors.sol";
 
 /// @title Templ Membership Module
 /// @notice Handles joins, reward accounting, and member-facing views.
@@ -93,7 +93,7 @@ contract TemplMembershipModule is TemplBase {
         joiningMember.joined = true;
         joiningMember.timestamp = block.timestamp;
         joiningMember.blockNumber = block.number;
-        
+
         uint256 sequence = ++joinSequence;
         memberCount = currentMemberCount + 1;
 
@@ -111,7 +111,7 @@ contract TemplMembershipModule is TemplBase {
 
         treasuryBalance += treasuryAmount;
         memberPoolBalance += distributablePool;
-        
+
         if (burnAmount > 0) {
             totalBurned += burnAmount;
         }
@@ -232,7 +232,7 @@ contract TemplMembershipModule is TemplBase {
         rewards.poolBalance = remaining - claimable;
 
         if (token == address(0)) {
-            (bool success, ) = payable(msg.sender).call{ value: claimable }("");
+            (bool success, ) = payable(msg.sender).call{value: claimable}("");
             if (!success) revert TemplErrors.ProposalExecutionFailed();
         } else {
             _safeTransfer(token, msg.sender, claimable);

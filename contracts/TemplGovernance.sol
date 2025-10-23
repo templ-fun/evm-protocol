@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.23;
-import { TemplBase } from "./TemplBase.sol";
-import { TemplErrors } from "./TemplErrors.sol";
-import { CurveConfig } from "./TemplCurve.sol";
+import {TemplBase} from "./TemplBase.sol";
+import {TemplErrors} from "./TemplErrors.sol";
+import {CurveConfig} from "./TemplCurve.sol";
 
 /// @title Templ Governance Module
 /// @notice Adds proposal creation, voting, and execution flows on top of treasury + membership logic.
@@ -43,7 +43,6 @@ contract TemplGovernanceModule is TemplBase {
     }
 
     /// @notice Opens a proposal to update entry fee and/or fee split configuration.
-    /// @param _token Optional replacement access token (must match current token or zero address).
     /// @param _newEntryFee Optional new entry fee (0 to keep current).
     /// @param _newBurnBps New burn share (bps) when `_updateFeeSplit` is true.
     /// @param _newTreasuryBps New treasury share (bps) when `_updateFeeSplit` is true.
@@ -54,7 +53,6 @@ contract TemplGovernanceModule is TemplBase {
     /// @param _description On-chain description for the proposal.
     /// @return proposalId Newly created proposal identifier.
     function createProposalUpdateConfig(
-        address _token,
         uint256 _newEntryFee,
         uint256 _newBurnBps,
         uint256 _newTreasuryBps,
@@ -75,7 +73,6 @@ contract TemplGovernanceModule is TemplBase {
         }
         (uint256 id, Proposal storage p) = _createBaseProposal(_votingPeriod, _title, _description);
         p.action = Action.UpdateConfig;
-        p.token = _token;
         p.newEntryFee = _newEntryFee;
         p.newBurnBps = _newBurnBps;
         p.newTreasuryBps = _newTreasuryBps;
@@ -156,14 +153,14 @@ contract TemplGovernanceModule is TemplBase {
         return id;
     }
 
-    /// @notice Opens a proposal to update the post-quorum execution delay in seconds.
-    /// @param _newDelaySeconds New delay (seconds) applied after quorum before execution.
+    /// @notice Opens a proposal to update the post‑quorum voting period in seconds.
+    /// @param _newPeriodSeconds New period (seconds) applied after quorum before execution.
     /// @param _votingPeriod Optional custom voting duration (seconds).
     /// @param _title On-chain title for the proposal.
     /// @param _description On-chain description for the proposal.
     /// @return proposalId Newly created proposal identifier.
-    function createProposalSetExecutionDelay(
-        uint256 _newDelaySeconds,
+    function createProposalSetPostQuorumVotingPeriod(
+        uint256 _newPeriodSeconds,
         uint256 _votingPeriod,
         string calldata _title,
         string calldata _description
@@ -171,8 +168,8 @@ contract TemplGovernanceModule is TemplBase {
         _requireDelegatecall();
         if (priestIsDictator) revert TemplErrors.DictatorshipEnabled();
         (uint256 id, Proposal storage p) = _createBaseProposal(_votingPeriod, _title, _description);
-        p.action = Action.SetExecutionDelay;
-        p.newExecutionDelay = _newDelaySeconds;
+        p.action = Action.SetPostQuorumVotingPeriod;
+        p.newPostQuorumVotingPeriod = _newPeriodSeconds;
         return id;
     }
 
@@ -293,8 +290,6 @@ contract TemplGovernanceModule is TemplBase {
         if (priestIsDictator) revert TemplErrors.DictatorshipEnabled();
         if (_target == address(0)) revert TemplErrors.InvalidRecipient();
         bytes memory callData = abi.encodePacked(_selector, _params);
-        // NOTE: External call proposals can execute arbitrary logic; frontends surface explicit warnings so
-        //       voters understand these actions may drain treasury funds or otherwise rug the templ.
         (uint256 id, Proposal storage p) = _createBaseProposal(_votingPeriod, _title, _description);
         p.action = Action.CallExternal;
         p.externalCallTarget = _target;
@@ -338,6 +333,8 @@ contract TemplGovernanceModule is TemplBase {
     /// @param _title On-chain title for the proposal.
     /// @param _description On-chain description for the proposal.
     /// @return proposalId Newly created proposal identifier.
+    /// @dev If the proposer is the `priest`, the proposal is quorum‑exempt to allow
+    ///      an otherwise inactive templ (insufficient turnout) to unwind with a simple majority.
     function createProposalDisbandTreasury(
         address _token,
         uint256 _votingPeriod,
@@ -349,8 +346,6 @@ contract TemplGovernanceModule is TemplBase {
         (uint256 id, Proposal storage p) = _createBaseProposal(_votingPeriod, _title, _description);
         p.action = Action.DisbandTreasury;
         p.token = _token;
-        // NOTE: Priest-initiated disband proposals intentionally bypass quorum to allow an inactive templ
-        //       (where turnout falls short of quorum) to unwind safely so long as a simple majority still votes yes.
         if (msg.sender == priest) {
             p.quorumExempt = true;
         }
@@ -421,6 +416,8 @@ contract TemplGovernanceModule is TemplBase {
     /// @notice Casts or updates a vote on a proposal.
     /// @param _proposalId Proposal id to vote on.
     /// @param _support True for YES, false for NO.
+    /// @dev Prior to quorum, eligibility is locked to the join sequence captured at proposal creation.
+    ///      Once quorum is reached, eligibility is re‑snapshotted to prevent later joins from swinging the vote.
     function vote(uint256 _proposalId, bool _support) external onlyMember {
         _requireDelegatecall();
         if (!(_proposalId < proposalCount)) revert TemplErrors.InvalidProposal();
@@ -474,9 +471,8 @@ contract TemplGovernanceModule is TemplBase {
                 proposal.quorumReachedAt = block.timestamp;
                 proposal.quorumSnapshotBlock = block.number;
                 proposal.postQuorumEligibleVoters = memberCount;
-                // Lock the join sequence to the current value so later joins cannot swing the vote.
                 proposal.quorumJoinSequence = joinSequence;
-                proposal.endTime = block.timestamp + executionDelayAfterQuorum;
+                proposal.endTime = block.timestamp + postQuorumVotingPeriod;
             }
         }
 
@@ -485,6 +481,8 @@ contract TemplGovernanceModule is TemplBase {
 
     /// @notice Executes a passed proposal after quorum (or voting) requirements are satisfied.
     /// @param _proposalId Proposal id to execute.
+    /// @dev For quorum‑gated proposals, the `endTime` captured at quorum anchors the post‑quorum voting window
+    ///      to prevent mid‑flight changes from affecting execution timing.
     function executeProposal(uint256 _proposalId) external nonReentrant {
         _requireDelegatecall();
         if (!(_proposalId < proposalCount)) revert TemplErrors.InvalidProposal();
@@ -501,8 +499,6 @@ contract TemplGovernanceModule is TemplBase {
             if (proposal.quorumReachedAt == 0) {
                 revert TemplErrors.QuorumNotReached();
             }
-            // Use the endTime captured at quorum to anchor the delay for this proposal,
-            // preventing mid-flight changes to executionDelayAfterQuorum from affecting it.
             if (block.timestamp < proposal.endTime) {
                 revert TemplErrors.ExecutionDelayActive();
             }
@@ -534,13 +530,11 @@ contract TemplGovernanceModule is TemplBase {
     /// @return returnData ABI-encoded return data for CallExternal actions, empty otherwise.
     function _executeActionInternal(uint256 _proposalId) internal returns (bytes memory returnData) {
         Proposal storage proposal = proposals[_proposalId];
-        if (proposal.action == Action.SetJoinPaused) {
-            _governanceSetJoinPaused(proposal.joinPaused);
-            return hex"";
+        if (proposal.action == Action.CallExternal) {
+            return _governanceCallExternal(proposal);
         }
         if (proposal.action == Action.UpdateConfig) {
             _governanceUpdateConfig(
-                proposal.token,
                 proposal.newEntryFee,
                 proposal.updateFeeSplit,
                 proposal.newBurnBps,
@@ -565,6 +559,14 @@ contract TemplGovernanceModule is TemplBase {
         }
         if (proposal.action == Action.ChangePriest) {
             _governanceChangePriest(proposal.recipient);
+            return hex"";
+        }
+        if (proposal.action == Action.CleanupExternalRewardToken) {
+            _governanceCleanupExternalRewardToken(proposal.token);
+            return hex"";
+        }
+        if (proposal.action == Action.SetJoinPaused) {
+            _governanceSetJoinPaused(proposal.joinPaused);
             return hex"";
         }
         if (proposal.action == Action.SetDictatorship) {
@@ -592,19 +594,12 @@ contract TemplGovernanceModule is TemplBase {
             _governanceSetEntryFeeCurve(curve2, proposal.curveBaseEntryFee);
             return hex"";
         }
-        if (proposal.action == Action.CallExternal) {
-            return _governanceCallExternal(proposal);
-        }
-        if (proposal.action == Action.CleanupExternalRewardToken) {
-            _governanceCleanupExternalRewardToken(proposal.token);
-            return hex"";
-        }
         if (proposal.action == Action.SetQuorumBps) {
             _governanceSetQuorumBps(proposal.newQuorumBps);
             return hex"";
         }
-        if (proposal.action == Action.SetExecutionDelay) {
-            _governanceSetExecutionDelay(proposal.newExecutionDelay);
+        if (proposal.action == Action.SetPostQuorumVotingPeriod) {
+            _governanceSetPostQuorumVotingPeriod(proposal.newPostQuorumVotingPeriod);
             return hex"";
         }
         if (proposal.action == Action.SetBurnAddress) {
@@ -621,21 +616,19 @@ contract TemplGovernanceModule is TemplBase {
     }
 
     /// @notice Governance wrapper that updates entry fee and/or fee splits.
-    /// @param _token Optional replacement access token.
     /// @param _entryFee Optional new entry fee.
     /// @param _updateFeeSplit Whether to apply the provided split values.
     /// @param _burnBps New burn share (bps) when applying split updates.
     /// @param _treasuryBps New treasury share (bps) when applying split updates.
     /// @param _memberPoolBps New member pool share (bps) when applying split updates.
     function _governanceUpdateConfig(
-        address _token,
         uint256 _entryFee,
         bool _updateFeeSplit,
         uint256 _burnBps,
         uint256 _treasuryBps,
         uint256 _memberPoolBps
     ) internal {
-        _updateConfig(_token, _entryFee, _updateFeeSplit, _burnBps, _treasuryBps, _memberPoolBps);
+        _updateConfig(_entryFee, _updateFeeSplit, _burnBps, _treasuryBps, _memberPoolBps);
     }
 
     /// @notice Governance wrapper that withdraws available treasury funds.
@@ -722,10 +715,10 @@ contract TemplGovernanceModule is TemplBase {
         _setQuorumBps(newQuorumBps);
     }
 
-    /// @notice Governance wrapper that updates post-quorum execution delay.
-    /// @param newDelay New delay in seconds.
-    function _governanceSetExecutionDelay(uint256 newDelay) internal {
-        _setExecutionDelayAfterQuorum(newDelay);
+    /// @notice Governance wrapper that updates the post‑quorum voting period.
+    /// @param newPeriod New period in seconds.
+    function _governanceSetPostQuorumVotingPeriod(uint256 newPeriod) internal {
+        _setPostQuorumVotingPeriod(newPeriod);
     }
 
     /// @notice Governance wrapper that updates the burn sink address.
@@ -743,7 +736,7 @@ contract TemplGovernanceModule is TemplBase {
         bytes memory callData = proposal.externalCallData;
         if (callData.length == 0) revert TemplErrors.InvalidCallData();
         uint256 callValue = proposal.externalCallValue;
-        (bool success, bytes memory _returndata) = target.call{ value: callValue }(callData);
+        (bool success, bytes memory _returndata) = target.call{value: callValue}(callData);
         if (!success) {
             assembly ("memory-safe") {
                 revert(add(_returndata, 32), mload(_returndata))
@@ -811,7 +804,7 @@ contract TemplGovernanceModule is TemplBase {
                 return false;
             }
         }
-        if (block.timestamp < proposal.quorumReachedAt + executionDelayAfterQuorum) {
+        if (block.timestamp < proposal.quorumReachedAt + postQuorumVotingPeriod) {
             return false;
         }
         return proposal.yesVotes > proposal.noVotes;
@@ -950,6 +943,10 @@ contract TemplGovernanceModule is TemplBase {
     /// @param _description On-chain description for the proposal.
     /// @return proposalId Newly created proposal id.
     /// @return proposal Storage reference to the created proposal.
+    /// @dev Captures a pre‑quorum snapshot (block, join sequence, eligible voters), applies a proposal fee
+    ///      when configured, and auto‑votes YES for the proposer. The voting period is clamped to
+    ///      `[MIN_PRE_QUORUM_VOTING_PERIOD, MAX_PRE_QUORUM_VOTING_PERIOD]` with `preQuorumVotingPeriod`
+    ///      applied when callers pass zero.
     function _createBaseProposal(
         uint256 _votingPeriod,
         string memory _title,
@@ -967,9 +964,9 @@ contract TemplGovernanceModule is TemplBase {
                 activeProposalId[msg.sender] = 0;
             }
         }
-        uint256 period = _votingPeriod == 0 ? DEFAULT_VOTING_PERIOD : _votingPeriod;
-        if (period < MIN_VOTING_PERIOD) revert TemplErrors.VotingPeriodTooShort();
-        if (period > MAX_VOTING_PERIOD) revert TemplErrors.VotingPeriodTooLong();
+        uint256 period = _votingPeriod == 0 ? preQuorumVotingPeriod : _votingPeriod;
+        if (period < MIN_PRE_QUORUM_VOTING_PERIOD) revert TemplErrors.VotingPeriodTooShort();
+        if (period > MAX_PRE_QUORUM_VOTING_PERIOD) revert TemplErrors.VotingPeriodTooLong();
         uint256 feeBps = proposalCreationFeeBps;
         if (feeBps > 0) {
             uint256 proposalFee = (entryFee * feeBps) / BPS_DENOMINATOR;
@@ -988,7 +985,6 @@ contract TemplGovernanceModule is TemplBase {
         proposal.title = _title;
         proposal.description = _description;
         proposal.preQuorumSnapshotBlock = block.number;
-        // Capture the join sequence so only existing members can vote prior to quorum.
         proposal.preQuorumJoinSequence = joinSequence;
         proposal.executed = false;
         proposal.hasVoted[msg.sender] = true;
@@ -1005,7 +1001,7 @@ contract TemplGovernanceModule is TemplBase {
             proposal.quorumSnapshotBlock = block.number;
             proposal.postQuorumEligibleVoters = proposal.eligibleVoters;
             proposal.quorumJoinSequence = proposal.preQuorumJoinSequence;
-            proposal.endTime = block.timestamp + executionDelayAfterQuorum;
+            proposal.endTime = block.timestamp + postQuorumVotingPeriod;
         }
         _addActiveProposal(proposalId);
         hasActiveProposal[msg.sender] = true;

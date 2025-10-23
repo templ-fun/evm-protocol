@@ -244,7 +244,6 @@ describe("Membership coverage extras", function () {
     await templ
       .connect(memberA)
       .createProposalUpdateConfig(
-        tokenAddress,
         0,
         4_000,
         2_000,
@@ -426,7 +425,6 @@ describe("Membership coverage extras", function () {
     await templ
       .connect(memberA)
       .createProposalUpdateConfig(
-        ethers.ZeroAddress,
         newEntryFee,
         3100,
         3100,
@@ -538,7 +536,7 @@ describe("Membership coverage extras", function () {
       .createProposalSetProposalFeeBps(feeBps, VOTING_PERIOD, "Enable fee", "Charge proposal fee");
     const proposalId = (await templ.proposalCount()) - 1n;
     await templ.connect(voter).vote(proposalId, true);
-    const delay = Number(await templ.executionDelayAfterQuorum());
+    const delay = Number(await templ.postQuorumVotingPeriod());
     await ethers.provider.send("evm_increaseTime", [delay + 1]);
     await ethers.provider.send("evm_mine", []);
     await templ.executeProposal(proposalId);
@@ -583,7 +581,7 @@ describe("Membership coverage extras", function () {
       .createProposalSetReferralShareBps(referralShare, VOTING_PERIOD, "Set referral", "Enable referral payouts");
     const referralProposalId = (await templ.proposalCount()) - 1n;
     await templ.connect(voter).vote(referralProposalId, true);
-    const delay = Number(await templ.executionDelayAfterQuorum());
+    const delay = Number(await templ.postQuorumVotingPeriod());
     await ethers.provider.send("evm_increaseTime", [delay + 1]);
     await ethers.provider.send("evm_mine", []);
     await templ.executeProposal(referralProposalId);

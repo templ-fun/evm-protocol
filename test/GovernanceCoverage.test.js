@@ -32,7 +32,6 @@ describe("Governance coverage gaps", function () {
       templ
         .connect(outsider)
       .createProposalUpdateConfig(
-        ethers.ZeroAddress,
         0,
         0,
         0,
@@ -82,7 +81,6 @@ describe("Governance coverage gaps", function () {
     await templ
       .connect(secondMember)
       .createProposalUpdateConfig(
-        ethers.ZeroAddress,
         0,
         0,
         0,
@@ -99,7 +97,6 @@ describe("Governance coverage gaps", function () {
     await templ
       .connect(thirdMember)
       .createProposalUpdateConfig(
-        ethers.ZeroAddress,
         0,
         2000,
         2000,
@@ -141,7 +138,7 @@ describe("Governance coverage gaps", function () {
     const proposalId = (await templ.proposalCount()) - 1n;
 
     await templ.connect(memberB).vote(proposalId, true);
-    const delay = Number(await templ.executionDelayAfterQuorum());
+    const delay = Number(await templ.postQuorumVotingPeriod());
     await ethers.provider.send("evm_increaseTime", [delay + 1]);
     await ethers.provider.send("evm_mine", []);
 
@@ -192,7 +189,7 @@ describe("Governance coverage gaps", function () {
     const proposalId = (await templ.proposalCount()) - 1n;
 
     await templ.connect(memberB).vote(proposalId, true);
-    const delay = Number(await templ.executionDelayAfterQuorum());
+    const delay = Number(await templ.postQuorumVotingPeriod());
     await ethers.provider.send("evm_increaseTime", [delay + 1]);
     await ethers.provider.send("evm_mine", []);
 
@@ -216,7 +213,7 @@ describe("Governance coverage gaps", function () {
       .createProposalSetProposalFeeBps(500, VOTING_PERIOD, "Set proposal fee", "Increase proposal cost");
     const proposalFeeId = (await templ.proposalCount()) - 1n;
     await templ.connect(memberB).vote(proposalFeeId, true);
-    const delay = Number(await templ.executionDelayAfterQuorum());
+    const delay = Number(await templ.postQuorumVotingPeriod());
     await ethers.provider.send("evm_increaseTime", [delay + 1]);
     await ethers.provider.send("evm_mine", []);
     await templ.executeProposal(proposalFeeId);
@@ -250,7 +247,6 @@ describe("Governance coverage gaps", function () {
     await templ
       .connect(member)
       .createProposalUpdateConfig(
-        ethers.ZeroAddress,
         0,
         0,
         0,
@@ -326,7 +322,7 @@ describe("Governance coverage gaps", function () {
     expect(await templ.hasActiveProposal(priest.address)).to.equal(true);
 
     await templ.connect(voter).vote(1, true);
-    const delay = Number(await templ.executionDelayAfterQuorum());
+    const delay = Number(await templ.postQuorumVotingPeriod());
     await ethers.provider.send("evm_increaseTime", [delay + 1]);
     await ethers.provider.send("evm_mine", []);
     await templ.executeProposal(1);
@@ -377,7 +373,7 @@ describe("Governance coverage gaps", function () {
 
     await templ.connect(member).createProposalSetJoinPaused(false, VOTING_PERIOD);
     await templ.connect(voter).vote(0, true);
-    const delay = Number(await templ.executionDelayAfterQuorum());
+    const delay = Number(await templ.postQuorumVotingPeriod());
     await ethers.provider.send("evm_increaseTime", [delay + 1]);
     await ethers.provider.send("evm_mine", []);
     await templ.executeProposal(0);

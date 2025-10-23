@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.23;
 
-import { TEMPL } from "../TEMPL.sol";
-import { TemplMembershipModule } from "../TemplMembership.sol";
-import { TemplTreasuryModule } from "../TemplTreasury.sol";
-import { TemplGovernanceModule } from "../TemplGovernance.sol";
-import { CurveConfig, CurveSegment, CurveStyle } from "../TemplCurve.sol";
-import { TestToken } from "../mocks/TestToken.sol";
+import {TEMPL} from "../TEMPL.sol";
+import {TemplMembershipModule} from "../TemplMembership.sol";
+import {TemplTreasuryModule} from "../TemplTreasury.sol";
+import {TemplGovernanceModule} from "../TemplGovernance.sol";
+import {CurveConfig, CurveSegment, CurveStyle} from "../TemplCurve.sol";
+import {TestToken} from "../mocks/TestToken.sol";
 
 /// @title EchidnaTemplHarness
 /// @notice Echidna property-based fuzzing harness for TEMPL.
@@ -39,7 +39,7 @@ contract EchidnaTemplHarness {
 
         // Exponential curve with 11_000 bps growth, infinite tail
         CurveConfig memory curve;
-        curve.primary = CurveSegment({ style: CurveStyle.Exponential, rateBps: 11_000, length: 0 });
+        curve.primary = CurveSegment({style: CurveStyle.Exponential, rateBps: 11_000, length: 0});
         // no additional segments
 
         // Deploy TEMPL root contract

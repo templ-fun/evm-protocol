@@ -15,19 +15,7 @@ yarn-error.log*
 *~
 .DS_Store
 
-# Sessions
-sessions/
-*.session
-
-# Docker volumes
-redis_data/
-
-# Backend runtime files
-backend/groups.db
-.cloudflare.env
-backend/wrangler.deployment.toml
-
-# Build
+# Build artifacts
 dist/
 build/
 
@@ -37,32 +25,10 @@ cache/
 crytic-export/
 deployments/
 
-# State files
-.monitor-state.json
+# Coverage and reports
+coverage/
+coverage.json
+.solhint-report.txt
 
 # Test outputs
 test-results/
-frontend/test-results/
-backend/e2e-groups.db*
-coverage/
-frontend/coverage/
-backend/coverage/
-backend/**/*.db3*
-xmtp-*.db3*
-backend/.data/
-backend/local-templ.db*
-frontend/.vitest-cache/
-frontend/.vite-cache/
-frontend/npm-cache/
-frontend/pw-dist/
-frontend/pw-results/
-
-# Root coverage artifact
-coverage.json
-
-# Local logs
-backend-test.log
-backend.test.log
-
-# AI
-.claude

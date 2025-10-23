@@ -216,7 +216,7 @@ async function fetchContractSnapshot(contract) {
     memberPoolBps: await safeCall(contract, 'memberPoolBps'),
     protocolBps: await safeCall(contract, 'protocolBps'),
     quorumBps: await safeCall(contract, 'quorumBps'),
-    executionDelayAfterQuorum: await safeCall(contract, 'executionDelayAfterQuorum'),
+    postQuorumVotingPeriod: await safeCall(contract, 'postQuorumVotingPeriod'),
     burnAddress: await safeCall(contract, 'burnAddress'),
     priestIsDictator: await safeCall(contract, 'priestIsDictator', (value) => Boolean(value)),
     maxMembers: await safeCall(contract, 'maxMembers'),
@@ -226,9 +226,9 @@ async function fetchContractSnapshot(contract) {
     proposalCreationFeeBps: await safeCall(contract, 'proposalCreationFeeBps'),
     referralShareBps: await safeCall(contract, 'referralShareBps'),
     // Module wiring (immutable in TEMPL constructor)
-    membershipModule: await safeCall(contract, 'membershipModule'),
-    treasuryModule: await safeCall(contract, 'treasuryModule'),
-    governanceModule: await safeCall(contract, 'governanceModule'),
+    membershipModule: await safeCall(contract, 'MEMBERSHIP_MODULE'),
+    treasuryModule: await safeCall(contract, 'TREASURY_MODULE'),
+    governanceModule: await safeCall(contract, 'GOVERNANCE_MODULE'),
     entryFeeCurve: await safeCall(contract, 'entryFeeCurve', normalizeCurveValue)
   };
 }
@@ -320,7 +320,7 @@ async function fetchEventSnapshot({ provider, factoryAddress, templAddress, from
           treasuryBps: toSerializable(args.treasuryBps),
           memberPoolBps: toSerializable(args.memberPoolBps),
           quorumBps: toSerializable(args.quorumBps),
-          executionDelayAfterQuorum: toSerializable(args.executionDelaySeconds),
+          postQuorumVotingPeriod: toSerializable(args.executionDelaySeconds),
           burnAddress: args.burnAddress,
           priestIsDictator: Boolean(args.priestIsDictator),
           maxMembers: toSerializable(args.maxMembers),
@@ -387,7 +387,7 @@ async function main() {
     treasuryBps: readCliOption(process.argv, ['--treasury-bps']),
     memberBps: readCliOption(process.argv, ['--member-bps']),
     quorumBps: readCliOption(process.argv, ['--quorum-bps']),
-    executionDelay: readCliOption(process.argv, ['--execution-delay', '--execution-delay-seconds']),
+    postQuorum: readCliOption(process.argv, ['--post-quorum-voting-period', '--post-quorum-seconds', '--post-quorum']),
     burnAddress: readCliOption(process.argv, ['--burn-address']),
     priestIsDictator: readCliOption(process.argv, ['--dictator', '--priest-is-dictator']),
     maxMembers: readCliOption(process.argv, ['--max-members']),
@@ -416,7 +416,7 @@ async function main() {
     treasuryBps: resolveBpsLike({ bpsValues: [cliOverrides.treasuryBps, process.env.TREASURY_BPS] }),
     memberPoolBps: resolveBpsLike({ bpsValues: [cliOverrides.memberBps, process.env.MEMBER_POOL_BPS] }),
     quorumBps: resolveBpsLike({ bpsValues: [cliOverrides.quorumBps, process.env.QUORUM_BPS] }),
-    executionDelayAfterQuorum: firstDefined([cliOverrides.executionDelay, process.env.EXECUTION_DELAY_SECONDS]),
+    postQuorumVotingPeriod: firstDefined([cliOverrides.postQuorum, process.env.POST_QUORUM_VOTING_PERIOD_SECONDS]),
     burnAddress: firstDefined([cliOverrides.burnAddress, process.env.BURN_ADDRESS]),
     priestIsDictator: firstDefined([
       resolveBoolean(cliOverrides.priestIsDictator),
@@ -497,11 +497,11 @@ async function main() {
       overrideValue: envOverrides.quorumBps,
       normalizer: (value) => toSerializable(value)
     }),
-    executionDelayAfterQuorum: resolveField({
-      label: 'executionDelayAfterQuorum',
-      contractValue: contractSnapshot.executionDelayAfterQuorum,
-      eventValue: eventSnapshot?.executionDelayAfterQuorum,
-      overrideValue: envOverrides.executionDelayAfterQuorum,
+    postQuorumVotingPeriod: resolveField({
+      label: 'postQuorumVotingPeriod',
+      contractValue: contractSnapshot.postQuorumVotingPeriod,
+      eventValue: eventSnapshot?.postQuorumVotingPeriod,
+      overrideValue: envOverrides.postQuorumVotingPeriod,
       normalizer: (value) => toSerializable(value)
     }),
     burnAddress: resolveField({
@@ -654,7 +654,7 @@ async function main() {
     constructorArgs.memberPoolBps,
     constructorArgs.protocolBps,
     constructorArgs.quorumBps,
-    constructorArgs.executionDelayAfterQuorum,
+    constructorArgs.postQuorumVotingPeriod,
     constructorArgs.burnAddress,
     constructorArgs.priestIsDictator,
     constructorArgs.maxMembers,

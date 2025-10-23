@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.23;
 
-import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
-import { TemplErrors } from "./TemplErrors.sol";
-import { CurveConfig, CurveSegment, CurveStyle } from "./TemplCurve.sol";
-import { TemplDefaults } from "./TemplDefaults.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {TemplErrors} from "./TemplErrors.sol";
+import {CurveConfig, CurveSegment, CurveStyle} from "./TemplCurve.sol";
+import {TemplDefaults} from "./TemplDefaults.sol";
 
 /// @title Base Templ Storage and Helpers
 /// @notice Hosts shared state, events, and internal helpers used by membership, treasury, and governance modules.
@@ -20,7 +20,7 @@ abstract contract TemplBase is ReentrancyGuard {
     /// @dev Default quorum threshold (basis points) applied when callers pass zero into constructors.
     uint256 internal constant DEFAULT_QUORUM_BPS = TemplDefaults.DEFAULT_QUORUM_BPS;
     /// @dev Default post-quorum execution delay used when deployers do not override it.
-    uint256 internal constant DEFAULT_EXECUTION_DELAY = TemplDefaults.DEFAULT_EXECUTION_DELAY;
+    uint256 internal constant DEFAULT_POST_QUORUM_VOTING_PERIOD = TemplDefaults.DEFAULT_EXECUTION_DELAY;
     /// @dev Default burn address used when deployers do not provide a custom sink.
     address internal constant DEFAULT_BURN_ADDRESS = TemplDefaults.DEFAULT_BURN_ADDRESS;
     /// @dev Caps the number of external reward tokens tracked to keep join gas bounded.
@@ -63,7 +63,7 @@ abstract contract TemplBase is ReentrancyGuard {
     /// @notice YES vote threshold required to satisfy quorum (basis points).
     uint256 public quorumBps;
     /// @notice Seconds governance must wait after quorum before executing a proposal.
-    uint256 public executionDelayAfterQuorum;
+    uint256 public postQuorumVotingPeriod;
     /// @notice Address that receives burn allocations.
     address public burnAddress;
     /// @notice Templ metadata surfaced across UIs and off-chain services.
@@ -158,8 +158,8 @@ abstract contract TemplBase is ReentrancyGuard {
         uint256 newMaxMembers;
         /// @notice Quorum threshold proposed (bps). Accepts 0-100 or 0-10_000 format.
         uint256 newQuorumBps;
-        /// @notice Execution delay proposed (seconds) after quorum is reached.
-        uint256 newExecutionDelay;
+        /// @notice Post‑quorum voting period proposed (seconds) after quorum is reached.
+        uint256 newPostQuorumVotingPeriod;
         /// @notice Burn address proposed to receive burn allocations.
         address newBurnAddress;
         /// @notice Target contract invoked when executing an external call proposal.
@@ -218,12 +218,12 @@ abstract contract TemplBase is ReentrancyGuard {
     mapping(address => bool) public hasActiveProposal;
     uint256[] internal activeProposalIds;
     mapping(uint256 => uint256) internal activeProposalIndex;
-    /// @notice Default voting period applied when not specified by callers.
-    uint256 public constant DEFAULT_VOTING_PERIOD = 7 days;
-    /// @notice Minimum allowed voting period.
-    uint256 public constant MIN_VOTING_PERIOD = 7 days;
-    /// @notice Maximum allowed voting period.
-    uint256 public constant MAX_VOTING_PERIOD = 30 days;
+    /// @notice Minimum allowed pre‑quorum voting period.
+    uint256 public constant MIN_PRE_QUORUM_VOTING_PERIOD = 36 hours;
+    /// @notice Maximum allowed pre‑quorum voting period.
+    uint256 public constant MAX_PRE_QUORUM_VOTING_PERIOD = 30 days;
+    /// @notice Default pre‑quorum voting period applied when proposal creators pass zero.
+    uint256 public preQuorumVotingPeriod;
 
     enum Action {
         SetJoinPaused,
@@ -240,7 +240,7 @@ abstract contract TemplBase is ReentrancyGuard {
         SetEntryFeeCurve,
         CleanupExternalRewardToken,
         SetQuorumBps,
-        SetExecutionDelay,
+        SetPostQuorumVotingPeriod,
         SetBurnAddress,
         Undefined
     }
@@ -384,14 +384,18 @@ abstract contract TemplBase is ReentrancyGuard {
     /// @param previousBps Previous quorum threshold (bps).
     /// @param newBps New quorum threshold (bps).
     event QuorumBpsUpdated(uint256 indexed previousBps, uint256 indexed newBps);
-    /// @notice Emitted when the post-quorum execution delay is updated via governance.
-    /// @param previousDelay Previous delay (seconds).
-    /// @param newDelay New delay (seconds).
-    event ExecutionDelayAfterQuorumUpdated(uint256 indexed previousDelay, uint256 indexed newDelay);
+    /// @notice Emitted when the post‑quorum voting period is updated via governance.
+    /// @param previousPeriod Previous period (seconds).
+    /// @param newPeriod New period (seconds).
+    event PostQuorumVotingPeriodUpdated(uint256 indexed previousPeriod, uint256 indexed newPeriod);
     /// @notice Emitted when the burn address is updated via governance.
     /// @param previousBurn Previous burn sink address.
     /// @param newBurn New burn sink address.
     event BurnAddressUpdated(address indexed previousBurn, address indexed newBurn);
+    /// @notice Emitted when the default pre‑quorum voting period is updated.
+    /// @param previousPeriod Previous default pre‑quorum voting period (seconds).
+    /// @param newPeriod New default pre‑quorum voting period (seconds).
+    event PreQuorumVotingPeriodUpdated(uint256 indexed previousPeriod, uint256 indexed newPeriod);
 
     struct ExternalRewardState {
         uint256 poolBalance;
@@ -417,7 +421,6 @@ abstract contract TemplBase is ReentrancyGuard {
 
     /// @dev Permits calls from the contract (governance) or the priest when dictatorship mode is enabled.
     modifier onlyDAO() {
-        // NOTE: Dictatorship mode deliberately grants the priest direct access to DAO functions.
         if (priestIsDictator) {
             if (msg.sender != address(this) && msg.sender != priest) revert TemplErrors.PriestOnly();
         } else if (msg.sender != address(this)) {
@@ -560,6 +563,7 @@ abstract contract TemplBase is ReentrancyGuard {
     /// @param _logoLink Initial templ logo link.
     /// @param _proposalCreationFeeBps Proposal creation fee in basis points of the entry fee.
     /// @param _referralShareBps Referral share in basis points of the member pool allocation.
+    /// @dev Also initializes the default `preQuorumVotingPeriod` to `MIN_PRE_QUORUM_VOTING_PERIOD`.
     function _initializeTempl(
         address _protocolFeeRecipient,
         address _accessToken,
@@ -613,11 +617,12 @@ abstract contract TemplBase is ReentrancyGuard {
             quorumBps = normalizedQuorum;
         }
 
-        executionDelayAfterQuorum = _executionDelay == 0 ? DEFAULT_EXECUTION_DELAY : _executionDelay;
+        postQuorumVotingPeriod = _executionDelay == 0 ? DEFAULT_POST_QUORUM_VOTING_PERIOD : _executionDelay;
         burnAddress = _burnAddress == address(0) ? DEFAULT_BURN_ADDRESS : _burnAddress;
         _setTemplMetadata(_name, _description, _logoLink);
         _setProposalCreationFee(_proposalCreationFeeBps);
         _setReferralShareBps(_referralShareBps);
+        preQuorumVotingPeriod = MIN_PRE_QUORUM_VOTING_PERIOD;
     }
 
     /// @notice Updates the split between burn, treasury, and member pool slices.
@@ -1101,12 +1106,12 @@ abstract contract TemplBase is ReentrancyGuard {
         emit QuorumBpsUpdated(previous, normalized);
     }
 
-    /// @notice Updates the post-quorum execution delay in seconds.
-    /// @param newDelay New delay (seconds) applied after quorum before execution.
-    function _setExecutionDelayAfterQuorum(uint256 newDelay) internal {
-        uint256 previous = executionDelayAfterQuorum;
-        executionDelayAfterQuorum = newDelay;
-        emit ExecutionDelayAfterQuorumUpdated(previous, newDelay);
+    /// @notice Updates the post‑quorum voting period in seconds.
+    /// @param newPeriod New period (seconds) applied after quorum before execution.
+    function _setPostQuorumVotingPeriod(uint256 newPeriod) internal {
+        uint256 previous = postQuorumVotingPeriod;
+        postQuorumVotingPeriod = newPeriod;
+        emit PostQuorumVotingPeriodUpdated(previous, newPeriod);
     }
 
     /// @notice Updates the burn sink address.
@@ -1116,6 +1121,17 @@ abstract contract TemplBase is ReentrancyGuard {
         address previous = burnAddress;
         burnAddress = newBurn;
         emit BurnAddressUpdated(previous, newBurn);
+    }
+
+    /// @notice Updates the default pre‑quorum voting period used when proposals do not supply one.
+    /// @param newPeriod New default pre‑quorum voting period (seconds).
+    function _setPreQuorumVotingPeriod(uint256 newPeriod) internal {
+        if (newPeriod < MIN_PRE_QUORUM_VOTING_PERIOD || newPeriod > MAX_PRE_QUORUM_VOTING_PERIOD) {
+            revert TemplErrors.InvalidCallData();
+        }
+        uint256 previous = preQuorumVotingPeriod;
+        preQuorumVotingPeriod = newPeriod;
+        emit PreQuorumVotingPeriodUpdated(previous, newPeriod);
     }
 
     /// @notice Executes a treasury withdrawal and emits the corresponding event.
@@ -1149,7 +1165,7 @@ abstract contract TemplBase is ReentrancyGuard {
             uint256 reservedForMembers = rewards.poolBalance;
             uint256 availableBalance = currentBalance > reservedForMembers ? currentBalance - reservedForMembers : 0;
             if (amount > availableBalance) revert TemplErrors.InsufficientTreasuryBalance();
-            (bool success, ) = payable(recipient).call{ value: amount }("");
+            (bool success, ) = payable(recipient).call{value: amount}("");
             if (!success) revert TemplErrors.ProposalExecutionFailed();
         } else {
             ExternalRewardState storage rewards = externalRewards[token];
@@ -1163,21 +1179,20 @@ abstract contract TemplBase is ReentrancyGuard {
     }
 
     /// @notice Applies updates to the entry fee and/or fee split configuration.
-    /// @param _token New access token (must equal current token or be zero to keep unchanged).
+    /// @dev The access token, protocol recipient, and protocol basis points are immutable
+    ///      post-deploy and cannot be changed via this update.
     /// @param _entryFee Optional new entry fee (0 keeps current).
     /// @param _updateFeeSplit Whether to apply the new split values.
     /// @param _burnBps New burn share (bps) when `_updateFeeSplit` is true.
     /// @param _treasuryBps New treasury share (bps) when `_updateFeeSplit` is true.
     /// @param _memberPoolBps New member pool share (bps) when `_updateFeeSplit` is true.
     function _updateConfig(
-        address _token,
         uint256 _entryFee,
         bool _updateFeeSplit,
         uint256 _burnBps,
         uint256 _treasuryBps,
         uint256 _memberPoolBps
     ) internal {
-        if (_token != address(0) && _token != accessToken) revert TemplErrors.TokenChangeDisabled();
         if (_entryFee > 0) {
             _setCurrentEntryFee(_entryFee);
         }

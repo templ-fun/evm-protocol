@@ -123,7 +123,7 @@ describe("TemplFactory", function () {
         expect(await templ.treasuryBps()).to.equal(BigInt(treasuryBps));
         expect(await templ.memberPoolBps()).to.equal(BigInt(memberPoolBps));
         expect(await templ.quorumBps()).to.equal(BigInt(quorumBps));
-        expect(await templ.executionDelayAfterQuorum()).to.equal(executionDelaySeconds);
+        expect(await templ.postQuorumVotingPeriod()).to.equal(executionDelaySeconds);
         expect(await templ.burnAddress()).to.equal(customBurnAddress);
         expect(await templ.maxMembers()).to.equal(0n);
         expect(await templ.templName()).to.equal(DEFAULT_METADATA.name);
@@ -358,7 +358,7 @@ describe("TemplFactory", function () {
     expect(await templ.memberPoolBps()).to.equal(1_500n);
     expect(await templ.protocolBps()).to.equal(BigInt(protocolBps));
     expect(await templ.quorumBps()).to.equal(3_300n);
-    expect(await templ.executionDelayAfterQuorum()).to.equal(7n * 24n * 60n * 60n);
+    expect(await templ.postQuorumVotingPeriod()).to.equal(36n * 60n * 60n);
     expect(await templ.burnAddress()).to.equal("0x000000000000000000000000000000000000dEaD");
   });
 
@@ -496,7 +496,7 @@ describe("TemplFactory", function () {
         expect(await templ.protocolFeeRecipient()).to.equal(protocolRecipient.address);
         expect(await templ.protocolBps()).to.equal(BigInt(pct(10)));
         expect(await templ.quorumBps()).to.equal(BigInt(pct(33)));
-        expect(await templ.executionDelayAfterQuorum()).to.equal(7 * 24 * 60 * 60);
+        expect(await templ.postQuorumVotingPeriod()).to.equal(36 * 60 * 60);
         expect(await templ.burnAddress()).to.equal("0x000000000000000000000000000000000000dEaD");
         expect(await templ.maxMembers()).to.equal(249n);
 
@@ -513,15 +513,15 @@ describe("TemplFactory", function () {
         const curveStyles = templCreated.args.curveStyles.map((value) => Number(value));
         const curveRates = templCreated.args.curveRateBps.map((value) => Number(value));
         const curveLengths = templCreated.args.curveLengths.map((value) => Number(value));
-        expect(curveStyles).to.deep.equal([CURVE_STYLE.Exponential]);
-        expect(curveRates).to.deep.equal([11_000]);
-        expect(curveLengths).to.deep.equal([0]);
+        expect(curveStyles).to.deep.equal([CURVE_STYLE.Exponential, CURVE_STYLE.Static]);
+        expect(curveRates).to.deep.equal([10_094, 0]);
+        expect(curveLengths).to.deep.equal([248, 0]);
 
         await mintToUsers(token, [joiner], ENTRY_FEE * 5n);
         await token.connect(joiner).approve(templAddress, ENTRY_FEE);
         await templ.connect(joiner).join();
 
-        const expectedNextFee = (ENTRY_FEE * 11_000n) / 10_000n;
+        const expectedNextFee = (ENTRY_FEE * 10_094n) / 10_000n;
         expect(await templ.entryFee()).to.equal(expectedNextFee);
     });
 
@@ -573,9 +573,9 @@ describe("TemplFactory", function () {
         const styles = templCreated.args.curveStyles.map((value) => Number(value));
         const rates = templCreated.args.curveRateBps.map((value) => Number(value));
         const lengths = templCreated.args.curveLengths.map((value) => Number(value));
-        expect(styles).to.deep.equal([CURVE_STYLE.Exponential]);
-        expect(rates).to.deep.equal([11_000]);
-        expect(lengths).to.deep.equal([0]);
+        expect(styles).to.deep.equal([CURVE_STYLE.Exponential, CURVE_STYLE.Static]);
+        expect(rates).to.deep.equal([10_094, 0]);
+        expect(lengths).to.deep.equal([248, 0]);
     });
 
   it("reuses the immutable protocol configuration for every templ", async function () {
@@ -643,6 +643,67 @@ describe("TemplFactory", function () {
     expect(await secondTempl.protocolFeeRecipient()).to.equal(protocolRecipient.address);
     expect(await firstTempl.protocolBps()).to.equal(BigInt(protocolBps));
     expect(await secondTempl.protocolBps()).to.equal(BigInt(protocolBps));
+  });
+
+  it("does not allow changing access token via updateConfig (ignored)", async function () {
+    const [, priest, protocolRecipient, member] = await ethers.getSigners();
+    const tokenA = await deployToken("TokenA", "TKA");
+    const tokenB = await deployToken("TokenB", "TKB");
+
+    const Factory = await ethers.getContractFactory("TemplFactory");
+    const protocolBps = pct(10);
+    const factory = await Factory.deploy((await ethers.getSigners())[0].address, protocolRecipient.address, protocolBps, modules.membershipModule, modules.treasuryModule, modules.governanceModule);
+    await factory.waitForDeployment();
+
+    const templAddress = await factory.createTemplFor.staticCall(
+      priest.address,
+      await tokenA.getAddress(),
+      ENTRY_FEE,
+      DEFAULT_METADATA.name,
+      DEFAULT_METADATA.description,
+      DEFAULT_METADATA.logoLink,
+      0,
+      0
+    );
+    await factory.createTemplFor(
+      priest.address,
+      await tokenA.getAddress(),
+      ENTRY_FEE,
+      DEFAULT_METADATA.name,
+      DEFAULT_METADATA.description,
+      DEFAULT_METADATA.logoLink,
+      0,
+      0
+    );
+    const templ = await getTemplAt(templAddress, ethers.provider);
+
+    // Join a member for governance
+    await mintToUsers(tokenA, [member], ENTRY_FEE * 2n);
+    await tokenA.connect(member).approve(templAddress, ENTRY_FEE);
+    await templ.connect(member).join();
+
+    // Propose update config attempting to change token to tokenB (should be ignored)
+    await templ
+      .connect(member)
+      .createProposalUpdateConfig(
+        0,
+        0,
+        0,
+        0,
+        false,
+        36 * 60 * 60,
+        "Ignore token change",
+        "Token immutable"
+      );
+    const pid = (await templ.proposalCount()) - 1n;
+    await templ.connect(member).vote(pid, true);
+    const delay = Number(await templ.postQuorumVotingPeriod());
+    await ethers.provider.send("evm_increaseTime", [delay + 1]);
+    await ethers.provider.send("evm_mine", []);
+    await expect(templ.connect(member).executeProposal(pid)).to.not.be.reverted;
+
+    // Access token remains unchanged
+    expect(await templ.accessToken()).to.equal(await tokenA.getAddress());
   });
 
     it("reverts when deployed with zero protocol recipient", async function () {
@@ -803,7 +864,7 @@ describe("TemplFactory", function () {
 
         expect(await templ.priest()).to.equal(deployer.address);
         expect(await templ.quorumBps()).to.equal(BigInt(pct(33)));
-        expect(await templ.executionDelayAfterQuorum()).to.equal(7 * 24 * 60 * 60);
+        expect(await templ.postQuorumVotingPeriod()).to.equal(36 * 60 * 60);
         expect(await templ.burnAddress()).to.equal("0x000000000000000000000000000000000000dEaD");
         expect(await templ.burnBps()).to.equal(BigInt(pct(30)));
         expect(await templ.treasuryBps()).to.equal(BigInt(pct(30)));
@@ -843,7 +904,7 @@ describe("TemplFactory", function () {
         const templ = await getTemplAt(templAddress, ethers.provider);
 
         expect(await templ.quorumBps()).to.equal(BigInt(pct(33)));
-        expect(await templ.executionDelayAfterQuorum()).to.equal(7n * 24n * 60n * 60n);
+        expect(await templ.postQuorumVotingPeriod()).to.equal(36n * 60n * 60n);
         expect(await templ.burnAddress()).to.equal("0x000000000000000000000000000000000000dEaD");
     });
 

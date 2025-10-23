@@ -1,21 +1,19 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.23;
 
-import { TEMPL } from "./TEMPL.sol";
-import { TemplErrors } from "./TemplErrors.sol";
-import { CurveConfig, CurveSegment, CurveStyle } from "./TemplCurve.sol";
-import { TemplDefaults } from "./TemplDefaults.sol";
+import {TEMPL} from "./TEMPL.sol";
+import {TemplErrors} from "./TemplErrors.sol";
+import {CurveConfig, CurveSegment, CurveStyle} from "./TemplCurve.sol";
+import {TemplDefaults} from "./TemplDefaults.sol";
 
 /// @title Templ Factory
 /// @notice Deploys Templ contracts with shared protocol configuration and optional custom splits.
+/// @dev Default burn/treasury/member shares assume a factory protocol share of 1,000 bps (10%).
+///      If `PROTOCOL_BPS` differs, either pass explicit splits to `createTemplWithConfig` or
+///      adjust the defaults so the totals continue to sum to 10_000 bps.
 /// @author templ.fun
 contract TemplFactory {
     uint256 internal constant BPS_DENOMINATOR = 10_000;
-    // NOTE: The default burn/treasury/member shares deliberately assume a
-    // factory-level protocol share of 10% (1,000 bps). Factories deployed with a different
-    // `protocolBps` should either adjust these constants prior to
-    // deployment or call `createTemplWithConfig` with explicit splits so the
-    // totals continue to sum to 100% (10_000 basis points).
     uint256 internal constant DEFAULT_BURN_BPS = 3_000;
     uint256 internal constant DEFAULT_TREASURY_BPS = 3_000;
     uint256 internal constant DEFAULT_MEMBER_POOL_BPS = 3_000;
@@ -24,8 +22,9 @@ contract TemplFactory {
     address internal constant DEFAULT_BURN_ADDRESS = TemplDefaults.DEFAULT_BURN_ADDRESS;
     int256 internal constant USE_DEFAULT_BPS = -1;
     uint256 internal constant DEFAULT_MAX_MEMBERS = 249;
-    uint32 internal constant DEFAULT_CURVE_EXP_RATE_BPS = 11_000;
-    uint256 internal constant DEFAULT_PROPOSAL_FEE_BPS = 0;
+    uint32 internal constant DEFAULT_CURVE_EXP_RATE_BPS = 10_094;
+    uint256 internal constant DEFAULT_PROPOSAL_FEE_BPS = 2_500;
+    uint256 internal constant DEFAULT_REFERRAL_SHARE_BPS = 2_500;
 
     /// @notice Full templ creation configuration. Use `createTemplWithConfig` to apply.
     struct CreateConfig {
@@ -134,15 +133,16 @@ contract TemplFactory {
     event PermissionlessModeUpdated(bool indexed enabled);
 
     /// @notice Returns the default curve configuration applied by the factory.
-    /// @return cfg Default exponential curve with infinite tail.
+    /// @return cfg Exponential until the 249th member, then static tail.
     function _defaultCurveConfig() internal pure returns (CurveConfig memory cfg) {
         CurveSegment memory primary = CurveSegment({
             style: CurveStyle.Exponential,
             rateBps: DEFAULT_CURVE_EXP_RATE_BPS,
-            length: 0
+            length: uint32(DEFAULT_MAX_MEMBERS - 1)
         });
-        CurveSegment[] memory extras = new CurveSegment[](0);
-        return CurveConfig({ primary: primary, additionalSegments: extras });
+        CurveSegment[] memory extras = new CurveSegment[](1);
+        extras[0] = CurveSegment({style: CurveStyle.Static, rateBps: 0, length: 0});
+        return CurveConfig({primary: primary, additionalSegments: extras});
     }
 
     /// @notice Initializes factory-wide protocol recipient, fee share, modules, and factory deployer.
@@ -215,7 +215,16 @@ contract TemplFactory {
         string calldata _logoLink
     ) external returns (address templAddress) {
         return
-            createTemplFor(msg.sender, _token, _entryFee, _name, _description, _logoLink, DEFAULT_PROPOSAL_FEE_BPS, 0);
+            createTemplFor(
+                msg.sender,
+                _token,
+                _entryFee,
+                _name,
+                _description,
+                _logoLink,
+                DEFAULT_PROPOSAL_FEE_BPS,
+                DEFAULT_REFERRAL_SHARE_BPS
+            );
     }
 
     /// @notice Deploys a templ on behalf of an explicit priest using default configuration.

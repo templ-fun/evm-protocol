@@ -449,7 +449,6 @@ describe("@load Templ High-Load Stress", function () {
       const newEntry = 0n; // leave entry fee unchanged
       await ensureProposalFee(templ, token, accessibleMembers[0], context);
       await templ.connect(accessibleMembers[0]).createProposalUpdateConfig(
-        ethers.ZeroAddress,
         newEntry,
         newBurn,
         newTreasury,
@@ -650,14 +649,14 @@ describe("@load Templ High-Load Stress", function () {
       expect(await templ.quorumBps()).to.equal(100n);
 
       await ensureProposalFee(templ, token, accessibleMembers[0], context);
-      await templ.connect(accessibleMembers[0]).createProposalSetExecutionDelay(2, 0, "Delay", "");
+      await templ.connect(accessibleMembers[0]).createProposalSetPostQuorumVotingPeriod(2, 0, "Delay", "");
       id = (await templ.proposalCount()) - 1n;
       await templ.connect(accessibleMembers[1]).vote(id, true);
       await ensureQuorum(templ, id);
       await ethers.provider.send("evm_increaseTime", [2]);
       await ethers.provider.send("evm_mine");
       await templ.executeProposal(id);
-      expect(await templ.executionDelayAfterQuorum()).to.equal(2n);
+      expect(await templ.postQuorumVotingPeriod()).to.equal(2n);
 
       // Change burn address to a known wallet and confirm next join burns to it
       const burner = ethers.Wallet.createRandom().connect(ethers.provider);

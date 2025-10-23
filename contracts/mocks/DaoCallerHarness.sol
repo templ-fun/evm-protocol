@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.23;
 
-import { TEMPL } from "../TEMPL.sol";
-import { CurveConfig, CurveSegment, CurveStyle } from "../TemplCurve.sol";
-import { TemplTreasuryModule } from "../TemplTreasury.sol";
+import {TEMPL} from "../TEMPL.sol";
+import {CurveConfig, CurveSegment, CurveStyle} from "../TemplCurve.sol";
+import {TemplTreasuryModule} from "../TemplTreasury.sol";
 
 /// @dev Harness that triggers onlyDAO externals via self-calls to cover wrapper paths
 contract DaoCallerHarness is TEMPL {
@@ -40,7 +40,7 @@ contract DaoCallerHarness is TEMPL {
             treasuryModule,
             governanceModule,
             CurveConfig({
-                primary: CurveSegment({ style: CurveStyle.Static, rateBps: 0, length: 0 }),
+                primary: CurveSegment({style: CurveStyle.Static, rateBps: 0, length: 0}),
                 additionalSegments: new CurveSegment[](0)
             })
         )
@@ -52,21 +52,13 @@ contract DaoCallerHarness is TEMPL {
 
     /// @notice Wrapper to call updateConfigDAO via contract self-call
     function daoUpdate(
-        address token,
         uint256 fee,
         bool updateSplit,
         uint256 burnBps,
         uint256 treasuryBps,
         uint256 memberPoolBps
     ) external {
-        TemplTreasuryModule(address(this)).updateConfigDAO(
-            token,
-            fee,
-            updateSplit,
-            burnBps,
-            treasuryBps,
-            memberPoolBps
-        );
+        TemplTreasuryModule(address(this)).updateConfigDAO(fee, updateSplit, burnBps, treasuryBps, memberPoolBps);
     }
     /// @notice Wrapper to call setJoinPausedDAO via contract self-call
     function daoPause(bool p) external {

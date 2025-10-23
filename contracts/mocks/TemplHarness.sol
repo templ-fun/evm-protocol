@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.23;
 
-import { TEMPL } from "../TEMPL.sol";
-import { CurveConfig, CurveSegment, CurveStyle } from "../TemplCurve.sol";
+import {TEMPL} from "../TEMPL.sol";
+import {CurveConfig, CurveSegment, CurveStyle} from "../TemplCurve.sol";
 
 /// @title TemplHarness
 /// @dev Testing harness that exposes internal helpers for coverage-only assertions
@@ -53,7 +53,7 @@ contract TemplHarness is TEMPL {
             _treasuryModule,
             _governanceModule,
             CurveConfig({
-                primary: CurveSegment({ style: CurveStyle.Static, rateBps: 0, length: 0 }),
+                primary: CurveSegment({style: CurveStyle.Static, rateBps: 0, length: 0}),
                 additionalSegments: new CurveSegment[](0)
             })
         )
@@ -92,7 +92,7 @@ contract TemplHarness is TEMPL {
         ExternalRewardState storage rewards = externalRewards[token];
         rewards.exists = true;
         rewards.checkpoints.push(
-            RewardCheckpoint({ blockNumber: blockNumber, timestamp: timestamp, cumulative: cumulative })
+            RewardCheckpoint({blockNumber: blockNumber, timestamp: timestamp, cumulative: cumulative})
         );
     }
 

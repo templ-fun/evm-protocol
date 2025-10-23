@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.23;
 
-import { TemplBase } from "./TemplBase.sol";
-import { TemplErrors } from "./TemplErrors.sol";
-import { CurveConfig } from "./TemplCurve.sol";
+import {TemplBase} from "./TemplBase.sol";
+import {TemplErrors} from "./TemplErrors.sol";
+import {CurveConfig} from "./TemplCurve.sol";
 
 /// @title Templ Treasury Module
 /// @notice Adds treasury controls, fee configuration, and external reward management.
@@ -37,21 +37,19 @@ contract TemplTreasuryModule is TemplBase {
     }
 
     /// @notice Governance action that updates the entry fee and/or fee split configuration.
-    /// @param _token Optional replacement access token (must equal the existing token or zero to leave unchanged).
     /// @param _entryFee Optional new entry fee (0 keeps the current value).
     /// @param _updateFeeSplit Whether to apply the provided fee-split overrides (bps).
     /// @param _burnBps New burn allocation in basis points when `_updateFeeSplit` is true.
     /// @param _treasuryBps New treasury allocation in basis points when `_updateFeeSplit` is true.
     /// @param _memberPoolBps New member pool allocation in basis points when `_updateFeeSplit` is true.
     function updateConfigDAO(
-        address _token,
         uint256 _entryFee,
         bool _updateFeeSplit,
         uint256 _burnBps,
         uint256 _treasuryBps,
         uint256 _memberPoolBps
     ) external onlyDAO onlyDelegatecall {
-        _updateConfig(_token, _entryFee, _updateFeeSplit, _burnBps, _treasuryBps, _memberPoolBps);
+        _updateConfig(_entryFee, _updateFeeSplit, _burnBps, _treasuryBps, _memberPoolBps);
     }
 
     /// @notice Governance action that toggles whether new members can join.
@@ -128,16 +126,24 @@ contract TemplTreasuryModule is TemplBase {
         _setQuorumBps(newQuorumBps);
     }
 
-    /// @notice Governance action that updates the post-quorum execution delay in seconds.
-    /// @param newDelay Seconds to wait after quorum before execution.
-    function setExecutionDelayAfterQuorumDAO(uint256 newDelay) external onlyDAO onlyDelegatecall {
-        _setExecutionDelayAfterQuorum(newDelay);
+    /// @notice Governance action that updates the post‑quorum voting period in seconds.
+    /// @param newPeriod Seconds to wait after quorum before execution.
+    function setPostQuorumVotingPeriodDAO(uint256 newPeriod) external onlyDAO onlyDelegatecall {
+        _setPostQuorumVotingPeriod(newPeriod);
     }
 
     /// @notice Governance action that updates the burn sink address.
     /// @param newBurn Address to receive burn allocations.
     function setBurnAddressDAO(address newBurn) external onlyDAO onlyDelegatecall {
         _setBurnAddress(newBurn);
+    }
+
+    /// @notice Governance action that updates the default pre‑quorum voting period (seconds).
+    /// @dev Governance can reach this setter by proposing a `CallExternal` targeting the TEMPL
+    ///      router with the `setPreQuorumVotingPeriodDAO` selector and encoded params.
+    /// @param newPeriod New default pre‑quorum voting period (seconds).
+    function setPreQuorumVotingPeriodDAO(uint256 newPeriod) external onlyDAO onlyDelegatecall {
+        _setPreQuorumVotingPeriod(newPeriod);
     }
 
     /// @notice Governance action that performs multiple external calls atomically from the templ.
@@ -157,7 +163,7 @@ contract TemplTreasuryModule is TemplBase {
         for (uint256 i = 0; i < len; ++i) {
             address target = targets[i];
             if (target == address(0)) revert TemplErrors.InvalidRecipient();
-            (bool success, bytes memory ret) = target.call{ value: values[i] }(calldatas[i]);
+            (bool success, bytes memory ret) = target.call{value: values[i]}(calldatas[i]);
             if (!success) {
                 assembly ("memory-safe") {
                     revert(add(ret, 32), mload(ret))

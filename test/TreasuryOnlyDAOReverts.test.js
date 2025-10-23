@@ -14,7 +14,7 @@ describe("Treasury onlyDAO reverts per function", function () {
     await expect(templ.connect(eoa).withdrawTreasuryDAO(await token.getAddress(), eoa.address, 1, "x"))
       .to.be.revertedWithCustomError(templ, "NotDAO");
 
-    await expect(templ.connect(eoa).updateConfigDAO(ethers.ZeroAddress, 0, false, 0, 0, 0))
+  await expect(templ.connect(eoa).updateConfigDAO(0, false, 0, 0, 0))
       .to.be.revertedWithCustomError(templ, "NotDAO");
 
     await expect(templ.connect(eoa).setJoinPausedDAO(true))
@@ -50,11 +50,10 @@ describe("Treasury onlyDAO reverts per function", function () {
     await expect(templ.connect(eoa).setQuorumBpsDAO(40))
       .to.be.revertedWithCustomError(templ, "NotDAO");
 
-    await expect(templ.connect(eoa).setExecutionDelayAfterQuorumDAO(3600))
+  await expect(templ.connect(eoa).setPostQuorumVotingPeriodDAO(3600))
       .to.be.revertedWithCustomError(templ, "NotDAO");
 
     await expect(templ.connect(eoa).setBurnAddressDAO("0x0000000000000000000000000000000000000002"))
       .to.be.revertedWithCustomError(templ, "NotDAO");
   });
 });
-

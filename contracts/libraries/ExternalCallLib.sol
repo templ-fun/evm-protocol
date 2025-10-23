@@ -12,7 +12,7 @@ library ExternalCallLib {
     /// @param callData ABI-encoded calldata to execute on the target.
     /// @return ret Raw return data from the external call.
     function perform(address target, uint256 value, bytes memory callData) public returns (bytes memory ret) {
-        (bool success, bytes memory _ret) = target.call{ value: value }(callData);
+        (bool success, bytes memory _ret) = target.call{value: value}(callData);
         if (!success) {
             assembly ("memory-safe") {
                 revert(add(_ret, 32), mload(_ret))

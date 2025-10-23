@@ -72,9 +72,11 @@ flowchart LR
 - Install: `npm install`
 - Compile: `npm run compile`
 - Test: `npm test` (Hardhat). Coverage: `npm run coverage`.
+- Docs (NatSpec): `npm run docs` (generates Markdown in `docs/`).
 - Fuzzing (Echidna): `npm run test:fuzz` (via Docker; harness in `contracts/echidna/EchidnaTemplHarness.sol`).
 - Static analysis: `npm run slither` (requires Slither in PATH).
-- Lint: `npm run lint` (Solhint; CI fails on any warning). Auto-fix: `npm run lint:fix`.
+- Lint: `npm run lint` (Prettier + Solhint; CI fails on formatting drift or any Solhint warning). Auto-fix: `npm run lint:fix`.
+- Format: `npm run format` (applies Prettier with `prettier-plugin-solidity` to `contracts/**/*.sol`).
 
 ## Deploy Locally
 
@@ -93,6 +95,18 @@ TEMPL_DESCRIPTION="Genesis collective" \
 npm run deploy:local
 ```
 
+Verify on Base (optional):
+
+```bash
+# Factory (reads constructor args from chain)
+BASESCAN_API_KEY=your_key \
+npm run verify:factory -- --network base --factory 0xYourFactory
+
+# TEMPL (reconstructs constructor args from chain + factory logs)
+BASESCAN_API_KEY=your_key \
+npm run verify:templ -- --network base --templ 0xYourTempl
+```
+
 Hardhat console (ethers v6) quick taste:
 
 ```js
@@ -101,7 +115,7 @@ const templ = await ethers.getContractAt("TEMPL", "0xYourTempl");
 const token = await ethers.getContractAt("IERC20", (await templ.getConfig())[0]);
 await token.approve(templ.target, (await templ.getConfig())[1]);
 await templ.join();
-const id = await templ.createProposalSetJoinPaused(true, 7*24*60*60, "Pause joins", "Cooldown");
+const id = await templ.createProposalSetJoinPaused(true, 36*60*60, "Pause joins", "Cooldown");
 await templ.vote(id, true);
 // ...advance time...
 await templ.executeProposal(id);
@@ -148,7 +162,7 @@ const execParams = ethers.AbiCoder.defaultAbiCoder().encode(
 );
 
 // 3) Propose the external call (templ -> BatchExecutor)
-const votingPeriod = 7 * 24 * 60 * 60;
+const votingPeriod = 36 * 60 * 60;
 const pid = await templ.createProposalCallExternal(
   await executor.getAddress(),
   0, // forward 0 ETH to the executor
@@ -161,7 +175,7 @@ const pid = await templ.createProposalCallExternal(
 
 // 4) Vote and execute after quorum + delay
 await templ.vote(pid, true);
-// ...advance time to satisfy execution delay...
+// ...advance time to satisfy post‑quorum voting period...
 await templ.executeProposal(pid);
 ```
 
@@ -201,12 +215,15 @@ sequenceDiagram
 Curves (see [`TemplCurve`](contracts/TemplCurve.sol)) support static, linear, and exponential segments. A final segment with `length=0` creates an infinite tail.
 
 ## Scripts & Env Vars
-- Scripts: `deploy:factory`, `deploy:factory:local`, `deploy:local`, `coverage`, `slither`.
+- Scripts: `deploy:factory`, `deploy:factory:local`, `deploy:local`, `coverage`, `slither`, `verify:templ`, `verify:factory`.
 - `scripts/deploy-factory.cjs`:
   - Required: `PROTOCOL_FEE_RECIPIENT`
   - Optional: `PROTOCOL_BPS`, `FACTORY_ADDRESS` (reuse), `FACTORY_DEPLOYER` (defaults to signer address)
   - Deploys modules if not provided via env and wires them into the factory constructor.
-- `scripts/deploy-templ.cjs`: key envs are `FACTORY_ADDRESS` (or omit to auto‑deploy modules + factory locally), `TOKEN_ADDRESS`, `ENTRY_FEE`, plus optional metadata (`TEMPL_NAME`, `TEMPL_DESCRIPTION`, `TEMPL_LOGO_LINK`). Many toggles are supported (priest, quorum/delay, caps, fee splits, referral share, curve).
+- `scripts/deploy-templ.cjs`: key envs are `FACTORY_ADDRESS` (or omit to auto‑deploy modules + factory locally), `TOKEN_ADDRESS`, `ENTRY_FEE`, plus optional metadata (`TEMPL_NAME`, `TEMPL_DESCRIPTION`, `TEMPL_LOGO_LINK`). Many toggles are supported (priest, quorum/post‑quorum voting periods, caps, fee splits, referral share, curve). Optional: `POST_QUORUM_VOTING_PERIOD_SECONDS`.
+- Verify helpers:
+  - `verify:templ` verifies a TEMPL instance, reconstructing constructor args from chain data. Provide `TEMPL_ADDRESS` or `--templ 0x...` and run with a configured Hardhat network.
+  - `verify:factory` verifies a TemplFactory deployment using on‑chain getters. Provide `FACTORY_ADDRESS` or `--factory 0x...`.
 - Permissioning:
   - `TemplFactory.setPermissionless(true)` allows anyone to create templs.
   - `TemplFactory.transferDeployer(newAddr)` hands off deployer rights when permissionless is disabled.
@@ -222,18 +239,19 @@ Curves (see [`TemplCurve`](contracts/TemplCurve.sol)) support static, linear, an
   - CallExternal payload shape: `(address target, uint256 value, bytes data)`
 - Events: see [`contracts/TemplBase.sol`](contracts/TemplBase.sol).
 - Learn by tests: see [Tests](#tests) for direct links by topic.
+ - DAO setters of interest: `setPreQuorumVotingPeriodDAO`, `setPostQuorumVotingPeriodDAO`, `setQuorumBpsDAO`, `setBurnAddressDAO`, `setEntryFeeCurveDAO`, `setProposalCreationFeeBpsDAO`, `setReferralShareBpsDAO`, `setMaxMembersDAO`, `setJoinPausedDAO`, `updateConfigDAO`.
 
 ## Limits & Defaults
 - `BPS_DENOMINATOR = 10_000`.
-- Defaults via [`TemplDefaults`](contracts/TemplDefaults.sol): quorum bps, execution delay, burn address.
+- Defaults via [`TemplDefaults`](contracts/TemplDefaults.sol): quorum bps, post‑quorum voting period, burn address.
 - `MAX_EXTERNAL_REWARD_TOKENS = 256` (UI enumeration bound).
 - `MAX_ENTRY_FEE = type(uint128).max` (entry fee safety guard).
-- Voting period: default 7 days (min 7, max 30).
+- Pre‑quorum voting window: default 36 hours (min 36h, max 30 days); view `preQuorumVotingPeriod`; adjust via `setPreQuorumVotingPeriodDAO`.
 - Factory defaults (when not explicitly provided):
   - Fee split: burn 3_000 bps, treasury 3_000 bps, member pool 3_000 bps (plus protocol bps from factory).
   - Membership cap: 249.
-  - Curve: exponential primary segment at 11_000 bps with infinite tail.
-  - Proposal fee: 0 bps; Referral share: 0 bps.
+  - Curve: exponential primary segment at 10_094 bps for 248 paid joins, then static tail (price holds if cap expands).
+  - Proposal fee: 2_500 bps (25% of current entry fee); Referral share: 2_500 bps (25% of member‑pool slice).
 
 ## Indexing Notes
 - Track `ProposalCreated` then hydrate with `getProposal` + `getProposalSnapshots`.
@@ -286,4 +304,4 @@ CI runs on PRs only when Solidity contracts or tests change (`contracts/**`, `te
 - Only one active proposal per proposer.
 - `TemplFactory` can be set permissionless to let anyone create templs.
 - Direct calls to module addresses revert; always go via `TEMPL`.
-- Default voting period is 7 days; quorum and delay are configurable.
+- Default voting window is 36 hours; quorum and post‑quorum delay are configurable.

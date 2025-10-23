@@ -46,9 +46,10 @@ describe("TEMPL.getRegisteredSelectors()", function () {
       "setEntryFeeCurveDAO",
       "cleanupExternalRewardToken",
       "setQuorumBpsDAO",
-      "setExecutionDelayAfterQuorumDAO",
+      "setPostQuorumVotingPeriodDAO",
       "setBurnAddressDAO",
       "batchDAO",
+      "setPreQuorumVotingPeriodDAO",
     ].map(sel);
 
     const expectedGovernance = [
@@ -75,7 +76,7 @@ describe("TEMPL.getRegisteredSelectors()", function () {
       "getProposalJoinSequences",
       "createProposalCleanupExternalRewardToken",
       "createProposalSetQuorumBps",
-      "createProposalSetExecutionDelay",
+      "createProposalSetPostQuorumVotingPeriod",
       "createProposalSetBurnAddress",
     ].map(sel);
 

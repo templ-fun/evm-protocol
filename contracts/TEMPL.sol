@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.23;
 
-import { TemplBase } from "./TemplBase.sol";
-import { TemplMembershipModule } from "./TemplMembership.sol";
-import { TemplTreasuryModule } from "./TemplTreasury.sol";
-import { TemplGovernanceModule } from "./TemplGovernance.sol";
-import { TemplErrors } from "./TemplErrors.sol";
-import { CurveConfig } from "./TemplCurve.sol";
+import {TemplBase} from "./TemplBase.sol";
+import {TemplMembershipModule} from "./TemplMembership.sol";
+import {TemplTreasuryModule} from "./TemplTreasury.sol";
+import {TemplGovernanceModule} from "./TemplGovernance.sol";
+import {TemplErrors} from "./TemplErrors.sol";
+import {CurveConfig} from "./TemplCurve.sol";
 
 /// @title Templ Core
 /// @notice Wires governance, treasury, and membership modules for a single Templ instance.
@@ -161,7 +161,7 @@ contract TEMPL is TemplBase {
         membership[16] = TemplMembershipModule.totalJoins.selector;
         membership[17] = TemplMembershipModule.getExternalRewardTokensPaginated.selector;
 
-        treasury = new bytes4[](16);
+        treasury = new bytes4[](17);
         treasury[0] = TemplTreasuryModule.withdrawTreasuryDAO.selector;
         treasury[1] = TemplTreasuryModule.updateConfigDAO.selector;
         treasury[2] = TemplTreasuryModule.setJoinPausedDAO.selector;
@@ -175,9 +175,10 @@ contract TEMPL is TemplBase {
         treasury[10] = TemplTreasuryModule.setEntryFeeCurveDAO.selector;
         treasury[11] = TemplTreasuryModule.cleanupExternalRewardToken.selector;
         treasury[12] = TemplTreasuryModule.setQuorumBpsDAO.selector;
-        treasury[13] = TemplTreasuryModule.setExecutionDelayAfterQuorumDAO.selector;
+        treasury[13] = TemplTreasuryModule.setPostQuorumVotingPeriodDAO.selector;
         treasury[14] = TemplTreasuryModule.setBurnAddressDAO.selector;
         treasury[15] = TemplTreasuryModule.batchDAO.selector;
+        treasury[16] = TemplTreasuryModule.setPreQuorumVotingPeriodDAO.selector;
 
         governance = new bytes4[](25);
         governance[0] = TemplGovernanceModule.createProposalSetJoinPaused.selector;
@@ -203,7 +204,7 @@ contract TEMPL is TemplBase {
         governance[20] = TemplGovernanceModule.getProposalJoinSequences.selector;
         governance[21] = TemplGovernanceModule.createProposalCleanupExternalRewardToken.selector;
         governance[22] = TemplGovernanceModule.createProposalSetQuorumBps.selector;
-        governance[23] = TemplGovernanceModule.createProposalSetExecutionDelay.selector;
+        governance[23] = TemplGovernanceModule.createProposalSetPostQuorumVotingPeriod.selector;
         governance[24] = TemplGovernanceModule.createProposalSetBurnAddress.selector;
     }
 
@@ -259,7 +260,7 @@ contract TEMPL is TemplBase {
     /// @notice Registers treasury function selectors to dispatch to `module`.
     /// @param module Module address that implements treasury functions.
     function _registerTreasurySelectors(address module) internal {
-        bytes4[] memory selectors = new bytes4[](16);
+        bytes4[] memory selectors = new bytes4[](17);
         selectors[0] = TemplTreasuryModule.withdrawTreasuryDAO.selector;
         selectors[1] = TemplTreasuryModule.updateConfigDAO.selector;
         selectors[2] = TemplTreasuryModule.setJoinPausedDAO.selector;
@@ -273,9 +274,10 @@ contract TEMPL is TemplBase {
         selectors[10] = TemplTreasuryModule.setEntryFeeCurveDAO.selector;
         selectors[11] = TemplTreasuryModule.cleanupExternalRewardToken.selector;
         selectors[12] = TemplTreasuryModule.setQuorumBpsDAO.selector;
-        selectors[13] = TemplTreasuryModule.setExecutionDelayAfterQuorumDAO.selector;
+        selectors[13] = TemplTreasuryModule.setPostQuorumVotingPeriodDAO.selector;
         selectors[14] = TemplTreasuryModule.setBurnAddressDAO.selector;
         selectors[15] = TemplTreasuryModule.batchDAO.selector;
+        selectors[16] = TemplTreasuryModule.setPreQuorumVotingPeriodDAO.selector;
         _registerModule(module, selectors);
     }
 
@@ -306,7 +308,7 @@ contract TEMPL is TemplBase {
         selectors[20] = TemplGovernanceModule.getProposalJoinSequences.selector;
         selectors[21] = TemplGovernanceModule.createProposalCleanupExternalRewardToken.selector;
         selectors[22] = TemplGovernanceModule.createProposalSetQuorumBps.selector;
-        selectors[23] = TemplGovernanceModule.createProposalSetExecutionDelay.selector;
+        selectors[23] = TemplGovernanceModule.createProposalSetPostQuorumVotingPeriod.selector;
         selectors[24] = TemplGovernanceModule.createProposalSetBurnAddress.selector;
         _registerModule(module, selectors);
     }
@@ -323,14 +325,7 @@ contract TEMPL is TemplBase {
         if (action == Action.SetJoinPaused) {
             payload = abi.encode(p.joinPaused);
         } else if (action == Action.UpdateConfig) {
-            payload = abi.encode(
-                p.token,
-                p.newEntryFee,
-                p.updateFeeSplit,
-                p.newBurnBps,
-                p.newTreasuryBps,
-                p.newMemberPoolBps
-            );
+            payload = abi.encode(p.newEntryFee, p.updateFeeSplit, p.newBurnBps, p.newTreasuryBps, p.newMemberPoolBps);
         } else if (action == Action.SetMaxMembers) {
             payload = abi.encode(p.newMaxMembers);
         } else if (action == Action.SetMetadata) {
@@ -356,8 +351,8 @@ contract TEMPL is TemplBase {
             payload = abi.encode(p.setDictatorship);
         } else if (action == Action.SetQuorumBps) {
             payload = abi.encode(p.newQuorumBps);
-        } else if (action == Action.SetExecutionDelay) {
-            payload = abi.encode(p.newExecutionDelay);
+        } else if (action == Action.SetPostQuorumVotingPeriod) {
+            payload = abi.encode(p.newPostQuorumVotingPeriod);
         } else if (action == Action.SetBurnAddress) {
             payload = abi.encode(p.newBurnAddress);
         } else {
