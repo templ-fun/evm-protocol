@@ -157,7 +157,7 @@ contract TEMPL is TemplBase {
         membership[16] = TemplMembershipModule.totalJoins.selector;
         membership[17] = TemplMembershipModule.getExternalRewardTokensPaginated.selector;
 
-        treasury = new bytes4[](15);
+        treasury = new bytes4[](16);
         treasury[0] = TemplTreasuryModule.withdrawTreasuryDAO.selector;
         treasury[1] = TemplTreasuryModule.updateConfigDAO.selector;
         treasury[2] = TemplTreasuryModule.setJoinPausedDAO.selector;
@@ -173,6 +173,7 @@ contract TEMPL is TemplBase {
         treasury[12] = TemplTreasuryModule.setQuorumBpsDAO.selector;
         treasury[13] = TemplTreasuryModule.setExecutionDelayAfterQuorumDAO.selector;
         treasury[14] = TemplTreasuryModule.setBurnAddressDAO.selector;
+        treasury[15] = TemplTreasuryModule.batchDAO.selector;
 
         governance = new bytes4[](25);
         governance[0] = TemplGovernanceModule.createProposalSetJoinPaused.selector;
@@ -243,7 +244,7 @@ contract TEMPL is TemplBase {
     }
 
     function _registerTreasurySelectors(address module) internal {
-        bytes4[] memory selectors = new bytes4[](15);
+        bytes4[] memory selectors = new bytes4[](16);
         selectors[0] = TemplTreasuryModule.withdrawTreasuryDAO.selector;
         selectors[1] = TemplTreasuryModule.updateConfigDAO.selector;
         selectors[2] = TemplTreasuryModule.setJoinPausedDAO.selector;
@@ -259,6 +260,7 @@ contract TEMPL is TemplBase {
         selectors[12] = TemplTreasuryModule.setQuorumBpsDAO.selector;
         selectors[13] = TemplTreasuryModule.setExecutionDelayAfterQuorumDAO.selector;
         selectors[14] = TemplTreasuryModule.setBurnAddressDAO.selector;
+        selectors[15] = TemplTreasuryModule.batchDAO.selector;
         _registerModule(module, selectors);
     }
 

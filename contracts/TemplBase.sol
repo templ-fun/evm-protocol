@@ -141,6 +141,7 @@ abstract contract TemplBase is ReentrancyGuard {
         uint256 externalCallValue;
         /// @notice ABI-encoded calldata executed against the external target.
         bytes externalCallData;
+        
         CurveConfig curveConfig;
         uint256 curveBaseEntryFee;
         uint256 yesVotes;

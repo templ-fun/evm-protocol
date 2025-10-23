@@ -4,12 +4,14 @@ import {TemplBase} from "./TemplBase.sol";
 import {TemplErrors} from "./TemplErrors.sol";
 import {CurveConfig} from "./TemplCurve.sol";
 import {TemplTreasuryModule} from "./TemplTreasury.sol";
+ 
 
 /// @title Templ Governance Module
 /// @notice Adds proposal creation, voting, and execution flows on top of treasury + membership logic.
 contract TemplGovernanceModule is TemplBase {
 
     address public immutable SELF;
+    
 
     constructor() {
         SELF = address(this);
@@ -300,6 +302,8 @@ contract TemplGovernanceModule is TemplBase {
         return id;
     }
 
+    
+
     /// @notice Opens a proposal to withdraw treasury or external funds to a recipient.
     /// @param _token Token to withdraw (`address(0)` for ETH).
     /// @param _recipient Destination wallet for the funds.
@@ -589,6 +593,7 @@ contract TemplGovernanceModule is TemplBase {
         if (proposal.action == Action.CallExternal) {
             return _governanceCallExternal(proposal);
         }
+        
         if (proposal.action == Action.CleanupExternalRewardToken) {
             _governanceCleanupExternalRewardToken(proposal.token);
             return hex"";
@@ -701,6 +706,9 @@ contract TemplGovernanceModule is TemplBase {
         delete proposal.externalCallData;
         return returndata;
     }
+
+    /// @dev Executes a sequence of external calls. Reverts atomically on the first failure.
+    
 
     /// @notice Returns core metadata for a proposal including vote totals and status.
     /// @param _proposalId Proposal id to inspect.

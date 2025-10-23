@@ -137,4 +137,31 @@ contract TemplTreasuryModule is TemplBase {
     function setBurnAddressDAO(address newBurn) external onlyDAO onlyDelegatecall {
         _setBurnAddress(newBurn);
     }
+
+    /// @notice Governance action that performs multiple external calls atomically from the templ.
+    /// @dev Executes each call in-order. If any call reverts, bubbles up revert data and reverts the whole batch.
+    /// @param targets Destination contracts for each call.
+    /// @param values ETH values to forward for each call.
+    /// @param calldatas ABI-encoded call data for each call (selector + params).
+    /// @return results Return data for each call in order.
+    function batchDAO(
+        address[] calldata targets,
+        uint256[] calldata values,
+        bytes[] calldata calldatas
+    ) external onlyDAO onlyDelegatecall returns (bytes[] memory results) {
+        uint256 len = targets.length;
+        if (len == 0 || len != values.length || len != calldatas.length) revert TemplErrors.InvalidCallData();
+        results = new bytes[](len);
+        for (uint256 i = 0; i < len; i++) {
+            address target = targets[i];
+            if (target == address(0)) revert TemplErrors.InvalidRecipient();
+            (bool success, bytes memory ret) = target.call{value: values[i]}(calldatas[i]);
+            if (!success) {
+                assembly ("memory-safe") {
+                    revert(add(ret, 32), mload(ret))
+                }
+            }
+            results[i] = ret;
+        }
+    }
 }
