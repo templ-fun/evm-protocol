@@ -197,6 +197,8 @@ contract TemplGovernanceModule is TemplBase {
         return id;
     }
 
+    // createProposalSetPreQuorumVotingPeriod intentionally omitted to keep governance bytecode under limit.
+
     /// @notice Opens a proposal to update the proposal creation fee basis points.
     /// @param _newFeeBps New proposal creation fee (bps of current entry fee).
     /// @param _votingPeriod Optional custom voting duration (seconds).
@@ -734,6 +736,8 @@ contract TemplGovernanceModule is TemplBase {
         _setBurnAddress(newBurn);
     }
 
+    // Pre‑quorum default period is set via treasury DAO wrapper; governance proposals can call it via CallExternal.
+
     /// @notice Executes the arbitrary call attached to `proposal` and bubbles up revert data.
     /// @param proposal Proposal storage reference containing the external call payload.
     /// @return returndata Raw return data from the external call.
@@ -967,9 +971,9 @@ contract TemplGovernanceModule is TemplBase {
                 activeProposalId[msg.sender] = 0;
             }
         }
-        uint256 period = _votingPeriod == 0 ? DEFAULT_VOTING_PERIOD : _votingPeriod;
-        if (period < MIN_VOTING_PERIOD) revert TemplErrors.VotingPeriodTooShort();
-        if (period > MAX_VOTING_PERIOD) revert TemplErrors.VotingPeriodTooLong();
+        uint256 period = _votingPeriod == 0 ? preQuorumVotingPeriod : _votingPeriod;
+        if (period < MIN_PRE_QUORUM_VOTING_PERIOD) revert TemplErrors.VotingPeriodTooShort();
+        if (period > MAX_PRE_QUORUM_VOTING_PERIOD) revert TemplErrors.VotingPeriodTooLong();
         uint256 feeBps = proposalCreationFeeBps;
         if (feeBps > 0) {
             uint256 proposalFee = (entryFee * feeBps) / BPS_DENOMINATOR;

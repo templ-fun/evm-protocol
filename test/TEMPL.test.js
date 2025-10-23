@@ -469,7 +469,7 @@ describe("TEMPL Contract with DAO Governance", function () {
                     ""
             );
             const proposal = await templ.proposals(0);
-            const defaultPeriod = await templ.DEFAULT_VOTING_PERIOD();
+            const defaultPeriod = await templ.preQuorumVotingPeriod();
             expect(proposal.endTime - proposal.createdAt).to.equal(defaultPeriod);
         });
 

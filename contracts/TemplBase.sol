@@ -206,6 +206,8 @@ abstract contract TemplBase is ReentrancyGuard {
         uint256 quorumJoinSequence;
         /// @notice Desired dictatorship state when the action is SetDictatorship.
         bool setDictatorship;
+        /// @notice Proposed default pre‑quorum voting period (seconds).
+        uint256 newPreQuorumVotingPeriod;
     }
 
     /// @notice Total proposals ever created.
@@ -218,12 +220,12 @@ abstract contract TemplBase is ReentrancyGuard {
     mapping(address => bool) public hasActiveProposal;
     uint256[] internal activeProposalIds;
     mapping(uint256 => uint256) internal activeProposalIndex;
-    /// @notice Default voting period applied when not specified by callers.
-    uint256 public constant DEFAULT_VOTING_PERIOD = 36 hours;
-    /// @notice Minimum allowed voting period.
-    uint256 public constant MIN_VOTING_PERIOD = 36 hours;
-    /// @notice Maximum allowed voting period.
-    uint256 public constant MAX_VOTING_PERIOD = 30 days;
+    /// @notice Minimum allowed pre‑quorum voting period.
+    uint256 public constant MIN_PRE_QUORUM_VOTING_PERIOD = 36 hours;
+    /// @notice Maximum allowed pre‑quorum voting period.
+    uint256 public constant MAX_PRE_QUORUM_VOTING_PERIOD = 30 days;
+    /// @notice Default pre‑quorum voting period applied when proposal creators pass zero.
+    uint256 public preQuorumVotingPeriod;
 
     enum Action {
         SetJoinPaused,
@@ -392,6 +394,10 @@ abstract contract TemplBase is ReentrancyGuard {
     /// @param previousBurn Previous burn sink address.
     /// @param newBurn New burn sink address.
     event BurnAddressUpdated(address indexed previousBurn, address indexed newBurn);
+    /// @notice Emitted when the default pre‑quorum voting period is updated.
+    /// @param previousPeriod Previous default pre‑quorum voting period (seconds).
+    /// @param newPeriod New default pre‑quorum voting period (seconds).
+    event PreQuorumVotingPeriodUpdated(uint256 indexed previousPeriod, uint256 indexed newPeriod);
 
     struct ExternalRewardState {
         uint256 poolBalance;
@@ -618,6 +624,8 @@ abstract contract TemplBase is ReentrancyGuard {
         _setTemplMetadata(_name, _description, _logoLink);
         _setProposalCreationFee(_proposalCreationFeeBps);
         _setReferralShareBps(_referralShareBps);
+        // Initialize default pre‑quorum voting period
+        preQuorumVotingPeriod = MIN_PRE_QUORUM_VOTING_PERIOD;
     }
 
     /// @notice Updates the split between burn, treasury, and member pool slices.
@@ -1116,6 +1124,17 @@ abstract contract TemplBase is ReentrancyGuard {
         address previous = burnAddress;
         burnAddress = newBurn;
         emit BurnAddressUpdated(previous, newBurn);
+    }
+
+    /// @notice Updates the default pre‑quorum voting period used when proposals do not supply one.
+    /// @param newPeriod New default pre‑quorum voting period (seconds).
+    function _setPreQuorumVotingPeriod(uint256 newPeriod) internal {
+        if (newPeriod < MIN_PRE_QUORUM_VOTING_PERIOD || newPeriod > MAX_PRE_QUORUM_VOTING_PERIOD) {
+            revert TemplErrors.InvalidCallData();
+        }
+        uint256 previous = preQuorumVotingPeriod;
+        preQuorumVotingPeriod = newPeriod;
+        emit PreQuorumVotingPeriodUpdated(previous, newPeriod);
     }
 
     /// @notice Executes a treasury withdrawal and emits the corresponding event.

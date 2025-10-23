@@ -49,6 +49,7 @@ describe("TEMPL.getRegisteredSelectors()", function () {
       "setExecutionDelayAfterQuorumDAO",
       "setBurnAddressDAO",
       "batchDAO",
+      "setPreQuorumVotingPeriodDAO",
     ].map(sel);
 
     const expectedGovernance = [

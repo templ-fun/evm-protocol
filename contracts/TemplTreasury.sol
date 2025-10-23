@@ -140,6 +140,12 @@ contract TemplTreasuryModule is TemplBase {
         _setBurnAddress(newBurn);
     }
 
+    /// @notice Governance action that updates the default pre‑quorum voting period (seconds).
+    /// @param newPeriod New default pre‑quorum voting period (seconds).
+    function setPreQuorumVotingPeriodDAO(uint256 newPeriod) external onlyDAO onlyDelegatecall {
+        _setPreQuorumVotingPeriod(newPeriod);
+    }
+
     /// @notice Governance action that performs multiple external calls atomically from the templ.
     /// @dev Executes each call in-order. If any call reverts, bubbles up revert data and reverts the whole batch.
     /// @param targets Destination contracts for each call.

@@ -237,13 +237,14 @@ Curves (see [`TemplCurve`](contracts/TemplCurve.sol)) support static, linear, an
   - CallExternal payload shape: `(address target, uint256 value, bytes data)`
 - Events: see [`contracts/TemplBase.sol`](contracts/TemplBase.sol).
 - Learn by tests: see [Tests](#tests) for direct links by topic.
+ - DAO setters of interest: `setPreQuorumVotingPeriodDAO`, `setExecutionDelayAfterQuorumDAO`, `setQuorumBpsDAO`, `setBurnAddressDAO`, `setEntryFeeCurveDAO`, `setProposalCreationFeeBpsDAO`, `setReferralShareBpsDAO`, `setMaxMembersDAO`, `setJoinPausedDAO`, `updateConfigDAO`.
 
 ## Limits & Defaults
 - `BPS_DENOMINATOR = 10_000`.
 - Defaults via [`TemplDefaults`](contracts/TemplDefaults.sol): quorum bps, execution delay, burn address.
 - `MAX_EXTERNAL_REWARD_TOKENS = 256` (UI enumeration bound).
 - `MAX_ENTRY_FEE = type(uint128).max` (entry fee safety guard).
-- Voting window: default 36 hours (min 36h, max 30 days).
+- Pre‑quorum voting window: default 36 hours (min 36h, max 30 days); view `preQuorumVotingPeriod`; adjust via `setPreQuorumVotingPeriodDAO`.
 - Factory defaults (when not explicitly provided):
   - Fee split: burn 3_000 bps, treasury 3_000 bps, member pool 3_000 bps (plus protocol bps from factory).
   - Membership cap: 249.
