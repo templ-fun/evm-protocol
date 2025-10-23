@@ -31,7 +31,7 @@ contract TemplTreasuryModule is TemplBase {
         address token,
         address recipient,
         uint256 amount,
-        string memory reason
+        string calldata reason
     ) external onlyDAO nonReentrant onlyDelegatecall {
         _withdrawTreasury(token, recipient, amount, reason, 0);
     }

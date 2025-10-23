@@ -6,6 +6,7 @@
     "max-states-count": "off",
     "no-complex-fallback": "off",
     "func-visibility": ["error", { "ignoreConstructors": true }],
-    "function-max-lines": "off"
+    "function-max-lines": "off",
+    "gas-struct-packing": "off"
   }
 }

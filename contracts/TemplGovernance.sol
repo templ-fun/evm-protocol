@@ -317,7 +317,7 @@ contract TemplGovernanceModule is TemplBase {
         address _token,
         address _recipient,
         uint256 _amount,
-        string memory _reason,
+        string calldata _reason,
         uint256 _votingPeriod,
         string calldata _title,
         string calldata _description
@@ -801,7 +801,7 @@ contract TemplGovernanceModule is TemplBase {
     /// @return passed True when the proposal can be executed.
     function _proposalPassed(Proposal storage proposal) internal view returns (bool passed) {
         if (proposal.quorumExempt) {
-        return (!(block.timestamp < proposal.endTime) && proposal.yesVotes > proposal.noVotes);
+            return (!(block.timestamp < proposal.endTime) && proposal.yesVotes > proposal.noVotes);
         }
         if (proposal.quorumReachedAt == 0) {
             return false;
@@ -1000,8 +1000,7 @@ contract TemplGovernanceModule is TemplBase {
         proposal.quorumReachedAt = 0;
         proposal.quorumExempt = false;
         if (
-            proposal.eligibleVoters != 0 &&
-            !(proposal.yesVotes * BPS_DENOMINATOR < quorumBps * proposal.eligibleVoters)
+            proposal.eligibleVoters != 0 && !(proposal.yesVotes * BPS_DENOMINATOR < quorumBps * proposal.eligibleVoters)
         ) {
             proposal.quorumReachedAt = block.timestamp;
             proposal.quorumSnapshotBlock = block.number;
