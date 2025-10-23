@@ -62,12 +62,12 @@ flowchart LR
 ## Deploy Locally
 
 ```bash
-# Deploy shared modules + factory (prefer npm script)
+# Deploy shared modules + factory
 PROTOCOL_FEE_RECIPIENT=0xYourRecipient \
 PROTOCOL_BPS=1000 \
 npm run deploy:factory:local
 
-# Deploy a templ via the factory (uses npm script)
+# Deploy a templ via the factory
 FACTORY_ADDRESS=0xFactoryFromPreviousStep \
 TOKEN_ADDRESS=0xAccessToken \
 ENTRY_FEE=100000000000000000000 \
@@ -130,7 +130,7 @@ sequenceDiagram
 Curves (see [`TemplCurve`](contracts/TemplCurve.sol)) support static, linear, and exponential segments. A final segment with `length=0` creates an infinite tail.
 
 ## Scripts & Env Vars
-- Prefer npm scripts: `deploy:factory`, `deploy:factory:local`, `deploy:local`, `coverage`, `slither`.
+- Scripts: `deploy:factory`, `deploy:factory:local`, `deploy:local`, `coverage`, `slither`.
 - `scripts/deploy-factory.cjs`: requires `PROTOCOL_FEE_RECIPIENT`; optional `PROTOCOL_BPS`. You can reuse an existing factory by setting `FACTORY_ADDRESS`. See the script for module overrides and verification notes.
 - `scripts/deploy-templ.cjs`: key envs are `FACTORY_ADDRESS` (or omit to auto‑deploy modules + factory locally), `TOKEN_ADDRESS`, `ENTRY_FEE`, plus optional metadata (`TEMPL_NAME`, `TEMPL_DESCRIPTION`, `TEMPL_LOGO_LINK`). The script supports many toggles (priest, quorum/delay, caps, fee splits, referral share, curve). See the script for the complete list and validation rules.
 - Permissionless mode: `TemplFactory.setPermissionless(true)` to allow anyone to create templs.
