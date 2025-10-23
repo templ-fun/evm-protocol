@@ -5,6 +5,7 @@ import { Bytecode } from "./utils/Bytecode.sol";
 
 /// @title SSTORE2
 /// @notice Read and write persistent bytecode blobs at a fraction of the storage cost.
+/// @author templ.fun
 /// @dev Adapted from https://github.com/0xsequence/sstore2 (MIT licensed).
 library SSTORE2 {
     error WriteError();

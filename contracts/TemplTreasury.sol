@@ -7,9 +7,12 @@ import { CurveConfig } from "./TemplCurve.sol";
 
 /// @title Templ Treasury Module
 /// @notice Adds treasury controls, fee configuration, and external reward management.
+/// @author templ.fun
 contract TemplTreasuryModule is TemplBase {
+    /// @notice Sentinel used to detect direct calls to the module implementation.
     address public immutable SELF;
 
+    /// @notice Initializes the module and captures its own address to enforce delegatecalls.
     constructor() {
         SELF = address(this);
     }

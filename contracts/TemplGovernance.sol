@@ -7,13 +7,18 @@ import { CurveConfig } from "./TemplCurve.sol";
 
 /// @title Templ Governance Module
 /// @notice Adds proposal creation, voting, and execution flows on top of treasury + membership logic.
+/// @author templ.fun
 contract TemplGovernanceModule is TemplBase {
+    /// @notice Sentinel used to detect direct calls to the module implementation.
     address public immutable SELF;
 
+    /// @notice Initializes the module and captures its own address to enforce delegatecalls.
     constructor() {
         SELF = address(this);
     }
 
+    /// @notice Reverts unless called via delegatecall from the TEMPL router.
+    /// @dev Prevents direct calls to the module implementation.
     function _requireDelegatecall() internal view {
         if (address(this) == SELF) revert TemplErrors.DelegatecallOnly();
     }
@@ -525,7 +530,10 @@ contract TemplGovernanceModule is TemplBase {
         _removeActiveProposal(_proposalId);
     }
 
-    function _executeActionInternal(uint256 _proposalId) internal returns (bytes memory) {
+    /// @notice Executes the action for `_proposalId` and returns any call return data.
+    /// @param _proposalId Proposal id whose action should be executed.
+    /// @return returnData ABI-encoded return data for CallExternal actions, empty otherwise.
+    function _executeActionInternal(uint256 _proposalId) internal returns (bytes memory returnData) {
         Proposal storage proposal = proposals[_proposalId];
         if (proposal.action == Action.SetJoinPaused) {
             _governanceSetJoinPaused(proposal.joinPaused);
@@ -607,10 +615,19 @@ contract TemplGovernanceModule is TemplBase {
         revert TemplErrors.InvalidCallData();
     }
 
+    /// @notice Governance wrapper that sets the join pause flag.
+    /// @param _paused Desired pause state.
     function _governanceSetJoinPaused(bool _paused) internal {
         _setJoinPaused(_paused);
     }
 
+    /// @notice Governance wrapper that updates entry fee and/or fee splits.
+    /// @param _token Optional replacement access token.
+    /// @param _entryFee Optional new entry fee.
+    /// @param _updateFeeSplit Whether to apply the provided split values.
+    /// @param _burnBps New burn share (bps) when applying split updates.
+    /// @param _treasuryBps New treasury share (bps) when applying split updates.
+    /// @param _memberPoolBps New member pool share (bps) when applying split updates.
     function _governanceUpdateConfig(
         address _token,
         uint256 _entryFee,
@@ -622,6 +639,12 @@ contract TemplGovernanceModule is TemplBase {
         _updateConfig(_token, _entryFee, _updateFeeSplit, _burnBps, _treasuryBps, _memberPoolBps);
     }
 
+    /// @notice Governance wrapper that withdraws available treasury funds.
+    /// @param token Token to withdraw (`address(0)` for ETH).
+    /// @param recipient Destination wallet.
+    /// @param amount Amount to transfer.
+    /// @param reason Human-readable reason string.
+    /// @param proposalId Authorizing proposal id.
     function _governanceWithdrawTreasury(
         address token,
         address recipient,
@@ -632,22 +655,35 @@ contract TemplGovernanceModule is TemplBase {
         _withdrawTreasury(token, recipient, amount, reason, proposalId);
     }
 
+    /// @notice Governance wrapper that disbands treasury into a reward pool for `token`.
+    /// @param token Token to disband (`address(0)` for ETH).
+    /// @param proposalId Authorizing proposal id.
     function _governanceDisbandTreasury(address token, uint256 proposalId) internal {
         _disbandTreasury(token, proposalId);
     }
 
+    /// @notice Governance wrapper that updates the priest address.
+    /// @param newPriest New priest wallet.
     function _governanceChangePriest(address newPriest) internal {
         _changePriest(newPriest);
     }
 
+    /// @notice Governance wrapper that toggles dictatorship mode.
+    /// @param enabled True to enable, false to disable.
     function _governanceSetDictatorship(bool enabled) internal {
         _updateDictatorship(enabled);
     }
 
+    /// @notice Governance wrapper that updates the membership cap.
+    /// @param newMaxMembers New membership cap (0 removes the cap).
     function _governanceSetMaxMembers(uint256 newMaxMembers) internal {
         _setMaxMembers(newMaxMembers);
     }
 
+    /// @notice Governance wrapper that updates on-chain templ metadata.
+    /// @param newName New templ name.
+    /// @param newDescription New templ description.
+    /// @param newLogoLink New templ logo link.
     function _governanceUpdateMetadata(
         string memory newName,
         string memory newDescription,
@@ -656,49 +692,66 @@ contract TemplGovernanceModule is TemplBase {
         _setTemplMetadata(newName, newDescription, newLogoLink);
     }
 
+    /// @notice Governance wrapper that updates proposal creation fee (bps of entry fee).
+    /// @param newFeeBps New fee in basis points.
     function _governanceSetProposalCreationFee(uint256 newFeeBps) internal {
         _setProposalCreationFee(newFeeBps);
     }
 
+    /// @notice Governance wrapper that updates referral share basis points.
+    /// @param newBps New referral share bps.
     function _governanceSetReferralShareBps(uint256 newBps) internal {
         _setReferralShareBps(newBps);
     }
 
+    /// @notice Governance wrapper that updates the entry fee curve.
+    /// @param curve New curve configuration.
+    /// @param baseEntryFee Optional base entry fee anchor (0 keeps current base).
     function _governanceSetEntryFeeCurve(CurveConfig memory curve, uint256 baseEntryFee) internal {
         _applyCurveUpdate(curve, baseEntryFee);
     }
 
+    /// @notice Governance wrapper that removes a settled external reward token from enumeration.
+    /// @param token Token to remove (cannot be the access token).
     function _governanceCleanupExternalRewardToken(address token) internal {
         _cleanupExternalRewardToken(token);
     }
 
+    /// @notice Governance wrapper that updates quorum threshold (bps).
+    /// @param newQuorumBps New quorum threshold value.
     function _governanceSetQuorumBps(uint256 newQuorumBps) internal {
         _setQuorumBps(newQuorumBps);
     }
 
+    /// @notice Governance wrapper that updates post-quorum execution delay.
+    /// @param newDelay New delay in seconds.
     function _governanceSetExecutionDelay(uint256 newDelay) internal {
         _setExecutionDelayAfterQuorum(newDelay);
     }
 
+    /// @notice Governance wrapper that updates the burn sink address.
+    /// @param newBurn New burn address.
     function _governanceSetBurnAddress(address newBurn) internal {
         _setBurnAddress(newBurn);
     }
 
-    /// @dev Executes the arbitrary call attached to `proposal` and bubbles up revert data.
-    function _governanceCallExternal(Proposal storage proposal) internal returns (bytes memory) {
+    /// @notice Executes the arbitrary call attached to `proposal` and bubbles up revert data.
+    /// @param proposal Proposal storage reference containing the external call payload.
+    /// @return returndata Raw return data from the external call.
+    function _governanceCallExternal(Proposal storage proposal) internal returns (bytes memory returndata) {
         address target = proposal.externalCallTarget;
         if (target == address(0)) revert TemplErrors.InvalidRecipient();
         bytes memory callData = proposal.externalCallData;
         if (callData.length == 0) revert TemplErrors.InvalidCallData();
         uint256 callValue = proposal.externalCallValue;
-        (bool success, bytes memory returndata) = target.call{ value: callValue }(callData);
+        (bool success, bytes memory _returndata) = target.call{ value: callValue }(callData);
         if (!success) {
             assembly ("memory-safe") {
-                revert(add(returndata, 32), mload(returndata))
+                revert(add(_returndata, 32), mload(_returndata))
             }
         }
         delete proposal.externalCallData;
-        return returndata;
+        return _returndata;
     }
 
     /// @notice Returns core metadata for a proposal including vote totals and status.
@@ -743,7 +796,10 @@ contract TemplGovernanceModule is TemplBase {
         );
     }
 
-    function _proposalPassed(Proposal storage proposal) internal view returns (bool) {
+    /// @notice Returns whether `proposal` has satisfied quorum, delay, and majority conditions.
+    /// @param proposal Proposal storage reference to evaluate.
+    /// @return passed True when the proposal can be executed.
+    function _proposalPassed(Proposal storage proposal) internal view returns (bool passed) {
         if (proposal.quorumExempt) {
             return (block.timestamp >= proposal.endTime && proposal.yesVotes > proposal.noVotes);
         }
@@ -886,7 +942,12 @@ contract TemplGovernanceModule is TemplBase {
         return (proposalIds, hasMore);
     }
 
-    /// @dev Creates the base proposal structure, including quorum pre-checks and proposer tracking.
+    /// @notice Creates the base proposal structure, applies fee, and tracks proposer state.
+    /// @param _votingPeriod Requested voting period (seconds). 0 applies the default.
+    /// @param _title On-chain title for the proposal.
+    /// @param _description On-chain description for the proposal.
+    /// @return proposalId Newly created proposal id.
+    /// @return proposal Storage reference to the created proposal.
     function _createBaseProposal(
         uint256 _votingPeriod,
         string memory _title,
@@ -949,6 +1010,8 @@ contract TemplGovernanceModule is TemplBase {
         emit ProposalCreated(proposalId, msg.sender, proposal.endTime, _title, _description);
     }
 
+    /// @notice Removes up to `maxRemovals` inactive proposals from the tail of the active set.
+    /// @param maxRemovals Maximum number of entries to remove.
     function _pruneInactiveTail(uint256 maxRemovals) internal {
         if (maxRemovals == 0) return;
         uint256 len = activeProposalIds.length;

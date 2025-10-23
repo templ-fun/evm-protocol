@@ -7,9 +7,12 @@ import { TemplErrors } from "./TemplErrors.sol";
 
 /// @title Templ Membership Module
 /// @notice Handles joins, reward accounting, and member-facing views.
+/// @author templ.fun
 contract TemplMembershipModule is TemplBase {
+    /// @notice Sentinel used to detect direct calls to the module implementation.
     address public immutable SELF;
 
+    /// @notice Initializes the module and captures its own address to enforce delegatecalls.
     constructor() {
         SELF = address(this);
     }
@@ -52,7 +55,10 @@ contract TemplMembershipModule is TemplBase {
         _join(msg.sender, recipient, referral);
     }
 
-    /// @dev Shared join workflow that handles accounting updates for new members.
+    /// @notice Shared join workflow that handles accounting updates for new members.
+    /// @param payer Wallet that pays the entry fee.
+    /// @param recipient Wallet that receives membership.
+    /// @param referral Optional referrer credited from the member pool.
     function _join(address payer, address recipient, address referral) internal {
         if (recipient == address(0)) revert TemplErrors.InvalidRecipient();
 
