@@ -2,9 +2,15 @@ name: CI
 
 on:
   pull_request:
+    paths:
+      - 'contracts/**'
+      - 'test/**'
   push:
     branches:
       - main
+    paths:
+      - 'contracts/**'
+      - 'test/**'
 
 jobs:
   test:
