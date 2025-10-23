@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.23;
 
-import { TemplBase } from "./TemplBase.sol";
-import { TemplErrors } from "./TemplErrors.sol";
-import { CurveConfig } from "./TemplCurve.sol";
+import {TemplBase} from "./TemplBase.sol";
+import {TemplErrors} from "./TemplErrors.sol";
+import {CurveConfig} from "./TemplCurve.sol";
 
 /// @title Templ Treasury Module
 /// @notice Adds treasury controls, fee configuration, and external reward management.
@@ -139,6 +139,8 @@ contract TemplTreasuryModule is TemplBase {
     }
 
     /// @notice Governance action that updates the default pre‑quorum voting period (seconds).
+    /// @dev Governance can reach this setter by proposing a `CallExternal` targeting the TEMPL
+    ///      router with the `setPreQuorumVotingPeriodDAO` selector and encoded params.
     /// @param newPeriod New default pre‑quorum voting period (seconds).
     function setPreQuorumVotingPeriodDAO(uint256 newPeriod) external onlyDAO onlyDelegatecall {
         _setPreQuorumVotingPeriod(newPeriod);
@@ -161,7 +163,7 @@ contract TemplTreasuryModule is TemplBase {
         for (uint256 i = 0; i < len; ++i) {
             address target = targets[i];
             if (target == address(0)) revert TemplErrors.InvalidRecipient();
-            (bool success, bytes memory ret) = target.call{ value: values[i] }(calldatas[i]);
+            (bool success, bytes memory ret) = target.call{value: values[i]}(calldatas[i]);
             if (!success) {
                 assembly ("memory-safe") {
                     revert(add(ret, 32), mload(ret))

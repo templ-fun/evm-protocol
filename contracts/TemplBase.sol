@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.23;
 
-import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
-import { TemplErrors } from "./TemplErrors.sol";
-import { CurveConfig, CurveSegment, CurveStyle } from "./TemplCurve.sol";
-import { TemplDefaults } from "./TemplDefaults.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {TemplErrors} from "./TemplErrors.sol";
+import {CurveConfig, CurveSegment, CurveStyle} from "./TemplCurve.sol";
+import {TemplDefaults} from "./TemplDefaults.sol";
 
 /// @title Base Templ Storage and Helpers
 /// @notice Hosts shared state, events, and internal helpers used by membership, treasury, and governance modules.
@@ -421,7 +421,6 @@ abstract contract TemplBase is ReentrancyGuard {
 
     /// @dev Permits calls from the contract (governance) or the priest when dictatorship mode is enabled.
     modifier onlyDAO() {
-        // NOTE: Dictatorship mode deliberately grants the priest direct access to DAO functions.
         if (priestIsDictator) {
             if (msg.sender != address(this) && msg.sender != priest) revert TemplErrors.PriestOnly();
         } else if (msg.sender != address(this)) {
@@ -564,6 +563,7 @@ abstract contract TemplBase is ReentrancyGuard {
     /// @param _logoLink Initial templ logo link.
     /// @param _proposalCreationFeeBps Proposal creation fee in basis points of the entry fee.
     /// @param _referralShareBps Referral share in basis points of the member pool allocation.
+    /// @dev Also initializes the default `preQuorumVotingPeriod` to `MIN_PRE_QUORUM_VOTING_PERIOD`.
     function _initializeTempl(
         address _protocolFeeRecipient,
         address _accessToken,
@@ -622,7 +622,6 @@ abstract contract TemplBase is ReentrancyGuard {
         _setTemplMetadata(_name, _description, _logoLink);
         _setProposalCreationFee(_proposalCreationFeeBps);
         _setReferralShareBps(_referralShareBps);
-        // Initialize default pre‑quorum voting period
         preQuorumVotingPeriod = MIN_PRE_QUORUM_VOTING_PERIOD;
     }
 
@@ -1166,7 +1165,7 @@ abstract contract TemplBase is ReentrancyGuard {
             uint256 reservedForMembers = rewards.poolBalance;
             uint256 availableBalance = currentBalance > reservedForMembers ? currentBalance - reservedForMembers : 0;
             if (amount > availableBalance) revert TemplErrors.InsufficientTreasuryBalance();
-            (bool success, ) = payable(recipient).call{ value: amount }("");
+            (bool success, ) = payable(recipient).call{value: amount}("");
             if (!success) revert TemplErrors.ProposalExecutionFailed();
         } else {
             ExternalRewardState storage rewards = externalRewards[token];
@@ -1180,6 +1179,8 @@ abstract contract TemplBase is ReentrancyGuard {
     }
 
     /// @notice Applies updates to the entry fee and/or fee split configuration.
+    /// @dev The access token, protocol recipient, and protocol basis points are immutable
+    ///      post-deploy and cannot be changed via this update.
     /// @param _entryFee Optional new entry fee (0 keeps current).
     /// @param _updateFeeSplit Whether to apply the new split values.
     /// @param _burnBps New burn share (bps) when `_updateFeeSplit` is true.
@@ -1192,8 +1193,6 @@ abstract contract TemplBase is ReentrancyGuard {
         uint256 _treasuryBps,
         uint256 _memberPoolBps
     ) internal {
-        // Note: The access token is immutable post‑deploy. Governance cannot change the
-        // token, the protocol recipient, or the protocol bps relative to total.
         if (_entryFee > 0) {
             _setCurrentEntryFee(_entryFee);
         }

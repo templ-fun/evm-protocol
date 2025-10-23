@@ -75,7 +75,8 @@ flowchart LR
 - Docs (NatSpec): `npm run docs` (generates Markdown in `docs/`).
 - Fuzzing (Echidna): `npm run test:fuzz` (via Docker; harness in `contracts/echidna/EchidnaTemplHarness.sol`).
 - Static analysis: `npm run slither` (requires Slither in PATH).
-- Lint: `npm run lint` (Solhint; CI fails on any warning). Auto-fix: `npm run lint:fix`.
+- Lint: `npm run lint` (Prettier + Solhint; CI fails on formatting drift or any Solhint warning). Auto-fix: `npm run lint:fix`.
+- Format: `npm run format` (applies Prettier with `prettier-plugin-solidity` to `contracts/**/*.sol`).
 
 ## Deploy Locally
 

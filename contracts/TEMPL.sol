@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.23;
 
-import { TemplBase } from "./TemplBase.sol";
-import { TemplMembershipModule } from "./TemplMembership.sol";
-import { TemplTreasuryModule } from "./TemplTreasury.sol";
-import { TemplGovernanceModule } from "./TemplGovernance.sol";
-import { TemplErrors } from "./TemplErrors.sol";
-import { CurveConfig } from "./TemplCurve.sol";
+import {TemplBase} from "./TemplBase.sol";
+import {TemplMembershipModule} from "./TemplMembership.sol";
+import {TemplTreasuryModule} from "./TemplTreasury.sol";
+import {TemplGovernanceModule} from "./TemplGovernance.sol";
+import {TemplErrors} from "./TemplErrors.sol";
+import {CurveConfig} from "./TemplCurve.sol";
 
 /// @title Templ Core
 /// @notice Wires governance, treasury, and membership modules for a single Templ instance.
@@ -325,13 +325,7 @@ contract TEMPL is TemplBase {
         if (action == Action.SetJoinPaused) {
             payload = abi.encode(p.joinPaused);
         } else if (action == Action.UpdateConfig) {
-            payload = abi.encode(
-                p.newEntryFee,
-                p.updateFeeSplit,
-                p.newBurnBps,
-                p.newTreasuryBps,
-                p.newMemberPoolBps
-            );
+            payload = abi.encode(p.newEntryFee, p.updateFeeSplit, p.newBurnBps, p.newTreasuryBps, p.newMemberPoolBps);
         } else if (action == Action.SetMaxMembers) {
             payload = abi.encode(p.newMaxMembers);
         } else if (action == Action.SetMetadata) {
