@@ -5,6 +5,9 @@ on:
     paths:
       - 'contracts/**'
       - 'test/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'hardhat.config.cjs'
   push:
     branches:
       - main
