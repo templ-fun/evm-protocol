@@ -25,7 +25,7 @@ contract TemplFactory {
     uint256 internal constant DEFAULT_MAX_MEMBERS = 249;
     uint32 internal constant DEFAULT_CURVE_EXP_RATE_BPS = 11_000;
     uint256 internal constant DEFAULT_PROPOSAL_FEE_BPS = 0;
-    
+
 
     /// @notice Full templ creation configuration. Use `createTemplWithConfig` to apply.
     struct CreateConfig {
@@ -74,7 +74,7 @@ contract TemplFactory {
     address public immutable governanceModule;
     address public immutable factoryDeployer;
     bool public permissionless;
-    
+
 
     /// @notice Emitted after deploying a new templ instance.
     /// @param templ Address of the deployed templ.
@@ -347,8 +347,6 @@ contract TemplFactory {
             cfg.referralShareBps
         );
     }
-
-    
 
     /// @dev Resolves a potentially sentinel-encoded bps value to its final value.
     /// @param rawBps Raw basis points supplied by callers (-1 requests the default value).

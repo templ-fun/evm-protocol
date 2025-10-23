@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.23;
-
 import {TemplFactory} from "../TemplFactory.sol";
 
 contract TemplFactoryHarness is TemplFactory {
@@ -14,5 +13,4 @@ contract TemplFactoryHarness is TemplFactory {
         TemplFactory(protocolFeeRecipient, protocolBps, membershipModule, treasuryModule, governanceModule)
     {}
 
-    
 }

@@ -4,14 +4,11 @@ import {TemplBase} from "./TemplBase.sol";
 import {TemplErrors} from "./TemplErrors.sol";
 import {CurveConfig} from "./TemplCurve.sol";
 import {TemplTreasuryModule} from "./TemplTreasury.sol";
- 
 
 /// @title Templ Governance Module
 /// @notice Adds proposal creation, voting, and execution flows on top of treasury + membership logic.
 contract TemplGovernanceModule is TemplBase {
-
     address public immutable SELF;
-    
 
     constructor() {
         SELF = address(this);
@@ -302,8 +299,6 @@ contract TemplGovernanceModule is TemplBase {
         return id;
     }
 
-    
-
     /// @notice Opens a proposal to withdraw treasury or external funds to a recipient.
     /// @param _token Token to withdraw (`address(0)` for ETH).
     /// @param _recipient Destination wallet for the funds.
@@ -593,7 +588,6 @@ contract TemplGovernanceModule is TemplBase {
         if (proposal.action == Action.CallExternal) {
             return _governanceCallExternal(proposal);
         }
-        
         if (proposal.action == Action.CleanupExternalRewardToken) {
             _governanceCleanupExternalRewardToken(proposal.token);
             return hex"";
@@ -706,9 +700,6 @@ contract TemplGovernanceModule is TemplBase {
         delete proposal.externalCallData;
         return returndata;
     }
-
-    /// @dev Executes a sequence of external calls. Reverts atomically on the first failure.
-    
 
     /// @notice Returns core metadata for a proposal including vote totals and status.
     /// @param _proposalId Proposal id to inspect.
@@ -828,8 +819,6 @@ contract TemplGovernanceModule is TemplBase {
         return (proposal.hasVoted[_voter], proposal.voteChoice[_voter]);
     }
 
-    
-
     /// @notice Lists proposal ids that are still within their active voting/execution window.
     /// @return proposalIds Array of currently active proposal ids.
     function getActiveProposals() external view returns (uint256[] memory proposalIds) {
@@ -899,7 +888,6 @@ contract TemplGovernanceModule is TemplBase {
         return (proposalIds, hasMore);
     }
 
-
     /// @dev Creates the base proposal structure, including quorum pre-checks and proposer tracking.
     function _createBaseProposal(
         uint256 _votingPeriod,
@@ -907,7 +895,6 @@ contract TemplGovernanceModule is TemplBase {
         string memory _description
     ) internal returns (uint256 proposalId, Proposal storage proposal) {
         _requireDelegatecall();
-        
         if (!members[msg.sender].joined) revert TemplErrors.NotMember();
         if (hasActiveProposal[msg.sender]) {
             uint256 existingId = activeProposalId[msg.sender];

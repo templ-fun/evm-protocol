@@ -294,8 +294,6 @@ contract TEMPL is TemplBase {
         _registerModule(module, selectors);
     }
 
-    
-
     /// @notice Returns the action and ABI-encoded payload for a proposal.
     /// @dev See README Proposal Views for payload types per action.
     /// @param _proposalId Proposal id to inspect.
