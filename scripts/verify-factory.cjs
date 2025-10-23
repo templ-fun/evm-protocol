@@ -1,0 +1,90 @@
+const hre = require("hardhat");
+require("dotenv").config();
+
+function readCliOption(argv, flags) {
+  for (let i = 2; i < argv.length; i += 1) {
+    const current = argv[i];
+    if (!flags.includes(current)) continue;
+    const next = argv[i + 1];
+    if (next && !next.startsWith('-')) {
+      return next;
+    }
+  }
+  return undefined;
+}
+
+function pickFactoryAddress(argv) {
+  const cli = readCliOption(argv, ['--factory', '--address']);
+  if (cli) return cli;
+  const envAddress = process.env.FACTORY_ADDRESS;
+  if (envAddress) return envAddress;
+  for (let i = 2; i < argv.length; i += 1) {
+    const arg = argv[i];
+    if (arg && !arg.startsWith('-')) {
+      return arg;
+    }
+  }
+  return undefined;
+}
+
+async function main() {
+  const factoryAddressRaw = pickFactoryAddress(process.argv);
+  if (!factoryAddressRaw) {
+    throw new Error(
+      'Provide factory address via --factory <addr>, FACTORY_ADDRESS env, or a positional argument.'
+    );
+  }
+  const factoryAddress = hre.ethers.getAddress(factoryAddressRaw);
+
+  const factory = await hre.ethers.getContractAt('TemplFactory', factoryAddress);
+
+  const factoryDeployer = await factory.factoryDeployer();
+  const protocolFeeRecipient = await factory.PROTOCOL_FEE_RECIPIENT();
+  const protocolBps = await factory.PROTOCOL_BPS();
+  const membershipModule = await factory.MEMBERSHIP_MODULE();
+  const treasuryModule = await factory.TREASURY_MODULE();
+  const governanceModule = await factory.GOVERNANCE_MODULE();
+
+  console.log('Verifying TemplFactory with constructor arguments:');
+  console.table({
+    factoryDeployer,
+    protocolFeeRecipient,
+    protocolBps: protocolBps.toString(),
+    membershipModule,
+    treasuryModule,
+    governanceModule
+  });
+
+  const constructorArguments = [
+    factoryDeployer,
+    protocolFeeRecipient,
+    protocolBps,
+    membershipModule,
+    treasuryModule,
+    governanceModule
+  ];
+
+  try {
+    await hre.run('verify:verify', {
+      address: factoryAddress,
+      contract: 'contracts/TemplFactory.sol:TemplFactory',
+      constructorArguments
+    });
+    console.log(`Verification submitted for ${factoryAddress}`);
+  } catch (err) {
+    const message = err?.message || String(err);
+    if (/already verified/i.test(message)) {
+      console.log(`Contract ${factoryAddress} is already verified.`);
+    } else {
+      throw err;
+    }
+  }
+}
+
+main()
+  .then(() => process.exit(0))
+  .catch((error) => {
+    console.error('Factory verification failed:', error);
+    process.exit(1);
+  });
+

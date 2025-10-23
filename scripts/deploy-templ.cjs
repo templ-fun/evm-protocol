@@ -645,7 +645,7 @@ async function main() {
     console.log("TemplFactory deployed => use factory logs to verify downstream TEMPL instances on Basescan.");
     console.log("You can verify the factory itself with:");
     console.log(
-      `npx hardhat verify --network base ${factoryAddress} ${PROTOCOL_FEE_RECIPIENT} ${protocolPercentBps} ${membershipModuleAddress} ${treasuryModuleAddress} ${governanceModuleAddress}`
+      `npx hardhat verify --network base ${factoryAddress} ${process.env.FACTORY_DEPLOYER || deployer.address} ${PROTOCOL_FEE_RECIPIENT} ${protocolPercentBps} ${membershipModuleAddress} ${treasuryModuleAddress} ${governanceModuleAddress}`
     );
   }
   

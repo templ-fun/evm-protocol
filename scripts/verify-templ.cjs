@@ -226,9 +226,9 @@ async function fetchContractSnapshot(contract) {
     proposalCreationFeeBps: await safeCall(contract, 'proposalCreationFeeBps'),
     referralShareBps: await safeCall(contract, 'referralShareBps'),
     // Module wiring (immutable in TEMPL constructor)
-    membershipModule: await safeCall(contract, 'membershipModule'),
-    treasuryModule: await safeCall(contract, 'treasuryModule'),
-    governanceModule: await safeCall(contract, 'governanceModule'),
+    membershipModule: await safeCall(contract, 'MEMBERSHIP_MODULE'),
+    treasuryModule: await safeCall(contract, 'TREASURY_MODULE'),
+    governanceModule: await safeCall(contract, 'GOVERNANCE_MODULE'),
     entryFeeCurve: await safeCall(contract, 'entryFeeCurve', normalizeCurveValue)
   };
 }

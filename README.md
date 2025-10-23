@@ -93,6 +93,18 @@ TEMPL_DESCRIPTION="Genesis collective" \
 npm run deploy:local
 ```
 
+Verify on Base (optional):
+
+```bash
+# Factory (reads constructor args from chain)
+BASESCAN_API_KEY=your_key \
+npm run verify:factory -- --network base --factory 0xYourFactory
+
+# TEMPL (reconstructs constructor args from chain + factory logs)
+BASESCAN_API_KEY=your_key \
+npm run verify:templ -- --network base --templ 0xYourTempl
+```
+
 Hardhat console (ethers v6) quick taste:
 
 ```js
@@ -201,12 +213,15 @@ sequenceDiagram
 Curves (see [`TemplCurve`](contracts/TemplCurve.sol)) support static, linear, and exponential segments. A final segment with `length=0` creates an infinite tail.
 
 ## Scripts & Env Vars
-- Scripts: `deploy:factory`, `deploy:factory:local`, `deploy:local`, `coverage`, `slither`.
+- Scripts: `deploy:factory`, `deploy:factory:local`, `deploy:local`, `coverage`, `slither`, `verify:templ`, `verify:factory`.
 - `scripts/deploy-factory.cjs`:
   - Required: `PROTOCOL_FEE_RECIPIENT`
   - Optional: `PROTOCOL_BPS`, `FACTORY_ADDRESS` (reuse), `FACTORY_DEPLOYER` (defaults to signer address)
   - Deploys modules if not provided via env and wires them into the factory constructor.
 - `scripts/deploy-templ.cjs`: key envs are `FACTORY_ADDRESS` (or omit to auto‑deploy modules + factory locally), `TOKEN_ADDRESS`, `ENTRY_FEE`, plus optional metadata (`TEMPL_NAME`, `TEMPL_DESCRIPTION`, `TEMPL_LOGO_LINK`). Many toggles are supported (priest, quorum/delay, caps, fee splits, referral share, curve).
+- Verify helpers:
+  - `verify:templ` verifies a TEMPL instance, reconstructing constructor args from chain data. Provide `TEMPL_ADDRESS` or `--templ 0x...` and run with a configured Hardhat network.
+  - `verify:factory` verifies a TemplFactory deployment using on‑chain getters. Provide `FACTORY_ADDRESS` or `--factory 0x...`.
 - Permissioning:
   - `TemplFactory.setPermissionless(true)` allows anyone to create templs.
   - `TemplFactory.transferDeployer(newAddr)` hands off deployer rights when permissionless is disabled.
