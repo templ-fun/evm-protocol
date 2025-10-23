@@ -257,7 +257,7 @@ async function main() {
   let protocolPercentSource = protocolPercentEnv.source;
   const QUORUM_BPS_RAW = process.env.QUORUM_BPS;
   const QUORUM_BPS = QUORUM_BPS_RAW !== undefined ? Number(QUORUM_BPS_RAW) : undefined;
-  const EXECUTION_DELAY_SECONDS = process.env.EXECUTION_DELAY_SECONDS !== undefined ? Number(process.env.EXECUTION_DELAY_SECONDS) : undefined;
+  const POST_QUORUM_VOTING_PERIOD_SECONDS = process.env.POST_QUORUM_VOTING_PERIOD_SECONDS !== undefined ? Number(process.env.POST_QUORUM_VOTING_PERIOD_SECONDS) : undefined;
   const BURN_ADDRESS = (process.env.BURN_ADDRESS || '').trim();
   const MAX_MEMBERS = process.env.MAX_MEMBERS !== undefined ? Number(process.env.MAX_MEMBERS) : 0;
   const NAME = (process.env.TEMPL_NAME ?? 'Templ').trim() || 'Templ';
@@ -327,8 +327,8 @@ async function main() {
   if (QUORUM_BPS !== undefined && (!Number.isFinite(QUORUM_BPS) || QUORUM_BPS < 0 || QUORUM_BPS > 10_000)) {
     throw new Error('QUORUM_BPS must be between 0 and 10,000');
   }
-  if (EXECUTION_DELAY_SECONDS !== undefined && (!Number.isFinite(EXECUTION_DELAY_SECONDS) || EXECUTION_DELAY_SECONDS <= 0)) {
-    throw new Error('EXECUTION_DELAY_SECONDS must be a positive number of seconds');
+  if (POST_QUORUM_VOTING_PERIOD_SECONDS !== undefined && (!Number.isFinite(POST_QUORUM_VOTING_PERIOD_SECONDS) || POST_QUORUM_VOTING_PERIOD_SECONDS <= 0)) {
+    throw new Error('POST_QUORUM_VOTING_PERIOD_SECONDS must be a positive number of seconds');
   }
   if (BURN_ADDRESS && !hre.ethers.isAddress(BURN_ADDRESS)) {
     throw new Error('BURN_ADDRESS must be a valid address');
@@ -384,7 +384,7 @@ async function main() {
   const chainIdNumber = Number(network.chainId);
   console.log("Network Chain ID:", network.chainId.toString());
   console.log("Quorum Bps:", quorumPercentBps || 3300);
-  console.log("Execution Delay (seconds):", EXECUTION_DELAY_SECONDS ?? 36 * 60 * 60);
+  console.log("Post‑Quorum Voting Period (seconds):", POST_QUORUM_VOTING_PERIOD_SECONDS ?? 36 * 60 * 60);
   console.log("Burn Address:", effectiveBurnAddress);
   console.log("Priest Dictatorship:", PRIEST_IS_DICTATOR ? 'enabled' : 'disabled');
   console.log('Curve configuration:', curveConfigEnv.description);
@@ -474,7 +474,7 @@ async function main() {
     treasuryBps: treasurySplit.configValue,
     memberPoolBps: memberPoolSplit.configValue,
     quorumBps: quorumPercentBps,
-    executionDelaySeconds: EXECUTION_DELAY_SECONDS ?? 0,
+    executionDelaySeconds: POST_QUORUM_VOTING_PERIOD_SECONDS ?? 0,
     burnAddress: BURN_ADDRESS || hre.ethers.ZeroAddress,
     priestIsDictator: PRIEST_IS_DICTATOR,
     maxMembers: MAX_MEMBERS,
@@ -608,7 +608,7 @@ async function main() {
     memberPoolBps: memberPoolSplit.resolvedBps,
     protocolBps: protocolPercentBps,
     quorumBps: quorumPercentBps,
-    executionDelaySeconds: EXECUTION_DELAY_SECONDS ?? 36 * 60 * 60,
+    executionDelaySeconds: POST_QUORUM_VOTING_PERIOD_SECONDS ?? 36 * 60 * 60,
     burnAddress: effectiveBurnAddress,
     priestIsDictator: PRIEST_IS_DICTATOR,
     tokenAddress: TOKEN_ADDRESS,

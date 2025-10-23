@@ -173,7 +173,7 @@ const pid = await templ.createProposalCallExternal(
 
 // 4) Vote and execute after quorum + delay
 await templ.vote(pid, true);
-// ...advance time to satisfy execution delay...
+// ...advance time to satisfy post‑quorum voting period...
 await templ.executeProposal(pid);
 ```
 
@@ -241,7 +241,7 @@ Curves (see [`TemplCurve`](contracts/TemplCurve.sol)) support static, linear, an
 
 ## Limits & Defaults
 - `BPS_DENOMINATOR = 10_000`.
-- Defaults via [`TemplDefaults`](contracts/TemplDefaults.sol): quorum bps, execution delay, burn address.
+- Defaults via [`TemplDefaults`](contracts/TemplDefaults.sol): quorum bps, post‑quorum voting period, burn address.
 - `MAX_EXTERNAL_REWARD_TOKENS = 256` (UI enumeration bound).
 - `MAX_ENTRY_FEE = type(uint128).max` (entry fee safety guard).
 - Pre‑quorum voting window: default 36 hours (min 36h, max 30 days); view `preQuorumVotingPeriod`; adjust via `setPreQuorumVotingPeriodDAO`.

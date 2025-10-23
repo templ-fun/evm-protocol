@@ -387,7 +387,7 @@ async function main() {
     treasuryBps: readCliOption(process.argv, ['--treasury-bps']),
     memberBps: readCliOption(process.argv, ['--member-bps']),
     quorumBps: readCliOption(process.argv, ['--quorum-bps']),
-    executionDelay: readCliOption(process.argv, ['--execution-delay', '--execution-delay-seconds']),
+    postQuorum: readCliOption(process.argv, ['--post-quorum-voting-period', '--post-quorum-seconds', '--post-quorum']),
     burnAddress: readCliOption(process.argv, ['--burn-address']),
     priestIsDictator: readCliOption(process.argv, ['--dictator', '--priest-is-dictator']),
     maxMembers: readCliOption(process.argv, ['--max-members']),
@@ -416,7 +416,7 @@ async function main() {
     treasuryBps: resolveBpsLike({ bpsValues: [cliOverrides.treasuryBps, process.env.TREASURY_BPS] }),
     memberPoolBps: resolveBpsLike({ bpsValues: [cliOverrides.memberBps, process.env.MEMBER_POOL_BPS] }),
     quorumBps: resolveBpsLike({ bpsValues: [cliOverrides.quorumBps, process.env.QUORUM_BPS] }),
-    postQuorumVotingPeriod: firstDefined([cliOverrides.executionDelay, process.env.EXECUTION_DELAY_SECONDS]),
+    postQuorumVotingPeriod: firstDefined([cliOverrides.postQuorum, process.env.POST_QUORUM_VOTING_PERIOD_SECONDS]),
     burnAddress: firstDefined([cliOverrides.burnAddress, process.env.BURN_ADDRESS]),
     priestIsDictator: firstDefined([
       resolveBoolean(cliOverrides.priestIsDictator),
