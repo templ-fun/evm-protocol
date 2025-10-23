@@ -71,8 +71,6 @@ contract TemplMembershipModule is TemplBase {
             revert TemplErrors.MemberLimitReached();
         }
 
-        // External reward remainders are rolled forward at disband time; no O(n) join-time flush
-
         uint256 price = entryFee;
 
         uint256 burnAmount = (price * burnBps) / BPS_DENOMINATOR;
@@ -95,7 +93,7 @@ contract TemplMembershipModule is TemplBase {
         joiningMember.joined = true;
         joiningMember.timestamp = block.timestamp;
         joiningMember.blockNumber = block.number;
-        // Snapshot the monotonic join order so governance snapshots can reason about eligibility.
+        
         uint256 sequence = ++joinSequence;
         memberCount = currentMemberCount + 1;
 
@@ -113,7 +111,7 @@ contract TemplMembershipModule is TemplBase {
 
         treasuryBalance += treasuryAmount;
         memberPoolBalance += distributablePool;
-        // NOTE: Fee-on-transfer or rebasing tokens are unsupported; accounting assumes vanilla ERC-20 semantics.
+        
         if (burnAmount > 0) {
             totalBurned += burnAmount;
         }
