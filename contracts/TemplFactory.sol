@@ -8,6 +8,7 @@ import { TemplDefaults } from "./TemplDefaults.sol";
 
 /// @title Templ Factory
 /// @notice Deploys Templ contracts with shared protocol configuration and optional custom splits.
+/// @author Templ
 contract TemplFactory {
     uint256 internal constant BPS_DENOMINATOR = 10_000;
     // NOTE: The default burn/treasury/member shares deliberately assume a
@@ -325,7 +326,7 @@ contract TemplFactory {
         curveStyles[0] = uint8(cfg.curve.primary.style);
         curveRates[0] = cfg.curve.primary.rateBps;
         curveLengths[0] = cfg.curve.primary.length;
-        for (uint256 i = 0; i < extraLen; i++) {
+        for (uint256 i = 0; i < extraLen; ++i) {
             CurveSegment memory seg = cfg.curve.additionalSegments[i];
             curveStyles[i + 1] = uint8(seg.style);
             curveRates[i + 1] = seg.rateBps;

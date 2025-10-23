@@ -7,6 +7,7 @@ import { TemplErrors } from "./TemplErrors.sol";
 
 /// @title Templ Membership Module
 /// @notice Handles joins, reward accounting, and member-facing views.
+/// @author Templ
 contract TemplMembershipModule is TemplBase {
     address public immutable SELF;
 
@@ -353,7 +354,7 @@ contract TemplMembershipModule is TemplBase {
         uint256 remaining = len - offset;
         uint256 take = limit < remaining ? limit : remaining;
         address[] memory out = new address[](take);
-        for (uint256 i = 0; i < take; i++) {
+        for (uint256 i = 0; i < take; ++i) {
             out[i] = externalRewardTokens[offset + i];
         }
         return (out, offset + take < len);

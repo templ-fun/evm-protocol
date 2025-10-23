@@ -7,6 +7,7 @@ import { CurveConfig } from "./TemplCurve.sol";
 
 /// @title Templ Governance Module
 /// @notice Adds proposal creation, voting, and execution flows on top of treasury + membership logic.
+/// @author Templ
 contract TemplGovernanceModule is TemplBase {
     address public immutable SELF;
 
@@ -827,14 +828,14 @@ contract TemplGovernanceModule is TemplBase {
         uint256 currentTime = block.timestamp;
         uint256[] memory temp = new uint256[](len);
         uint256 count = 0;
-        for (uint256 i = 0; i < len; i++) {
+        for (uint256 i = 0; i < len; ++i) {
             uint256 id = activeProposalIds[i];
             if (_isActiveProposal(proposals[id], currentTime)) {
                 temp[count++] = id;
             }
         }
         uint256[] memory activeIds = new uint256[](count);
-        for (uint256 i = 0; i < count; i++) {
+        for (uint256 i = 0; i < count; ++i) {
             activeIds[i] = temp[i];
         }
         return activeIds;
@@ -853,7 +854,7 @@ contract TemplGovernanceModule is TemplBase {
         uint256 currentTime = block.timestamp;
         uint256 len = activeProposalIds.length;
         uint256 totalActive = 0;
-        for (uint256 i = 0; i < len; i++) {
+        for (uint256 i = 0; i < len; ++i) {
             if (_isActiveProposal(proposals[activeProposalIds[i]], currentTime)) {
                 totalActive++;
             }
@@ -865,7 +866,7 @@ contract TemplGovernanceModule is TemplBase {
         uint256[] memory tempIds = new uint256[](limit);
         uint256 count = 0;
         uint256 activeSeen = 0;
-        for (uint256 i = 0; i < len && count < limit; i++) {
+        for (uint256 i = 0; i < len && count < limit; ++i) {
             uint256 id = activeProposalIds[i];
             if (!_isActiveProposal(proposals[id], currentTime)) {
                 continue;
@@ -879,7 +880,7 @@ contract TemplGovernanceModule is TemplBase {
         hasMore = (offset + count) < totalActive;
 
         proposalIds = new uint256[](count);
-        for (uint256 i = 0; i < count; i++) {
+        for (uint256 i = 0; i < count; ++i) {
             proposalIds[i] = tempIds[i];
         }
 

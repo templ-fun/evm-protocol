@@ -10,6 +10,7 @@ import { CurveConfig } from "./TemplCurve.sol";
 
 /// @title Templ Core
 /// @notice Wires governance, treasury, and membership modules for a single Templ instance.
+/// @author Templ
 contract TEMPL is TemplBase {
     address public immutable MEMBERSHIP_MODULE;
     address public immutable TREASURY_MODULE;
@@ -36,6 +37,9 @@ contract TEMPL is TemplBase {
     /// @param _proposalCreationFeeBps Proposal creation fee expressed in basis points of the current entry fee.
     /// @param _referralShareBps Referral share expressed in basis points of the member pool allocation.
     /// @param _curve Pricing curve configuration applied to future joins.
+    /// @param _membershipModule Module contract handling membership functions (delegatecalled).
+    /// @param _treasuryModule Module contract handling treasury/governance config (delegatecalled).
+    /// @param _governanceModule Module contract handling proposals/voting/execution (delegatecalled).
     constructor(
         address _priest,
         address _protocolFeeRecipient,
@@ -351,7 +355,7 @@ contract TEMPL is TemplBase {
 
     function _registerModule(address module, bytes4[] memory selectors) internal {
         uint256 len = selectors.length;
-        for (uint256 i = 0; i < len; i++) {
+        for (uint256 i = 0; i < len; ++i) {
             _moduleForSelector[selectors[i]] = module;
         }
     }

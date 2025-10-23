@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.23;
 
-import { Bytecode } from "./utils/Bytecode.sol";
+import { Bytecode } from "./Bytecode.sol";
 
 /// @title SSTORE2
 /// @notice Read and write persistent bytecode blobs at a fraction of the storage cost.
 /// @dev Adapted from https://github.com/0xsequence/sstore2 (MIT licensed).
+/// @author Templ
 library SSTORE2 {
     error WriteError();
 

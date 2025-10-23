@@ -3,6 +3,7 @@ pragma solidity ^0.8.23;
 
 /// @title Bytecode Utils
 /// @notice Helpers for constructing creation code and reading deployed bytecode ranges.
+/// @author Templ
 library Bytecode {
     error InvalidCodeAtRange(uint256 size, uint256 start, uint256 end);
 

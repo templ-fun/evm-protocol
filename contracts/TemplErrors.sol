@@ -3,6 +3,7 @@ pragma solidity ^0.8.23;
 
 /// @title TemplErrors
 /// @notice Shared custom errors for Templ contracts
+/// @author Templ
 library TemplErrors {
     /// @notice Thrown when the caller has not joined the templ.
     error NotMember();

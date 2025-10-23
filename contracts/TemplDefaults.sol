@@ -3,6 +3,7 @@ pragma solidity ^0.8.23;
 
 /// @title TemplDefaults
 /// @notice Shared default configuration constants to avoid drift across contracts
+/// @author Templ
 library TemplDefaults {
     uint256 internal constant DEFAULT_QUORUM_BPS = 3_300;
     uint256 internal constant DEFAULT_EXECUTION_DELAY = 7 days;
