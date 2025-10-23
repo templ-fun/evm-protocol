@@ -8,6 +8,7 @@ import { TemplDefaults } from "./TemplDefaults.sol";
 
 /// @title Templ Factory
 /// @notice Deploys Templ contracts with shared protocol configuration and optional custom splits.
+/// @author templ.fun
 contract TemplFactory {
     uint256 internal constant BPS_DENOMINATOR = 10_000;
     // NOTE: The default burn/treasury/member shares deliberately assume a
@@ -66,14 +67,20 @@ contract TemplFactory {
         uint256 referralShareBps;
     }
 
+    /// @notice Address that receives the protocol share in newly created templs.
     address public immutable PROTOCOL_FEE_RECIPIENT;
+    /// @notice Protocol fee share (bps) applied to all templs created by this factory.
     uint256 public immutable PROTOCOL_BPS;
+    /// @notice Membership module implementation used by templs deployed via this factory.
     address public immutable MEMBERSHIP_MODULE;
+    /// @notice Treasury module implementation used by templs deployed via this factory.
     address public immutable TREASURY_MODULE;
+    /// @notice Governance module implementation used by templs deployed via this factory.
     address public immutable GOVERNANCE_MODULE;
     /// @notice Account allowed to create templs while permissionless mode is disabled.
     /// @dev Can be transferred by the current deployer via `transferDeployer`.
     address public factoryDeployer;
+    /// @notice When true, any address may create templs via this factory.
     bool public permissionless;
 
     /// @notice Emitted after deploying a new templ instance.
@@ -124,9 +131,11 @@ contract TemplFactory {
 
     /// @notice Emitted when factory permissionless mode is toggled.
     /// @param enabled True when any address may create templs.
-    event PermissionlessModeUpdated(bool enabled);
+    event PermissionlessModeUpdated(bool indexed enabled);
 
-    function _defaultCurveConfig() internal pure returns (CurveConfig memory) {
+    /// @notice Returns the default curve configuration applied by the factory.
+    /// @return cfg Default exponential curve with infinite tail.
+    function _defaultCurveConfig() internal pure returns (CurveConfig memory cfg) {
         CurveSegment memory primary = CurveSegment({
             style: CurveStyle.Exponential,
             rateBps: DEFAULT_CURVE_EXP_RATE_BPS,
@@ -278,7 +287,7 @@ contract TemplFactory {
         return _deploy(cfg);
     }
 
-    /// @dev Deploys the templ after sanitizing the provided configuration.
+    /// @notice Deploys the templ after sanitizing the provided configuration.
     /// @param cfg Struct containing the templ deployment parameters.
     /// @return templAddress Address of the deployed templ.
     function _deploy(CreateConfig memory cfg) internal returns (address templAddress) {
@@ -325,7 +334,7 @@ contract TemplFactory {
         curveStyles[0] = uint8(cfg.curve.primary.style);
         curveRates[0] = cfg.curve.primary.rateBps;
         curveLengths[0] = cfg.curve.primary.length;
-        for (uint256 i = 0; i < extraLen; i++) {
+        for (uint256 i = 0; i < extraLen; ++i) {
             CurveSegment memory seg = cfg.curve.additionalSegments[i];
             curveStyles[i + 1] = uint8(seg.style);
             curveRates[i + 1] = seg.rateBps;
@@ -356,7 +365,7 @@ contract TemplFactory {
         );
     }
 
-    /// @dev Resolves a potentially sentinel-encoded bps value to its final value.
+    /// @notice Resolves a potentially sentinel-encoded bps value to its final value.
     /// @param rawBps Raw basis points supplied by callers (-1 requests the default value).
     /// @param defaultBps Default bps used when `rawBps` is the sentinel.
     /// @return resolvedBps Final bps applied to the deployment.
@@ -368,14 +377,17 @@ contract TemplFactory {
         return uint256(rawBps);
     }
 
-    /// @dev Ensures burn, treasury, member pool, and protocol slices sum to 100%.
+    /// @notice Ensures burn, treasury, member pool, and protocol slices sum to 100%.
+    /// @param _burnBps Burn share (bps).
+    /// @param _treasuryBps Treasury share (bps).
+    /// @param _memberPoolBps Member pool share (bps).
     function _validatePercentSplit(uint256 _burnBps, uint256 _treasuryBps, uint256 _memberPoolBps) internal view {
         if (_burnBps + _treasuryBps + _memberPoolBps + PROTOCOL_BPS != BPS_DENOMINATOR) {
             revert TemplErrors.InvalidPercentageSplit();
         }
     }
 
-    /// @dev Ensures templ creation calls respect the permissionless flag.
+    /// @notice Ensures templ creation calls respect the permissionless flag.
     function _enforceCreationAccess() internal view {
         if (!permissionless && msg.sender != factoryDeployer) {
             revert TemplErrors.FactoryAccessRestricted();

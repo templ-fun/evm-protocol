@@ -10,9 +10,13 @@ import { CurveConfig } from "./TemplCurve.sol";
 
 /// @title Templ Core
 /// @notice Wires governance, treasury, and membership modules for a single Templ instance.
+/// @author templ.fun
 contract TEMPL is TemplBase {
+    /// @notice Address of the membership module implementation used for delegatecalls.
     address public immutable MEMBERSHIP_MODULE;
+    /// @notice Address of the treasury module implementation used for delegatecalls.
     address public immutable TREASURY_MODULE;
+    /// @notice Address of the governance module implementation used for delegatecalls.
     address public immutable GOVERNANCE_MODULE;
 
     mapping(bytes4 => address) private _moduleForSelector;
@@ -35,6 +39,9 @@ contract TEMPL is TemplBase {
     /// @param _logoLink Canonical logo URL for the templ.
     /// @param _proposalCreationFeeBps Proposal creation fee expressed in basis points of the current entry fee.
     /// @param _referralShareBps Referral share expressed in basis points of the member pool allocation.
+    /// @param _membershipModule Address of the deployed membership module implementation.
+    /// @param _treasuryModule Address of the deployed treasury module implementation.
+    /// @param _governanceModule Address of the deployed governance module implementation.
     /// @param _curve Pricing curve configuration applied to future joins.
     constructor(
         address _priest,
@@ -200,12 +207,15 @@ contract TEMPL is TemplBase {
         governance[24] = TemplGovernanceModule.createProposalSetBurnAddress.selector;
     }
 
+    /// @notice Fallback routes calls to the registered module for the function selector.
     fallback() external payable {
         address module = _moduleForSelector[msg.sig];
         if (module == address(0)) revert TemplErrors.InvalidCallData();
         _delegateTo(module);
     }
 
+    /// @notice Delegatecalls the registered `module` forwarding calldata and bubbling return/revert data.
+    /// @param module Destination module address resolved for the current selector.
     function _delegateTo(address module) internal {
         assembly ("memory-safe") {
             calldatacopy(0, 0, calldatasize())
@@ -221,6 +231,8 @@ contract TEMPL is TemplBase {
         }
     }
 
+    /// @notice Registers membership function selectors to dispatch to `module`.
+    /// @param module Module address that implements membership functions.
     function _registerMembershipSelectors(address module) internal {
         bytes4[] memory selectors = new bytes4[](18);
         selectors[0] = TemplMembershipModule.join.selector;
@@ -244,6 +256,8 @@ contract TEMPL is TemplBase {
         _registerModule(module, selectors);
     }
 
+    /// @notice Registers treasury function selectors to dispatch to `module`.
+    /// @param module Module address that implements treasury functions.
     function _registerTreasurySelectors(address module) internal {
         bytes4[] memory selectors = new bytes4[](16);
         selectors[0] = TemplTreasuryModule.withdrawTreasuryDAO.selector;
@@ -265,6 +279,8 @@ contract TEMPL is TemplBase {
         _registerModule(module, selectors);
     }
 
+    /// @notice Registers governance function selectors to dispatch to `module`.
+    /// @param module Module address that implements governance functions.
     function _registerGovernanceSelectors(address module) internal {
         bytes4[] memory selectors = new bytes4[](25);
         selectors[0] = TemplGovernanceModule.createProposalSetJoinPaused.selector;
@@ -301,7 +317,7 @@ contract TEMPL is TemplBase {
     /// @return action The proposal action enum value.
     /// @return payload ABI-encoded payload corresponding to `action`.
     function getProposalActionData(uint256 _proposalId) external view returns (Action action, bytes memory payload) {
-        if (_proposalId >= proposalCount) revert TemplErrors.InvalidProposal();
+        if (!(_proposalId < proposalCount)) revert TemplErrors.InvalidProposal();
         Proposal storage p = proposals[_proposalId];
         action = p.action;
         if (action == Action.SetJoinPaused) {
@@ -349,9 +365,12 @@ contract TEMPL is TemplBase {
         }
     }
 
+    /// @notice Assigns each `selectors[i]` to `module` so delegatecalls are routed correctly.
+    /// @param module Module address to associate with the selectors.
+    /// @param selectors Function selectors implemented by `module`.
     function _registerModule(address module, bytes4[] memory selectors) internal {
         uint256 len = selectors.length;
-        for (uint256 i = 0; i < len; i++) {
+        for (uint256 i = 0; i < len; ++i) {
             _moduleForSelector[selectors[i]] = module;
         }
     }

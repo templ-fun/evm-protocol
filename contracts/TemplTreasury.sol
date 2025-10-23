@@ -7,9 +7,12 @@ import { CurveConfig } from "./TemplCurve.sol";
 
 /// @title Templ Treasury Module
 /// @notice Adds treasury controls, fee configuration, and external reward management.
+/// @author templ.fun
 contract TemplTreasuryModule is TemplBase {
+    /// @notice Sentinel used to detect direct calls to the module implementation.
     address public immutable SELF;
 
+    /// @notice Initializes the module and captures its own address to enforce delegatecalls.
     constructor() {
         SELF = address(this);
     }
@@ -28,7 +31,7 @@ contract TemplTreasuryModule is TemplBase {
         address token,
         address recipient,
         uint256 amount,
-        string memory reason
+        string calldata reason
     ) external onlyDAO nonReentrant onlyDelegatecall {
         _withdrawTreasury(token, recipient, amount, reason, 0);
     }
@@ -151,7 +154,7 @@ contract TemplTreasuryModule is TemplBase {
         uint256 len = targets.length;
         if (len == 0 || len != values.length || len != calldatas.length) revert TemplErrors.InvalidCallData();
         results = new bytes[](len);
-        for (uint256 i = 0; i < len; i++) {
+        for (uint256 i = 0; i < len; ++i) {
             address target = targets[i];
             if (target == address(0)) revert TemplErrors.InvalidRecipient();
             (bool success, bytes memory ret) = target.call{ value: values[i] }(calldatas[i]);
