@@ -82,6 +82,7 @@ contract TemplGovernanceModule is TemplBase {
     }
 
     /// @notice Opens a proposal to change the membership cap.
+    /// @dev Reverts when the requested cap is below the current `memberCount`.
     /// @param _newMaxMembers New membership limit (0 to remove the cap).
     /// @param _votingPeriod Optional custom voting duration (seconds).
     /// @param _title On-chain title for the proposal.
@@ -131,6 +132,7 @@ contract TemplGovernanceModule is TemplBase {
     }
 
     /// @notice Opens a proposal to update the quorum threshold (bps).
+    /// @dev Accepts either 0-100 (interpreted as %) or 0-10_000 (basis points).
     /// @param _newQuorumBps New quorum threshold (accepts 0-100 or 0-10_000 values).
     /// @param _votingPeriod Optional custom voting duration (seconds).
     /// @param _title On-chain title for the proposal.
@@ -174,6 +176,7 @@ contract TemplGovernanceModule is TemplBase {
     }
 
     /// @notice Opens a proposal to update the burn sink address.
+    /// @dev Reverts when `_newBurn` is the zero address.
     /// @param _newBurn Address that will receive burn allocations.
     /// @param _votingPeriod Optional custom voting duration (seconds).
     /// @param _title On-chain title for the proposal.
@@ -373,6 +376,7 @@ contract TemplGovernanceModule is TemplBase {
     }
 
     /// @notice Opens a proposal to appoint a new priest.
+    /// @dev Reverts when `_newPriest` is the zero address.
     /// @param _newPriest Address proposed as the new priest.
     /// @param _votingPeriod Optional custom voting duration (seconds).
     /// @param _title On-chain title for the proposal.
@@ -394,6 +398,7 @@ contract TemplGovernanceModule is TemplBase {
     }
 
     /// @notice Opens a proposal to enable or disable dictatorship mode.
+    /// @dev Reverts when the requested state equals the current `priestIsDictator` value.
     /// @param _enable Target dictatorship state.
     /// @param _votingPeriod Optional custom voting duration (seconds).
     /// @param _title On-chain title for the proposal.
