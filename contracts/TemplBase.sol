@@ -114,7 +114,6 @@ abstract contract TemplBase is ReentrancyGuard {
         uint256 cumulative;
     }
 
-    // Reorder: ensure Action enum appears before Proposal struct for consistency
     enum Action {
         SetJoinPaused,
         UpdateConfig,

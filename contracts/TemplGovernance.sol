@@ -16,12 +16,6 @@ contract TemplGovernanceModule is TemplBase {
         SELF = address(this);
     }
 
-    /// @notice Reverts unless called via delegatecall from the TEMPL router.
-    /// @dev Prevents direct calls to the module implementation.
-    function _requireDelegatecall() internal view {
-        if (address(this) == SELF) revert TemplErrors.DelegatecallOnly();
-    }
-
     /// @notice Opens a proposal to pause or resume new member joins.
     /// @param _paused Desired join pause state.
     /// @param _votingPeriod Optional custom voting duration (seconds).
@@ -1050,5 +1044,11 @@ contract TemplGovernanceModule is TemplBase {
             ++removed;
             len = activeProposalIds.length;
         }
+    }
+
+    /// @notice Reverts unless called via delegatecall from the TEMPL router.
+    /// @dev Prevents direct calls to the module implementation.
+    function _requireDelegatecall() internal view {
+        if (address(this) == SELF) revert TemplErrors.DelegatecallOnly();
     }
 }

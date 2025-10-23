@@ -26,7 +26,7 @@
     "deploy:local": "npx hardhat run scripts/deploy-templ.cjs --network localhost",
     "deploy:factory:local": "npx hardhat run scripts/deploy-factory.cjs --network localhost",
     "node": "npx hardhat node",
-    "docs": "npm run docs:clean && npx -y solidity-docgen@0.5.16 --output docs",
+    "docs": "npm run docs:clean && npx -y solidity-docgen@0.5.16 --solc-module solc --output docs",
     "docs:clean": "rm -rf docs"
   },
   "keywords": [
@@ -54,6 +54,7 @@
     "hardhat-gas-reporter": "^1.0.8",
     "prettier": "^3.6.0",
     "prettier-plugin-solidity": "^1.4.3",
+    "solc": "^0.8.23",
     "solhint": "^6.0.1",
     "solidity-coverage": "^0.8.1"
   },

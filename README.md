@@ -83,7 +83,7 @@ Events are declared contiguously, and selector routing in `TEMPL.sol` keeps exte
 - Install: `npm install`
 - Compile: `npm run compile`
 - Test: `npm test` (Hardhat). Coverage: `npm run coverage`.
-- Docs (NatSpec): `npm run docs` (generates Markdown in `docs/`).
+- Docs (NatSpec): `npm run docs` (generates Markdown in `docs/`). Uses `solidity-docgen@0.5.16` with `solc@0.8.23`.
 - Fuzzing (Echidna): `npm run test:fuzz` (via Docker; harness in `contracts/echidna/EchidnaTemplHarness.sol`).
 - Static analysis: `npm run slither` (requires Slither in PATH).
 - Lint: `npm run lint` (Prettier + Solhint; CI fails on formatting drift or any Solhint warning). Auto-fix: `npm run lint:fix`.
