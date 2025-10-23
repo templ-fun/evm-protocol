@@ -206,8 +206,6 @@ abstract contract TemplBase is ReentrancyGuard {
         uint256 quorumJoinSequence;
         /// @notice Desired dictatorship state when the action is SetDictatorship.
         bool setDictatorship;
-        /// @notice Proposed default pre‑quorum voting period (seconds).
-        uint256 newPreQuorumVotingPeriod;
     }
 
     /// @notice Total proposals ever created.
