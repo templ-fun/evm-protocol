@@ -179,8 +179,6 @@ contract TemplFactory {
         permissionless = false;
     }
 
-    
-
     /// @notice Transfers the factory deployer role to a new address.
     /// @param newDeployer Address of the new deployer.
     function transferDeployer(address newDeployer) external {

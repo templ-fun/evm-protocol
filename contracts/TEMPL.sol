@@ -360,8 +360,6 @@ contract TEMPL is TemplBase {
         _registerModule(module, selectors);
     }
 
-    
-
     /// @notice Assigns each `selectors[i]` to `module` so delegatecalls are routed correctly.
     /// @param module Module address to associate with the selectors.
     /// @param selectors Function selectors implemented by `module`.

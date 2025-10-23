@@ -246,8 +246,6 @@ abstract contract TemplBase is ReentrancyGuard {
     /// @notice Default pre‑quorum voting period applied when proposal creators pass zero.
     uint256 public preQuorumVotingPeriod;
 
-    
-
     /// @notice Emitted after a successful join.
     /// @param payer Wallet that paid the entry fee.
     /// @param member Wallet that received membership.
@@ -446,8 +444,6 @@ abstract contract TemplBase is ReentrancyGuard {
         if (joinPaused) revert TemplErrors.JoinIntakePaused();
         _;
     }
-
-    
 
     /// @notice Persists a new external reward checkpoint so future joins can baseline correctly.
     /// @param rewards External reward state to record a checkpoint for.
