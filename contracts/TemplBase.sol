@@ -236,7 +236,9 @@ abstract contract TemplBase is ReentrancyGuard {
     mapping(address => uint256) public activeProposalId;
     /// @notice Flags whether a proposer currently has an active proposal.
     mapping(address => bool) public hasActiveProposal;
+    /// @dev Dense set of currently active proposal ids for enumeration.
     uint256[] internal activeProposalIds;
+    /// @dev Index (id -> position+1) for O(1) removals from `activeProposalIds`.
     mapping(uint256 => uint256) internal activeProposalIndex;
     /// @notice Minimum allowed pre‑quorum voting period.
     uint256 public constant MIN_PRE_QUORUM_VOTING_PERIOD = 36 hours;

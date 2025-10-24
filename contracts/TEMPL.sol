@@ -19,6 +19,7 @@ contract TEMPL is TemplBase {
     /// @notice Address of the governance module implementation used for delegatecalls.
     address public immutable GOVERNANCE_MODULE;
 
+    /// @dev Selector-to-module routing table used by the fallback for delegatecall dispatch.
     mapping(bytes4 => address) private _moduleForSelector;
     /// @notice Initializes a new templ with the provided configuration and priest.
     /// @param _priest Wallet that oversees configuration changes until governance replaces it.

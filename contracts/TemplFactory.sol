@@ -70,11 +70,11 @@ contract TemplFactory {
     address public immutable PROTOCOL_FEE_RECIPIENT;
     /// @notice Protocol fee share (bps) applied to all templs created by this factory.
     uint256 public immutable PROTOCOL_BPS;
-    /// @notice Membership module implementation used by templs deployed via this factory.
+    /// @dev Membership module implementation used by templs deployed via this factory.
     address public immutable MEMBERSHIP_MODULE;
-    /// @notice Treasury module implementation used by templs deployed via this factory.
+    /// @dev Treasury module implementation used by templs deployed via this factory.
     address public immutable TREASURY_MODULE;
-    /// @notice Governance module implementation used by templs deployed via this factory.
+    /// @dev Governance module implementation used by templs deployed via this factory.
     address public immutable GOVERNANCE_MODULE;
     /// @notice Account allowed to create templs while permissionless mode is disabled.
     /// @dev Can be transferred by the current deployer via `transferDeployer`.
