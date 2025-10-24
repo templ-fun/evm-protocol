@@ -459,18 +459,15 @@ contract TemplFactory {
 
         uint256 factoryBefore = IERC20(token).balanceOf(address(this));
 
-        // Pull from user to factory; must increase factory's balance by exactly `amount`.
         IERC20(token).safeTransferFrom(from, address(this), amount);
         uint256 factoryAfterPull = IERC20(token).balanceOf(address(this));
         if (factoryAfterPull != factoryBefore + amount) revert TemplErrors.NonVanillaToken();
 
-        // Return to user; must increase user's balance by exactly `amount`.
         uint256 userBeforeReturn = IERC20(token).balanceOf(from);
         IERC20(token).safeTransfer(from, amount);
         uint256 userAfterReturn = IERC20(token).balanceOf(from);
         if (userAfterReturn != userBeforeReturn + amount) revert TemplErrors.NonVanillaToken();
 
-        // Sanity: factory balance back to starting point.
         uint256 factoryAfterReturn = IERC20(token).balanceOf(address(this));
         if (factoryAfterReturn != factoryBefore) revert TemplErrors.NonVanillaToken();
     }

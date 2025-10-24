@@ -524,7 +524,6 @@ contract TemplGovernanceModule is TemplBase {
 
         emit ProposalExecuted(_proposalId, true, keccak256(returnData));
         _removeActiveProposal(_proposalId);
-        // Opportunistically prune a small tail of inactive proposals to keep the index tidy.
         _pruneInactiveTail(EXECUTION_TAIL_PRUNE);
     }
 
