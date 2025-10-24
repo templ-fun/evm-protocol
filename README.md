@@ -175,7 +175,9 @@ Hardhat console (ethers v6) quick taste:
 // npx hardhat console --network localhost
 const templ = await ethers.getContractAt("TEMPL", "0xYourTempl");
 const token = await ethers.getContractAt("IERC20", (await templ.getConfig())[0]);
-await token.approve(templ.target, (await templ.getConfig())[1]);
+// Approve a bounded buffer (~2× entryFee) to absorb join races and cover first proposal fee
+const entryFee = (await templ.getConfig())[1];
+await token.approve(templ.target, entryFee * 2n);
 await templ.join();
 const id = await templ.createProposalSetJoinPaused(true, 36*60*60, "Pause joins", "Cooldown");
 await templ.vote(id, true);
@@ -245,6 +247,62 @@ Notes
 - To forward ETH in the batch, set `values` for the specific inner call(s) and pass the top-level `value` argument in `createProposalCallExternal` to `sum(values)`.
 - If any inner call reverts, the entire batch reverts; no partial effects.
 - Proposing and voting require membership; ensure the caller has joined.
+
+### Batched External Calls (approve → deploy vesting)
+This example shows how to batch an ERC‑20 `approve` with a downstream call to a vesting/stream factory. It mirrors the pattern above, using the minimal `BatchExecutor` helper.
+
+```js
+// npx hardhat console --network localhost
+const templ = await ethers.getContractAt("TEMPL", "0xYourTempl");
+const token = await ethers.getContractAt("IERC20", (await templ.getConfig())[0]);
+
+// 1) Build inner calls
+const factory = await ethers.getContractAt("IERC165", "0xcf61782465Ff973638143d6492B51A85986aB347");
+const amount = ethers.parseUnits("1000", 18);
+const recipient = "0xRecipient";
+const vestingDuration = 60n * 60n * 24n * 365n; // 1 year
+
+// approve(token -> factory, amount)
+const approveSel = token.interface.getFunction("approve").selector;
+const approveArgs = ethers.AbiCoder.defaultAbiCoder().encode(["address","uint256"],[await factory.getAddress(), amount]);
+const approveData = ethers.concat([approveSel, approveArgs]);
+
+// deploy_vesting_contract(token, recipient, amount, vesting_duration)
+const deploySel = "0x0551ebac"; // function selector
+const deployArgs = ethers.AbiCoder.defaultAbiCoder().encode([
+  "address","address","uint256","uint256"
+],[await token.getAddress(), recipient, amount, vestingDuration]);
+const deployData = ethers.concat([deploySel, deployArgs]);
+
+// 2) Wrap both in BatchExecutor.execute
+const Executor = await ethers.getContractFactory("BatchExecutor");
+const executor = await Executor.deploy();
+await executor.waitForDeployment();
+
+const targets = [await token.getAddress(), await factory.getAddress()];
+const values = [0, 0];
+const calldatas = [approveData, deployData];
+
+const execSel = executor.interface.getFunction("execute").selector;
+const execParams = ethers.AbiCoder.defaultAbiCoder().encode([
+  "address[]","uint256[]","bytes[]"
+],[targets, values, calldatas]);
+
+// 3) Create the external-call proposal
+const pid = await templ.createProposalCallExternal(
+  await executor.getAddress(),
+  0,
+  execSel,
+  execParams,
+  36 * 60 * 60,
+  "Approve + Deploy Vesting",
+  "Approve access token then call deploy_vesting_contract"
+);
+```
+
+Notes
+- Calls inside the batch are executed by the executor contract. If the vesting factory will pull tokens, its allowance and balance must belong to the executor. When funds should remain in the templ, use a purpose‑built helper that performs both steps from a single target so the templ is the caller, or transfer funds to the executor before the batch.
+- Keep `value=0` unless the target expects ETH.
 ```
 
 ```mermaid

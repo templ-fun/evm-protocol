@@ -16,9 +16,13 @@ Common preflight helpers
 - External rewards list: `TEMPL.getExternalRewardTokens()` or paginated `getExternalRewardTokensPaginated(offset, limit)`
 
 Allowances and approvals
-- Joins require an ERC-20 approval for the current `entryFee` to the TEMPL address.
-- Creating a proposal may require an ERC-20 approval when `proposalCreationFeeBps > 0` (collected from the proposer in access token units). Compute: `proposalFee = entryFee * proposalCreationFeeBps / 10_000`.
-- External reward claims for ERC-20s do not require approvals (the templ transfers out to the member). ETH uses a plain call.
+- Joins: UIs should default to approving a buffer of `2 × entryFee` to the TEMPL address. This protects against fee increases caused by concurrent joins between your approval and `join()` submission, and it leaves headroom for your first proposal creation fee (when enabled) without prompting another approval. Always make this adjustable and never default to unlimited.
+- Proposal creation: when `proposalCreationFeeBps > 0`, the proposer pays `proposalFee = entryFee * proposalCreationFeeBps / 10_000` in the access token. The 2× buffer above typically covers this; if not, prompt for a top‑up approval.
+- External reward claims for ERC‑20s do not require approvals (the templ transfers out). ETH uses a plain call.
+
+Join slippage handling (race‑proof UX)
+- On submit, re‑read `entryFee` from `getConfig()` and check current allowance. If `allowance < entryFee`, prompt to top‑up approval. With the recommended 2× buffer, this should be rare.
+- Show a concise note explaining that the approval buffer both guarantees the join and pre‑funds the first proposal fee.
 
 1) Join (default)
 - Step A: read `const [token, entryFee] = (await templ.getConfig());`
@@ -48,7 +52,7 @@ Allowances and approvals
   - Pause/resume joins: `templ.createProposalSetJoinPaused(bool paused, uint256 votingPeriod, string title, string description)`
   - Update entry fee / split: `templ.createProposalUpdateConfig(uint256 newFee, uint256 newBurnBps, uint256 newTreasuryBps, uint256 newMemberPoolBps, bool updateSplit, uint256 votingPeriod, string title, string description)`
   - Withdraw treasury/external funds: `templ.createProposalWithdrawTreasury(address tokenOrZero, address recipient, uint256 amount, string reason, uint256 votingPeriod, string title, string description)`
-  - Arbitrary external call: `templ.createProposalCallExternal(address target, uint256 value, bytes4 selector, bytes params, uint256 votingPeriod, string title, string description)`
+ - Arbitrary external call: `templ.createProposalCallExternal(address target, uint256 value, bytes4 selector, bytes params, uint256 votingPeriod, string title, string description)`
 - Building CallExternal params (ethers v6 style):
   - Selector: `target.interface.getFunction("fn").selector`
   - Params: `ethers.AbiCoder.defaultAbiCoder().encode(["type",...], [values...])`
@@ -95,7 +99,7 @@ Complete proposal creators (scan in code for params)
 - `createProposalSetBurnAddress`
 
 Security notes for UIs
-- Always approve the exact required amount (entry fee for joins; computed proposal fee for proposals). Avoid unlimited approvals in UX defaults.
+- Default to a bounded buffer, not unlimited. Approve `~2× entryFee` for joins (adjustable) and avoid unlimited approvals.
 - External call proposals are as powerful as timelocked admin calls; surface clear warnings. If batching is needed, use an executor contract like `contracts/tools/BatchExecutor.sol` and target it via `createProposalCallExternal`.
 - Only call the router. Modules revert on direct calls to prevent bypassing safety checks.
 
@@ -116,3 +120,63 @@ Where to look in code
 - Treasury APIs: `contracts/TemplTreasury.sol:1`
 - Action payload helper: `contracts/TEMPL.sol:240` via `getProposalActionData`
 
+Example: Approve + Deploy Vesting (batched external)
+- Goal: create a proposal that atomically approves a vesting/streaming factory, then calls its `deploy_vesting_contract` entrypoint.
+- Target factory: `0xcf61782465Ff973638143d6492B51A85986aB347` with selector `0x0551ebac` and params `(address token, address recipient, uint256 amount, uint256 vesting_duration)`.
+- Pattern: build two inner calls and execute them via `BatchExecutor.execute(targets, values, calldatas)` from a single `createProposalCallExternal` proposal.
+
+Ethers v6 encoding snippet (UI side):
+```js
+// Inputs the UI collects
+const token = "0xAccessToken";              // templ access token
+const factory = "0xcf61782465Ff973638143d6492B51A85986aB347"; // vesting/stream factory
+const recipient = "0xRecipient";
+const amount = ethers.parseUnits("1000", 18);
+const vestingDuration = 60n * 60n * 24n * 365n; // 1 year
+
+// 1) Build approve(token -> factory, amount)
+const erc20 = await ethers.getContractAt("IERC20", token);
+const approveSel = erc20.interface.getFunction("approve").selector;
+const approveArgs = ethers.AbiCoder.defaultAbiCoder().encode(["address","uint256"],[factory, amount]);
+const approveCalldata = ethers.concat([approveSel, approveArgs]);
+
+// 2) Build deploy_vesting_contract(token, recipient, amount, vesting_duration)
+const deploySel = "0x0551ebac"; // function selector
+const deployArgs = ethers.AbiCoder.defaultAbiCoder().encode(
+  ["address","address","uint256","uint256"],
+  [token, recipient, amount, vestingDuration]
+);
+const deployCalldata = ethers.concat([deploySel, deployArgs]);
+
+// 3) Wrap in BatchExecutor.execute
+const Executor = await ethers.getContractFactory("BatchExecutor");
+const executor = await Executor.deploy();
+await executor.waitForDeployment();
+
+const targets = [token, factory];
+const values = [0, 0];
+const calldatas = [approveCalldata, deployCalldata];
+
+const execSel = executor.interface.getFunction("execute").selector;
+const execParams = ethers.AbiCoder.defaultAbiCoder().encode(
+  ["address[]","uint256[]","bytes[]"],
+  [targets, values, calldatas]
+);
+
+// 4) Create the proposal: templ -> BatchExecutor
+await templ.createProposalCallExternal(
+  await executor.getAddress(),
+  0,
+  execSel,
+  execParams,
+  0,
+  "Approve + Deploy Vesting",
+  "Approve access token then deploy a vesting/stream contract"
+);
+```
+
+Important
+- Calls executed through `BatchExecutor` are sent by the executor contract. Any `approve` affects the executor’s allowance and any token transfers spend the executor’s balance. If the vesting factory must pull tokens from the templ, prefer one of:
+  - Single‑target helper: a minimal helper contract with a single function that performs both `token.approve(factory, amount)` and the `deploy_vesting_contract` call, then point `createProposalCallExternal` at the helper so the templ is the caller/owner of the allowance and funds.
+  - Deposit first: have the proposal transfer or withdraw tokens to the executor before the batch (less preferred; splits custody).
+- Keep `value=0` unless the target expects ETH.
