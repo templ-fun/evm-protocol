@@ -34,11 +34,11 @@ abstract contract TemplBase is ReentrancyGuard {
     /// @dev Maximum allowed proposal description length in bytes.
     uint256 internal constant MAX_PROPOSAL_DESCRIPTION_LENGTH = 2048;
     /// @dev Maximum allowed templ name length in bytes.
-    uint256 internal constant MAX_TEMPL_NAME_LENGTH = 64;
+    uint256 internal constant MAX_TEMPL_NAME_LENGTH = 256;
     /// @dev Maximum allowed templ description length in bytes.
-    uint256 internal constant MAX_TEMPL_DESCRIPTION_LENGTH = 512;
+    uint256 internal constant MAX_TEMPL_DESCRIPTION_LENGTH = 2048;
     /// @dev Maximum allowed templ logo URI length in bytes.
-    uint256 internal constant MAX_TEMPL_LOGO_URI_LENGTH = 512;
+    uint256 internal constant MAX_TEMPL_LOGO_URI_LENGTH = 2048;
 
     /// @notice Basis points of the entry fee that are burned on every join.
     uint256 public burnBps;

@@ -332,7 +332,7 @@ Curves (see [`TemplCurve`](contracts/TemplCurve.sol)) support static, linear, an
 - `MAX_ENTRY_FEE = type(uint128).max` (entry fee safety guard).
 - `MAX_CURVE_SEGMENTS = 8` (primary + additional; prevents curve OOG griefing).
 - Proposal metadata caps: title ≤256 bytes; description ≤2048 bytes.
-- Templ metadata caps: name ≤64 bytes; description ≤512 bytes; logo URI ≤512 bytes.
+- Templ metadata caps: name ≤256 bytes; description ≤2048 bytes; logo URI ≤2048 bytes.
 - Pre‑quorum voting window: default 36 hours (min 36h, max 30 days); view `preQuorumVotingPeriod`; adjust via `setPreQuorumVotingPeriodDAO`.
 - Factory defaults (when not explicitly provided):
   - Fee split: burn 3_000 bps, treasury 3_000 bps, member pool 3_000 bps (plus protocol bps from factory).
