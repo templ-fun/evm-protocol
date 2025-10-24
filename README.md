@@ -9,6 +9,7 @@ Quick links: [At a Glance](#protocol-at-a-glance) · [Architecture](#architectur
 ## Protocol At a Glance
 - Create a templ tied to a vanilla ERC‑20 access token; members join by paying an entry fee in that token. The fee is split into burn, treasury, member‑pool, and protocol slices.
 - Existing members accrue pro‑rata rewards from the member‑pool slice and can claim at any time. Templs can also hold ETH or ERC‑20s as external rewards.
+- Any ETH or ERC‑20 sent directly to the templ is held by the templ and governed: governance can withdraw these funds to recipients, or disband them into claimable external rewards for members.
 - Governance is member‑only: propose, vote, and execute actions to change parameters, move treasury, update curves/metadata, or call arbitrary external contracts.
 - Optional dictatorship lets a designated “priest” directly execute DAO‑only actions when enabled; otherwise all such actions flow through governance.
 - Pricing curves define how the entry fee evolves with membership growth (static, linear, exponential segments; see `CurveConfig` in `TemplCurve`).
@@ -63,7 +64,7 @@ flowchart LR
 - Fee split: burn / treasury / member pool / protocol; must sum to 10_000 bps.
 - Member pool: portion of each join streamed to existing members pro‑rata; optional referral share is paid from this slice.
 - Curves: entry fee evolves by static/linear/exponential segments; see [`TemplCurve`](contracts/TemplCurve.sol).
-- Dictatorship: when enabled, the priest may call `onlyDAO` actions directly; otherwise all `onlyDAO` actions execute via governance.
+- Dictatorship: when enabled, the priest may call `onlyDAO` actions directly with no voting window or timelock. The priest can exercise the full DAO surface, including `batchDAO` for arbitrary external calls executed from the templ address. When dictatorship is disabled, all `onlyDAO` actions execute via governance.
 - Snapshots: eligibility is frozen by join sequence at proposal creation, then again at quorum.
 - Caps/pauses: optional `maxMembers` (auto‑pauses at cap) plus `joinPaused` toggle.
 - Governance access: proposing and voting require membership; the proposer’s vote is counted YES at creation.
@@ -187,7 +188,7 @@ await templ.executeProposal(id);
 ```
 
 ### Batched External Calls (approve → stake)
-Use the included [`BatchExecutor`](contracts/tools/BatchExecutor.sol) to sequence multiple downstream calls atomically via a single governance proposal. For a simple staking target used in examples/tests, see [contracts/mocks/MockStaking.sol](contracts/mocks/MockStaking.sol).
+Use the built‑in `batchDAO(address[],uint256[],bytes[])` to execute multiple calls atomically from the templ address in a single proposal. For a simple staking target used in examples/tests, see [contracts/mocks/MockStaking.sol](contracts/mocks/MockStaking.sol).
 
 ```js
 // npx hardhat console --network localhost
@@ -210,31 +211,29 @@ const stakeArgs = ethers.AbiCoder.defaultAbiCoder().encode(
 );
 const stakeData = ethers.concat([stakeSel, stakeArgs]);
 
-// 2) Encode BatchExecutor.execute(targets, values, calldatas)
-// Deploy a fresh BatchExecutor (or use an existing address)
-const Executor = await ethers.getContractFactory("BatchExecutor");
-const executor = await Executor.deploy();
-await executor.waitForDeployment();
+// 2) Encode templ.batchDAO(targets, values, calldatas)
 const targets = [await token.getAddress(), await staking.getAddress()];
-const values = [0, 0]; // no ETH in this example
+const values = [0, 0];
 const calldatas = [approveData, stakeData];
 
-const execSel = executor.interface.getFunction("execute").selector;
-const execParams = ethers.AbiCoder.defaultAbiCoder().encode(
+// Use the Treasury module ABI to get the batch selector
+const Treasury = await ethers.getContractFactory("TemplTreasuryModule");
+const batchSel = Treasury.interface.getFunction("batchDAO").selector;
+const batchParams = ethers.AbiCoder.defaultAbiCoder().encode(
   ["address[]","uint256[]","bytes[]"],
   [targets, values, calldatas]
 );
 
-// 3) Propose the external call (templ -> BatchExecutor)
+// 3) Propose the external call (templ -> templ.batchDAO)
 const votingPeriod = 36 * 60 * 60;
 const pid = await templ.createProposalCallExternal(
-  await executor.getAddress(),
-  0, // forward 0 ETH to the executor
-  execSel,
-  execParams,
+  await templ.getAddress(),
+  0, // no ETH forwarded in this example
+  batchSel,
+  batchParams,
   votingPeriod,
   "Approve and stake",
-  "Approve token then stake in a single atomic batch"
+  "Approve token then stake in a single atomic batch (sender = templ)"
 );
 
 // 4) Vote and execute after quorum + delay
@@ -244,12 +243,13 @@ await templ.executeProposal(pid);
 ```
 
 Notes
-- To forward ETH in the batch, set `values` for the specific inner call(s) and pass the top-level `value` argument in `createProposalCallExternal` to `sum(values)`.
+- Calls execute from the templ address. Any approvals and transfers affect the templ’s allowances and balances.
+- To forward ETH in the batch, set `values` per inner call and set the top‑level `value` in `createProposalCallExternal` to `sum(values)`.
 - If any inner call reverts, the entire batch reverts; no partial effects.
 - Proposing and voting require membership; ensure the caller has joined.
 
 ### Batched External Calls (approve → deploy vesting)
-This example shows how to batch an ERC‑20 `approve` with a downstream call to a vesting/stream factory. It mirrors the pattern above, using the minimal `BatchExecutor` helper.
+This example shows how to batch an ERC‑20 `approve` with a downstream call to a vesting/stream factory, executing both from the templ via `batchDAO`.
 
 ```js
 // npx hardhat console --network localhost
@@ -274,26 +274,23 @@ const deployArgs = ethers.AbiCoder.defaultAbiCoder().encode([
 ],[await token.getAddress(), recipient, amount, vestingDuration]);
 const deployData = ethers.concat([deploySel, deployArgs]);
 
-// 2) Wrap both in BatchExecutor.execute
-const Executor = await ethers.getContractFactory("BatchExecutor");
-const executor = await Executor.deploy();
-await executor.waitForDeployment();
-
+// 2) Wrap both in templ.batchDAO
 const targets = [await token.getAddress(), await factory.getAddress()];
 const values = [0, 0];
 const calldatas = [approveData, deployData];
 
-const execSel = executor.interface.getFunction("execute").selector;
-const execParams = ethers.AbiCoder.defaultAbiCoder().encode([
+const Treasury = await ethers.getContractFactory("TemplTreasuryModule");
+const batchSel = Treasury.interface.getFunction("batchDAO").selector;
+const batchParams = ethers.AbiCoder.defaultAbiCoder().encode([
   "address[]","uint256[]","bytes[]"
 ],[targets, values, calldatas]);
 
 // 3) Create the external-call proposal
 const pid = await templ.createProposalCallExternal(
-  await executor.getAddress(),
+  await templ.getAddress(),
   0,
-  execSel,
-  execParams,
+  batchSel,
+  batchParams,
   36 * 60 * 60,
   "Approve + Deploy Vesting",
   "Approve access token then call deploy_vesting_contract"
@@ -301,7 +298,7 @@ const pid = await templ.createProposalCallExternal(
 ```
 
 Notes
-- Calls inside the batch are executed by the executor contract. If the vesting factory will pull tokens, its allowance and balance must belong to the executor. When funds should remain in the templ, use a purpose‑built helper that performs both steps from a single target so the templ is the caller, or transfer funds to the executor before the batch.
+- Calls execute from the templ address. Approvals and transfers affect the templ’s allowance/balance. This is the canonical way to interact with other protocols while keeping custody in the templ.
 - Keep `value=0` unless the target expects ETH.
 ```
 

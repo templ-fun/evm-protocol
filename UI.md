@@ -120,10 +120,10 @@ Where to look in code
 - Treasury APIs: `contracts/TemplTreasury.sol:1`
 - Action payload helper: `contracts/TEMPL.sol:240` via `getProposalActionData`
 
-Example: Approve + Deploy Vesting (batched external)
-- Goal: create a proposal that atomically approves a vesting/streaming factory, then calls its `deploy_vesting_contract` entrypoint.
+Example: Approve + Deploy Vesting (from templ via batchDAO)
+- Goal: create a proposal that atomically approves a vesting/streaming factory, then calls its `deploy_vesting_contract` entrypoint, with both calls originating from the templ address.
 - Target factory: `0xcf61782465Ff973638143d6492B51A85986aB347` with selector `0x0551ebac` and params `(address token, address recipient, uint256 amount, uint256 vesting_duration)`.
-- Pattern: build two inner calls and execute them via `BatchExecutor.execute(targets, values, calldatas)` from a single `createProposalCallExternal` proposal.
+- Pattern: build two inner calls and execute them via `TEMPL.batchDAO(address[],uint256[],bytes[])` called through `createProposalCallExternal` targeting the TEMPL router.
 
 Ethers v6 encoding snippet (UI side):
 ```js
@@ -148,27 +148,24 @@ const deployArgs = ethers.AbiCoder.defaultAbiCoder().encode(
 );
 const deployCalldata = ethers.concat([deploySel, deployArgs]);
 
-// 3) Wrap in BatchExecutor.execute
-const Executor = await ethers.getContractFactory("BatchExecutor");
-const executor = await Executor.deploy();
-await executor.waitForDeployment();
-
+// 3) Wrap in templ.batchDAO
 const targets = [token, factory];
 const values = [0, 0];
 const calldatas = [approveCalldata, deployCalldata];
 
-const execSel = executor.interface.getFunction("execute").selector;
-const execParams = ethers.AbiCoder.defaultAbiCoder().encode(
+const Treasury = await ethers.getContractFactory("TemplTreasuryModule");
+const batchSel = Treasury.interface.getFunction("batchDAO").selector;
+const batchParams = ethers.AbiCoder.defaultAbiCoder().encode(
   ["address[]","uint256[]","bytes[]"],
   [targets, values, calldatas]
 );
 
-// 4) Create the proposal: templ -> BatchExecutor
+// 4) Create the proposal: templ -> templ.batchDAO
 await templ.createProposalCallExternal(
-  await executor.getAddress(),
+  await templ.getAddress(),
   0,
-  execSel,
-  execParams,
+  batchSel,
+  batchParams,
   0,
   "Approve + Deploy Vesting",
   "Approve access token then deploy a vesting/stream contract"
@@ -176,7 +173,5 @@ await templ.createProposalCallExternal(
 ```
 
 Important
-- Calls executed through `BatchExecutor` are sent by the executor contract. Any `approve` affects the executor’s allowance and any token transfers spend the executor’s balance. If the vesting factory must pull tokens from the templ, prefer one of:
-  - Single‑target helper: a minimal helper contract with a single function that performs both `token.approve(factory, amount)` and the `deploy_vesting_contract` call, then point `createProposalCallExternal` at the helper so the templ is the caller/owner of the allowance and funds.
-  - Deposit first: have the proposal transfer or withdraw tokens to the executor before the batch (less preferred; splits custody).
+- Calls execute from the templ address. Any `approve` and downstream `transferFrom` affect the templ’s allowance and balance, preserving custody in the templ.
 - Keep `value=0` unless the target expects ETH.
