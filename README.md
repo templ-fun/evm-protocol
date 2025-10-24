@@ -60,9 +60,9 @@ flowchart LR
 
 ## Repo Map
 - Contracts: `contracts/`
-  - Core: `TEMPL.sol`, `TemplBase.sol`, `TemplMembership.sol`, `TemplTreasury.sol`, `TemplGovernance.sol`
-  - Factory + config: `TemplFactory.sol`, `TemplCurve.sol`, `TemplDefaults.sol`, `TemplErrors.sol`
-  - Utilities: `tools/BatchExecutor.sol`, `libraries/*`, `mocks/*`, `echidna/*`
+  - Core: `contracts/TEMPL.sol`, `contracts/TemplBase.sol`, `contracts/TemplMembership.sol`, `contracts/TemplTreasury.sol`, `contracts/TemplGovernance.sol`
+  - Factory + config: `contracts/TemplFactory.sol`, `contracts/TemplCurve.sol`, `contracts/TemplDefaults.sol`, `contracts/TemplErrors.sol`
+  - Utilities: `contracts/tools/BatchExecutor.sol`, `contracts/libraries/*`, `contracts/mocks/*`, `contracts/echidna/*`
 - Tests: `test/*.test.js` (ethers v6, hardhat). Helpers in `test/utils`.
 - Scripts: `scripts/deploy-factory.cjs`, `scripts/deploy-templ.cjs`
 - Config: `hardhat.config.cjs`, `echidna.yaml`, `slither.config.json`, `.solhint.json`
@@ -312,7 +312,7 @@ Learn by topic (a non‑exhaustive map):
 - Defenses/guards: `test/Reentrancy.test.js`, `test/ProposalFeeReentrancy.test.js`, `test/DirectModuleCallGuard.test.js`
 - Selectors/ABI surface: `test/TEMPLRegisteredSelectors.test.js`, `test/TEMPLSelectors.test.js`
 
-CI runs on PRs only when Solidity contracts or tests change (`contracts/**`, `test/**`), keeping checks focused on relevant changes.
+CI runs on PRs when source, tests, scripts, or docs change (contracts, tests, scripts, docs, and key configs), keeping checks focused on relevant changes.
 
 ## Gotchas
 - Use a vanilla ERC‑20 for access token (no transfer fees/rebases/hooks).

@@ -120,16 +120,14 @@ Governance action that updates the post‑quorum voting period in seconds.
 
 ### `setBurnAddressDAO(address newBurn)` (external)
 
-/ @notice Governance action that updates the burn sink address.
-
+Governance action that updates the burn sink address.
 
 Reverts when `newBurn` is the zero address.
 
 
 ### `setPreQuorumVotingPeriodDAO(uint256 newPeriod)` (external)
 
-/ @notice Governance action that updates the default pre‑quorum voting period (seconds).
-
+Governance action that updates the default pre‑quorum voting period (seconds).
 
 Governance can reach this setter by proposing a `CallExternal` targeting the TEMPL
      router with the `setPreQuorumVotingPeriodDAO` selector and encoded params.
@@ -138,11 +136,9 @@ Governance can reach this setter by proposing a `CallExternal` targeting the TEM
 
 ### `batchDAO(address[] targets, uint256[] values, bytes[] calldatas) → bytes[] results` (external)
 
-otice Governance action that performs multiple external calls atomically from the templ.
-
+Governance action that performs multiple external calls atomically from the templ.
 
 Executes each call in-order. If any call reverts, bubbles up revert data and reverts the whole batch.
-
 
 
 
