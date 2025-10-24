@@ -139,7 +139,6 @@ contract TemplGovernanceModule is TemplBase {
     ) external nonReentrant returns (uint256 proposalId) {
         _requireDelegatecall();
         if (priestIsDictator) revert TemplErrors.DictatorshipEnabled();
-        // Enforce BPS-only inputs.
         if (_newQuorumBps > BPS_DENOMINATOR) revert TemplErrors.InvalidPercentage();
         (uint256 id, Proposal storage p) = _createBaseProposal(_votingPeriod, _title, _description);
         p.action = Action.SetQuorumBps;

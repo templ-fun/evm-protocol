@@ -587,7 +587,6 @@ abstract contract TemplBase is ReentrancyGuard {
         accessToken = _accessToken;
         priestIsDictator = _priestIsDictator;
 
-        // Enforce BPS-only inputs for fee splits.
         uint256 rawTotal = _burnBps + _treasuryBps + _memberPoolBps + _protocolBps;
         if (rawTotal != BPS_DENOMINATOR) revert TemplErrors.InvalidPercentageSplit();
 
