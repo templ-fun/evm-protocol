@@ -12,6 +12,7 @@ import {CurveConfig} from "./TemplCurve.sol";
 /// @notice Wires governance, treasury, and membership modules for a single Templ instance.
 /// @author templ.fun
 contract TEMPL is TemplBase {
+    
     /// @notice Address of the membership module implementation used for delegatecalls.
     address public immutable MEMBERSHIP_MODULE;
     /// @notice Address of the treasury module implementation used for delegatecalls.
@@ -21,6 +22,7 @@ contract TEMPL is TemplBase {
 
     /// @dev Selector-to-module routing table used by the fallback for delegatecall dispatch.
     mapping(bytes4 => address) private _moduleForSelector;
+
     /// @notice Initializes a new templ with the provided configuration and priest.
     /// @param _priest Wallet that oversees configuration changes until governance replaces it.
     /// @param _protocolFeeRecipient Address that receives the protocol share of every entry fee.
