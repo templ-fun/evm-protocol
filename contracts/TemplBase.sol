@@ -13,7 +13,6 @@ import {TemplDefaults} from "./TemplDefaults.sol";
 /// @notice Hosts shared state, events, and internal helpers used by membership, treasury, and governance modules.
 /// @author templ.fun
 abstract contract TemplBase is ReentrancyGuard {
-
     using SafeERC20 for IERC20;
 
     /// @dev Basis for fee split math (basis points per 100%).
@@ -376,7 +375,7 @@ abstract contract TemplBase is ReentrancyGuard {
     /// @param name New templ name.
     /// @param description New templ description.
     /// @param logoLink New templ logo link.
-    
+
     event TemplMetadataUpdated(string name, string description, string logoLink);
     /// @notice Emitted when the proposal creation fee is updated.
     /// @param previousFeeBps Previous fee (bps of entry fee).
@@ -406,7 +405,7 @@ abstract contract TemplBase is ReentrancyGuard {
     /// @notice Emitted when the default pre‑quorum voting period is updated.
     /// @param previousPeriod Previous default pre‑quorum voting period (seconds).
     /// @param newPeriod New default pre‑quorum voting period (seconds).
-    
+
     event PreQuorumVotingPeriodUpdated(uint256 indexed previousPeriod, uint256 indexed newPeriod);
     /// @notice Emitted when dictatorship mode is toggled.
     /// @param enabled True when dictatorship is enabled, false when disabled.
