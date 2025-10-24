@@ -25,9 +25,7 @@
     "deploy:factory": "npx hardhat run scripts/deploy-factory.cjs --network base",
     "deploy:local": "npx hardhat run scripts/deploy-templ.cjs --network localhost",
     "deploy:factory:local": "npx hardhat run scripts/deploy-factory.cjs --network localhost",
-    "node": "npx hardhat node",
-    "docs": "npm run docs:clean && npx -y solidity-docgen@0.5.16 --solc-module solc --output docs",
-    "docs:clean": "rm -rf docs"
+    "node": "npx hardhat node"
   },
   "keywords": [
     "solidity",
