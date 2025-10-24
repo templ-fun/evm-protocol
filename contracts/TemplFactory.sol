@@ -5,6 +5,8 @@ import {TEMPL} from "./TEMPL.sol";
 import {TemplErrors} from "./TemplErrors.sol";
 import {CurveConfig, CurveSegment, CurveStyle} from "./TemplCurve.sol";
 import {TemplDefaults} from "./TemplDefaults.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 /// @title Templ Factory
 /// @notice Deploys Templ contracts with shared protocol configuration and optional custom splits.
@@ -13,6 +15,7 @@ import {TemplDefaults} from "./TemplDefaults.sol";
 ///      adjust the defaults so the totals continue to sum to 10_000 bps.
 /// @author templ.fun
 contract TemplFactory {
+    using SafeERC20 for IERC20;
     uint256 internal constant BPS_DENOMINATOR = 10_000;
     uint256 internal constant DEFAULT_BURN_BPS = 3_000;
     uint256 internal constant DEFAULT_TREASURY_BPS = 3_000;
@@ -25,6 +28,8 @@ contract TemplFactory {
     uint32 internal constant DEFAULT_CURVE_EXP_RATE_BPS = 10_094;
     uint256 internal constant DEFAULT_PROPOSAL_FEE_BPS = 2_500;
     uint256 internal constant DEFAULT_REFERRAL_SHARE_BPS = 2_500;
+    /// @dev Probe amount used by `safeDeployFor` to sanity-check vanilla ERC-20 semantics.
+    uint256 internal constant SAFE_DEPLOY_PROBE_AMOUNT = 100_000;
 
     /// @notice Full templ creation configuration. Use `createTemplWithConfig` to apply.
     struct CreateConfig {
@@ -271,6 +276,46 @@ contract TemplFactory {
         return _deploy(cfg);
     }
 
+    /// @notice Safely deploys a templ by first probing the access token for vanilla ERC-20 semantics.
+    /// @dev Requires the caller to approve this factory for `SAFE_DEPLOY_PROBE_AMOUNT` of `_token`.
+    ///      The probe pulls tokens from the caller and returns them, asserting exact deltas both ways.
+    ///      Any fee-on-transfer, rebasing, or hook-based deviation from exact transfer semantics
+    ///      causes the deploy to revert with NonVanillaToken.
+    /// @param _priest Wallet that will assume the templ priest role after deployment.
+    /// @param _token ERC-20 access token for the templ.
+    /// @param _entryFee Entry fee denominated in `_token`.
+    /// @param _name Human-readable templ name.
+    /// @param _description Short templ description.
+    /// @param _logoLink Canonical logo URL.
+    /// @param _proposalFeeBps Proposal creation fee (bps of entry fee).
+    /// @param _referralShareBps Referral share (bps of member pool allocation).
+    /// @return templAddress Address of the deployed templ.
+    function safeDeployFor(
+        address _priest,
+        address _token,
+        uint256 _entryFee,
+        string calldata _name,
+        string calldata _description,
+        string calldata _logoLink,
+        uint256 _proposalFeeBps,
+        uint256 _referralShareBps
+    ) external returns (address templAddress) {
+        _enforceCreationAccess();
+        if (_priest == address(0)) revert TemplErrors.InvalidRecipient();
+        _probeVanillaToken(_token, msg.sender, SAFE_DEPLOY_PROBE_AMOUNT);
+        return
+            createTemplFor(
+                _priest,
+                _token,
+                _entryFee,
+                _name,
+                _description,
+                _logoLink,
+                _proposalFeeBps,
+                _referralShareBps
+            );
+    }
+
     /// @notice Deploys a templ using a custom configuration struct.
     /// @param config Struct containing fee splits, governance settings, and defaults.
     /// @return templAddress Address of the deployed templ.
@@ -400,5 +445,30 @@ contract TemplFactory {
         if (!permissionless && msg.sender != factoryDeployer) {
             revert TemplErrors.FactoryAccessRestricted();
         }
+    }
+
+    /// @notice Probes that `token` behaves as a vanilla ERC-20 by pulling and returning `amount`.
+    /// @dev Reverts if the factory doesn't receive exactly `amount` on pull or the caller
+    ///      doesn't receive exactly `amount` back on return.
+    /// @param token ERC-20 token to probe.
+    /// @param from Wallet expected to have approved `amount` for this factory.
+    /// @param amount Amount to pull and return.
+    function _probeVanillaToken(address token, address from, uint256 amount) internal {
+        if (token == address(0)) revert TemplErrors.InvalidRecipient();
+        if (amount == 0) revert TemplErrors.AmountZero();
+
+        uint256 factoryBefore = IERC20(token).balanceOf(address(this));
+
+        IERC20(token).safeTransferFrom(from, address(this), amount);
+        uint256 factoryAfterPull = IERC20(token).balanceOf(address(this));
+        if (factoryAfterPull != factoryBefore + amount) revert TemplErrors.NonVanillaToken();
+
+        uint256 userBeforeReturn = IERC20(token).balanceOf(from);
+        IERC20(token).safeTransfer(from, amount);
+        uint256 userAfterReturn = IERC20(token).balanceOf(from);
+        if (userAfterReturn != userBeforeReturn + amount) revert TemplErrors.NonVanillaToken();
+
+        uint256 factoryAfterReturn = IERC20(token).balanceOf(address(this));
+        if (factoryAfterReturn != factoryBefore) revert TemplErrors.NonVanillaToken();
     }
 }

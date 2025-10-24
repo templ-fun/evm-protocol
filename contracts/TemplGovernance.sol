@@ -10,6 +10,9 @@ import {CurveConfig} from "./TemplCurve.sol";
 contract TemplGovernanceModule is TemplBase {
     /// @notice Sentinel used to detect direct calls to the module implementation.
     address public immutable SELF;
+    /// @notice Bound on how many inactive proposals to prune from the tail after each execution.
+    /// @dev Keeps the active proposals index tidy without risking excessive gas on heavy executions.
+    uint256 internal constant EXECUTION_TAIL_PRUNE = 5;
 
     /// @notice Initializes the module and captures its own address to enforce delegatecalls.
     constructor() {
@@ -478,7 +481,9 @@ contract TemplGovernanceModule is TemplBase {
     /// @notice Executes a passed proposal after quorum (or voting) requirements are satisfied.
     /// @param _proposalId Proposal id to execute.
     /// @dev For quorum‑gated proposals, the `endTime` captured at quorum anchors the post‑quorum voting window
-    ///      to prevent mid‑flight changes from affecting execution timing.
+    ///      to prevent mid‑flight changes from affecting execution timing. After execution, the
+    ///      active proposals index opportunistically prunes up to `EXECUTION_TAIL_PRUNE` inactive
+    ///      entries from its tail to keep the set compact.
     function executeProposal(uint256 _proposalId) external nonReentrant {
         _requireDelegatecall();
         if (!(_proposalId < proposalCount)) revert TemplErrors.InvalidProposal();
@@ -519,6 +524,7 @@ contract TemplGovernanceModule is TemplBase {
 
         emit ProposalExecuted(_proposalId, true, keccak256(returnData));
         _removeActiveProposal(_proposalId);
+        _pruneInactiveTail(EXECUTION_TAIL_PRUNE);
     }
 
     /// @notice Executes the action for `_proposalId` and returns any call return data.
