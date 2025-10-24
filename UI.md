@@ -16,9 +16,16 @@ Common preflight helpers
 - External rewards list: `TEMPL.getExternalRewardTokens()` or paginated `getExternalRewardTokensPaginated(offset, limit)`
 
 Allowances and approvals
-- Joins: UIs should default to approving a buffer of `2 × entryFee` to the TEMPL address. This protects against fee increases caused by concurrent joins between your approval and `join()` submission, and it leaves headroom for your first proposal creation fee (when enabled) without prompting another approval. Always make this adjustable and never default to unlimited.
-- Proposal creation: when `proposalCreationFeeBps > 0`, the proposer pays `proposalFee = entryFee * proposalCreationFeeBps / 10_000` in the access token. The 2× buffer above typically covers this; if not, prompt for a top‑up approval.
-- External reward claims for ERC‑20s do not require approvals (the templ transfers out). ETH uses a plain call.
+- Joins (all variants): approve the access token to `templ.target` before calling the join. Recommend a buffer of `2 × entryFee` to absorb fee changes and cover the first proposal creation fee. Always make this adjustable and never default to unlimited.
+- Proposal creation fee: when `proposalCreationFeeBps > 0`, the proposer must approve `proposalFee = entryFee * proposalCreationFeeBps / 10_000` to `templ.target` prior to any `createProposal*` call.
+- External reward claims: no approvals are required; the templ transfers out ERC‑20s and sends ETH directly.
+- Donations: no approvals are needed. Donors send ETH directly to the templ address, or call token `transfer(templ.target, amount)`.
+
+Allowance checklist (TL;DR)
+- join / joinWithReferral / joinFor / joinForWithReferral → approve access token to `templ.target` (payer = `msg.sender`).
+- createProposal* (if fee > 0) → approve access token to `templ.target` for `proposalFee`.
+- claimMemberRewards / claimExternalReward → no approvals.
+- batchDAO / external calls (proposals or dictatorship) → no user approvals; if tokens need templ approvals, include them inside the batch.
 
 Join slippage handling (race‑proof UX)
 - On submit, re‑read `entryFee` from `getConfig()` and check current allowance. If `allowance < entryFee`, prompt to top‑up approval. With the recommended 2× buffer, this should be rare.
@@ -32,8 +39,10 @@ Join slippage handling (race‑proof UX)
 
 2) Join With Referral
 - Same as join, but call `templ.joinWithReferral(referrer)`.
+- Explicit allowance: the payer (`msg.sender`) must approve the access token to `templ.target` for at least `entryFee` (recommended `2 × entryFee`).
 - The referrer must already be a member and cannot equal the recipient; referral rewards are paid immediately from the member-pool slice and emitted via `ReferralRewardPaid(referral, newMember, amount)`.
-- Variants: sponsor another wallet with `templ.joinFor(recipient)` or `templ.joinForWithReferral(recipient, referrer)`.
+- Variant `templ.joinFor(recipient)`: payer is the caller; approve `entryFee` from the caller to `templ.target` before calling.
+- Variant `templ.joinForWithReferral(recipient, referrer)`: payer is the caller; approve `entryFee` from the caller to `templ.target` before calling.
 
 3) Claim Rewards (member pool and external)
 - Member pool (access token):
@@ -60,6 +69,21 @@ Join slippage handling (race‑proof UX)
 - Full proposal surface and payload shapes:
   - Read `contracts/TemplGovernance.sol` create functions for the complete list and param types.
   - For any proposal id, use `TEMPL.getProposalActionData(id)` to fetch `(Action action, bytes payload)` and inspect the exact payload for rendering and indexing.
+
+Allowance steps for proposal creation (ethers v6):
+```js
+const [accessToken, entryFee] = await templ.getConfig();
+const bps = await templ.proposalCreationFeeBps();
+const proposalFee = (entryFee * bps) / 10_000n;
+if (proposalFee > 0n) {
+  const token = await ethers.getContractAt("IERC20", accessToken);
+  const allowance = await token.allowance(await signer.getAddress(), templ.target);
+  if (allowance < proposalFee) {
+    await token.approve(templ.target, proposalFee);
+  }
+}
+// Now call any createProposal*
+```
 
 5) Vote on a Proposal
 - Call: `templ.vote(uint256 proposalId, bool support)`
@@ -118,6 +142,22 @@ Where to look in code
 - Membership APIs: `contracts/TemplMembership.sol:1`
 - Governance APIs: `contracts/TemplGovernance.sol:1`
 - Treasury APIs: `contracts/TemplTreasury.sol:1`
+
+Gotchas and validation checklist
+- One active proposal per proposer: `templ.hasActiveProposal(user)` blocks new proposals until the previous one is executed/expired. Disable create UI when true.
+- Voting window anchors at quorum: when quorum is reached, `endTime` resets to `block.timestamp + postQuorumVotingPeriod`. Always show the latest `endTime` from `getProposal(id)`; do not precompute.
+- Pre‑quorum voting period bounds: enforce `[36h, 30d]`. Passing `0` applies the templ default.
+- Title/description caps: title ≤256 bytes, description ≤2048 bytes. Truncate or warn before submit.
+- Entry fee update constraints: new fee must be ≥10 and divisible by 10 (raw token units). Validate before proposing.
+- Curve config bounds: at most 8 total segments (primary + additional). Validate before proposing curve changes.
+- Batch external calls with ETH: when batching via `templ.batchDAO`, set `target = templ.getAddress()` and pass `value = sum(values)` to `createProposalCallExternal`. Any inner revert bubbles and reverts the whole batch.
+- Pagination limits: `getActiveProposalsPaginated` and `getExternalRewardTokensPaginated` require `1 ≤ limit ≤ 100`. Respect `hasMore` when paginating.
+- Donations and enumeration: donated ERC‑20s are withdrawable immediately but only appear in `getExternalRewardTokens()` after the first disband for that token.
+- External reward cleanup: show “Cleanup token” only when `getExternalRewardState(token).poolBalance == 0` AND `remainder == 0`. Remainders are flushed as membership changes or on subsequent disbands.
+- Join auto‑pause at cap: if `maxMembers` is set and reached, `joinPaused` flips true automatically. Always read `joinPaused` before enabling join UI.
+- Referral rules: referrer must be an existing member and not the recipient; otherwise referral pays 0. Consider checking `isMember(referrer)` pre‑submit.
+- Dictatorship mode: when `priestIsDictator()` is true, block proposal create/vote/execute in the UI (except the dictatorship toggle), and surface priest‑only controls for DAO actions (including `batchDAO`).
+- ETH recipients: treasury ETH withdrawals call `recipient.call{value: amount}("")`. If the recipient is a non‑payable contract or reverts in `receive()`, the withdrawal reverts. Prefer EOA or payable targets.
 - Action payload helper: `contracts/TEMPL.sol:240` via `getProposalActionData`
 
 Example: Approve + Deploy Vesting (from templ via batchDAO)
@@ -175,6 +215,7 @@ await templ.createProposalCallExternal(
 Important
 - Calls execute from the templ address. Any `approve` and downstream `transferFrom` affect the templ’s allowance and balance, preserving custody in the templ.
 - Keep `value=0` unless the target expects ETH.
+ - No user approvals are needed for the batch itself; if downstream calls require the templ to approve tokens, include that `approve` as an inner call before the dependent call.
 
 5) Donate (ETH or ERC‑20)
 - Summary: Donations require no templ call. The templ accepts direct transfers of ETH or any ERC‑20; governance can later withdraw these funds to recipients or disband them into member‑claimable external rewards.
