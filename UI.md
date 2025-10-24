@@ -63,28 +63,11 @@ const templAddress = await factory.createTempl.staticCall(
 );
 ```
 
-Safe minimal deploy (token probe)
-- Use `factory.safeDeployFor(priest, token, entryFee, name, description, logo, proposalFeeBps, referralShareBps)` to enforce vanilla ERC‑20 semantics.
-- Requires the caller to pre‑approve the factory for `SAFE_DEPLOY_PROBE_AMOUNT = 100,000` units of the access token. The factory pulls and returns this amount; any tax/rebase/hook triggers `NonVanillaToken` and the deploy reverts.
-- Ethers v6 example (safe deploy):
-```js
-const factory = await ethers.getContractAt("TemplFactory", factoryAddress);
-const PROBE = 100_000n;
-const token = await ethers.getContractAt("IERC20", tokenAddress);
-await token.approve(factoryAddress, PROBE);
-const templAddress = await factory.safeDeployFor.staticCall(
-  priestAddress, tokenAddress, entryFee, templName, templDescription, templLogoLink, 2500, 2500
-);
-await factory.safeDeployFor(
-  priestAddress, tokenAddress, entryFee, templName, templDescription, templLogoLink, 2500, 2500
-);
-```
-
 Complete custom deploy (full config)
 - Use `factory.createTemplWithConfig(CreateConfig)` to set all parameters. Recommended when your UI exposes fee splits, quorum/delay, cap, dictatorship, curve, and metadata.
 - Struct fields (sentinels apply defaults):
   - `priest`: EOA that becomes priest (zero uses `msg.sender`).
-  - `token`: ERC‑20 access token (must be vanilla; UI should prefer Safe deploy or warn users).
+  - `token`: ERC‑20 access token (must be vanilla; UIs should warn on known tax/rebase/hook tokens).
   - `entryFee`: ≥10 and divisible by 10 (raw token units).
   - `burnBps`, `treasuryBps`, `memberPoolBps`: `int256`; use `-1` to apply factory defaults; otherwise 0…10,000.
   - `quorumBps`: 0 applies default; otherwise 0…10,000.
