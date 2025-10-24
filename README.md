@@ -56,7 +56,7 @@ flowchart LR
 - `TEMPL` routes calls to modules via delegatecall and exposes selector→module lookup.
 - Membership: joins, fee‑split accounting, member reward accrual and claims, eligibility snapshots.
 - Treasury: governance/priests withdraw, disband, update config/splits/curve/metadata/referral/proposal fee.
-- Governance: create/vote/execute proposals, quorum + delay, dictatorship toggle, safe external calls (single or batched).
+- Governance: create/vote/execute proposals, quorum + delay, dictatorship toggle, safe external calls (single or batched), and opportunistic tail‑pruning of inactive proposals on execution to keep the active index compact.
 - Shared storage: all persistent state lives in [`TemplBase`](contracts/TemplBase.sol).
 
 ## Key Concepts
@@ -135,6 +135,31 @@ ENTRY_FEE=100000000000000000000 \
 TEMPL_NAME="templ.fun OG" \
 TEMPL_DESCRIPTION="Genesis collective" \
 npm run deploy:local
+```
+
+Safe deploy (vanilla token probe):
+
+```bash
+# 1) Approve the factory to pull the probe amount (100,000 units)
+#    from the account that will call safeDeployFor
+#    Example using ethers in Hardhat console:
+#      const token = await ethers.getContractAt("IERC20", TOKEN_ADDRESS)
+#      await token.approve(FACTORY_ADDRESS, 100000)
+
+# 2) Call safeDeployFor to atomically probe + deploy
+#    (reverts with NonVanillaToken when the access token taxes/rebases/hooks transfers)
+// npx hardhat console --network localhost
+const factory = await ethers.getContractAt("TemplFactory", FACTORY_ADDRESS);
+await factory.safeDeployFor(
+  "0xPriest",
+  TOKEN_ADDRESS,
+  ENTRY_FEE,
+  TEMPL_NAME,
+  TEMPL_DESCRIPTION,
+  "https://example.com/logo.png",
+  0, // proposal fee bps
+  0  // referral share bps
+);
 ```
 
 Verify on Base (optional):
@@ -320,6 +345,7 @@ Curves (see [`TemplCurve`](contracts/TemplCurve.sol)) support static, linear, an
 
 ## Safety Model
 - Vanilla ERC‑20 only: the access token must not tax, rebase, or hook transfers; accounting assumes exact in/out.
+- Factory enforcement option: use `safeDeployFor` to probe vanilla semantics before deploying.
 - Router‑only entry: modules can only be reached via `TEMPL` delegatecalls; direct module calls revert by design.
 - Reentrancy containment: module boundaries and state updates are organized to prevent cross‑module reentrancy; tests probe reentrant tokens and hooks.
 - Snapshotting: proposal eligibility freezes at creation, then re‑snapshots at quorum to prevent late join swings.
