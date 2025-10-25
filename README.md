@@ -16,6 +16,9 @@ Quick links: [At a Glance](#protocol-at-a-glance) · [Architecture](#architectur
 - Everything is modular: `TEMPL` is a router that delegatecalls membership, treasury, and governance modules over a shared storage layout, keeping concerns clean.
 - Deploy many templs via `TemplFactory`; run permissionless or with a gated deployer.
 
+## Templ Factories
+
+- Base: [`0xc47c3088a0be67a5c29c3649be6e7ca8e8aeb5e3`](https://basescan.org/address/0xc47c3088a0be67a5c29c3649be6e7ca8e8aeb5e3)
 
 ## Architecture
 At runtime a templ behaves like one contract with clean separation of concerns via delegatecall modules sharing a single storage layout:
