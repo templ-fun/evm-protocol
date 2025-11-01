@@ -9,6 +9,13 @@ Router-first rule
   - `TEMPL.getModuleForSelector(bytes4)` to sanity-check routing for a selector.
   - `TEMPL.MEMBERSHIP_MODULE()`, `TEMPL.TREASURY_MODULE()`, `TEMPL.GOVERNANCE_MODULE()` return implementation addresses (do not call them directly).
 
+Governance-controlled upgrades
+- No protocol admin: there is no owner or protocol dev key that can change behavior for a templ. Routing changes are only possible via that templ’s own governance.
+- Priest caveat: the priest can change routing only when dictatorship is explicitly enabled for the templ. Otherwise, only governance proposals can reach `setRoutingModuleDAO`.
+- Introspection: `getRegisteredSelectors()` is a static helper for the shipped modules; the live mapping is authoritative and can be read via `getModuleForSelector(bytes4)` per selector.
+- How to upgrade via UI: build a `createProposalCallExternal` targeting the templ address with the `setRoutingModuleDAO(address,bytes4[])` selector and ABI‑encoded params. After the proposal passes and executes, calls to those selectors will route to the new module.
+- Module access guard: module implementations revert on direct calls; all interactions must flow through `TEMPL` (delegatecall) to share storage and enforce guards.
+
 Common preflight helpers
 - Access token and entry fee: `TEMPL.getConfig()` → `(token, fee, joinPaused, joins, treasury, pool, burnBps, treasuryBps, memberPoolBps, protocolBps)`
 - Treasury/burn display: `TEMPL.getTreasuryInfo()` → `(treasury, memberPool, protocolRecipient, burned)`
@@ -222,6 +229,7 @@ Security notes for UIs
 - Default to a bounded buffer, not unlimited. Approve `~2× entryFee` for joins (adjustable) and avoid unlimited approvals.
 - External call proposals are as powerful as timelocked admin calls; surface clear warnings. If batching is needed, use an executor contract like `contracts/tools/BatchExecutor.sol` and target it via `createProposalCallExternal`.
 - Only call the router. Modules revert on direct calls to prevent bypassing safety checks.
+- Governance-only upgrades: there is no protocol-level upgrade authority. Routing and external-call abilities are controlled by each templ’s governance (or the priest only when dictatorship is enabled). Reflect this in copy to avoid confusing users about admin powers.
 
 Minimal flow snippets (ethers v6)
 - Join: read fee → approve(templ, fee) → `templ.join()`.
