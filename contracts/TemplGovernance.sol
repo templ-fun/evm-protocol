@@ -541,12 +541,7 @@ contract TemplGovernanceModule is TemplBase {
                 proposal.newMemberPoolBps
             );
         } else if (proposal.action == Action.WithdrawTreasury) {
-            _governanceWithdrawTreasury(
-                proposal.token,
-                proposal.recipient,
-                proposal.amount,
-                _proposalId
-            );
+            _governanceWithdrawTreasury(proposal.token, proposal.recipient, proposal.amount, _proposalId);
         } else if (proposal.action == Action.DisbandTreasury) {
             _governanceDisbandTreasury(proposal.token, _proposalId);
         } else if (proposal.action == Action.ChangePriest) {

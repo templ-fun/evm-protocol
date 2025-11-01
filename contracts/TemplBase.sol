@@ -318,12 +318,7 @@ abstract contract TemplBase is ReentrancyGuard {
     /// @param token Token withdrawn (address(0) for ETH).
     /// @param recipient Recipient wallet.
     /// @param amount Amount transferred.
-    event TreasuryAction(
-        uint256 indexed proposalId,
-        address indexed token,
-        address indexed recipient,
-        uint256 amount
-    );
+    event TreasuryAction(uint256 indexed proposalId, address indexed token, address indexed recipient, uint256 amount);
 
     /// @notice Emitted when templ configuration is updated.
     /// @param token Access token address.
@@ -1143,12 +1138,7 @@ abstract contract TemplBase is ReentrancyGuard {
     /// @param recipient Destination wallet.
     /// @param amount Amount to transfer.
     /// @param proposalId Proposal id authorizing the withdrawal (0 for direct DAO call).
-    function _withdrawTreasury(
-        address token,
-        address recipient,
-        uint256 amount,
-        uint256 proposalId
-    ) internal {
+    function _withdrawTreasury(address token, address recipient, uint256 amount, uint256 proposalId) internal {
         if (recipient == address(0)) revert TemplErrors.InvalidRecipient();
         if (amount == 0) revert TemplErrors.AmountZero();
 
