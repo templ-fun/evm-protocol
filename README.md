@@ -158,8 +158,8 @@ flowchart LR
 
 - `TEMPL` routes calls to modules via delegatecall and exposes selector→module lookup.
 - Membership: joins, fee‑split accounting, member reward accrual and claims, eligibility snapshots.
-- Treasury: governance/priests withdraw, disband, update config/splits/curve/metadata/referral/proposal fee.
-- Governance: create/vote/execute proposals, quorum + delay, dictatorship toggle, safe external calls (single or batched), and opportunistic tail‑pruning of inactive proposals on execution to keep the active index compact.
+- Treasury: governance/priests manage pause/cap/config/curve, change the priest or dictatorship state, adjust referral/proposal fees, quorum/post‑quorum windows, burn address, clean up settled external rewards, withdraw/disband assets, and run atomic multi‑call batches via `batchDAO`.
+- Governance: create/vote/execute proposals covering all treasury setters (including quorum/burn/curve metadata), safe external calls (single or batched), dictatorship toggle, and opportunistic tail‑pruning of inactive proposals on execution to keep the active index compact.
 - Shared storage: all persistent state lives in [`TemplBase`](contracts/TemplBase.sol).
 
 ## Solidity Patterns
@@ -299,12 +299,13 @@ const templ = await ethers.getContractAt("TEMPL", "0xYourTempl");
 const token = await ethers.getContractAt("IERC20", (await templ.getConfig())[0]);
 // Approve a bounded buffer (~2× entryFee) to absorb join races and cover first proposal fee
 const entryFee = (await templ.getConfig())[1];
-await token.approve(templ.target, entryFee * 2n);
-await templ.join();
-const id = await templ.createProposalSetJoinPaused(true, 36*60*60, "Pause joins", "Cooldown");
-await templ.vote(id, true);
+await (await token.approve(templ.target, entryFee * 2n)).wait();
+await (await templ.join()).wait();
+const id = await templ.callStatic.createProposalSetJoinPaused(true, 36 * 60 * 60, "Pause joins", "Cooldown");
+await (await templ.createProposalSetJoinPaused(true, 36 * 60 * 60, "Pause joins", "Cooldown")).wait();
+await (await templ.vote(id, true)).wait();
 // ...advance time...
-await templ.executeProposal(id);
+await (await templ.executeProposal(id)).wait();
 
 ```
 
@@ -347,7 +348,7 @@ const batchParams = ethers.AbiCoder.defaultAbiCoder().encode(
 
 // 3) Propose the external call (templ -> templ.batchDAO)
 const votingPeriod = 36 * 60 * 60;
-const pid = await templ.createProposalCallExternal(
+const pid = await templ.callStatic.createProposalCallExternal(
   await templ.getAddress(),
   0, // no ETH forwarded in this example
   batchSel,
@@ -356,11 +357,22 @@ const pid = await templ.createProposalCallExternal(
   "Approve and stake",
   "Approve token then stake in a single atomic batch (sender = templ)"
 );
+await (
+  await templ.createProposalCallExternal(
+    await templ.getAddress(),
+    0,
+    batchSel,
+    batchParams,
+    votingPeriod,
+    "Approve and stake",
+    "Approve token then stake in a single atomic batch (sender = templ)"
+  )
+).wait();
 
 // 4) Vote and execute after quorum + delay
-await templ.vote(pid, true);
+await (await templ.vote(pid, true)).wait();
 // ...advance time to satisfy post‑quorum voting period...
-await templ.executeProposal(pid);
+await (await templ.executeProposal(pid)).wait();
 ```
 
 Notes
@@ -551,7 +563,7 @@ See tests by topic in [test/](test/).
 ## Tests
 - Default: `npm test` (heavy `@load` suite is excluded).
 - High‑load stress: `npm run test:load` with `TEMPL_LOAD=...`.
-- End‑to‑end readiness: see [test/UltimateProdReadiness.test.js](test/UltimateProdReadiness.test.js).
+- End‑to‑end readiness: see [test/ProdReadiness.test.js](test/ProdReadiness.test.js).
 - Coverage: `npm run coverage`. Static: `npm run slither`.
 - Property fuzzing: `npm run test:fuzz` (via Docker) using [echidna.yaml](echidna.yaml) and [contracts/echidna/EchidnaTemplHarness.sol](contracts/echidna/EchidnaTemplHarness.sol).
 
