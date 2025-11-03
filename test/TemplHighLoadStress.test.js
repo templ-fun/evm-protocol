@@ -1136,15 +1136,12 @@ describe("@load Templ High-Load Stress", function () {
 
       // Create N tokens, fund templ, and disband via onlyDAO (use current priest signer)
       const currentPriest = await templ.priest();
-      const candidates = [context.priest, ...context.accessibleMembers];
-      let priestSigner = candidates.find(async (s) => (s.address || (await s.getAddress())) === currentPriest);
-      if (!priestSigner) {
-        // Fallback: if array predicate with async failed, do a sync match
-        for (const s of candidates) {
-          const addr = s.address || (await s.getAddress());
-          if (addr === currentPriest) { priestSigner = s; break; }
-        }
+      let priestSigner = null;
+      for (const s of [context.priest, ...context.accessibleMembers]) {
+        const addr = s.address || (await s.getAddress());
+        if (addr === currentPriest) { priestSigner = s; break; }
       }
+      if (!priestSigner) priestSigner = context.priest;
       for (let i = 0; i < tokenFanout; i += 1) {
         const t = await TestToken.connect(priest).deploy(`R${i}`, `R${i}`, 18);
         await t.waitForDeployment();
@@ -1152,19 +1149,7 @@ describe("@load Templ High-Load Stress", function () {
         await t.connect(priest).mint(priest.address, totalPerToken);
         await t.connect(priest).transfer(await templ.getAddress(), totalPerToken);
         // Only the current priest can call onlyDAO surfaces directly under dictatorship
-        try {
-          await templ.connect(priestSigner).disbandTreasuryDAO(addr);
-        } catch (_) {
-          // Fallback to governance path for this token
-          await ensureProposalFee(templ, context.token, accessibleMembers[0], context);
-          await templ.connect(accessibleMembers[0]).createProposalDisbandTreasury(addr, 0, `Disband-${i}`, "");
-          const did = (await templ.proposalCount()) - 1n;
-          await templ.connect(accessibleMembers[1]).vote(did, true);
-          await ensureQuorum(templ, did);
-          await ethers.provider.send("evm_increaseTime", [2]);
-          await ethers.provider.send("evm_mine");
-          await templ.executeProposal(did);
-        }
+        await templ.connect(priestSigner).disbandTreasuryDAO(addr);
         created.push({ token: t, address: addr });
       }
 
