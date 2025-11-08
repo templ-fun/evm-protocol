@@ -95,4 +95,202 @@ describe("Routing upgrade via setRoutingModuleDAO", function () {
     const restored = await templ.getMemberCount();
     expect(restored).to.equal(initialCount);
   });
+
+  it("allows priest to update routing when dictatorship enabled", async function () {
+    const { templ, token, accounts } = await deployTempl({
+      entryFee: ENTRY_FEE,
+      priestIsDictator: true,
+    });
+    const [, priest, m1] = accounts;
+
+    await mintToUsers(token, [m1], ENTRY_FEE * 2n);
+    await joinMembers(templ, token, [m1]);
+
+    const initialCount = await templ.getMemberCount();
+    expect(initialCount).to.equal(2n); // priest + m1
+
+    const Mock = await ethers.getContractFactory("contracts/mocks/MockMembershipOverride.sol:MockMembershipOverride");
+    const mock = await Mock.deploy();
+    await mock.waitForDeployment();
+
+    const getCountIface = new ethers.Interface(["function getMemberCount() view returns (uint256)"]);
+    const sel = getCountIface.getFunction("getMemberCount").selector;
+
+    // Priest can directly call setRoutingModuleDAO when dictatorship is enabled
+    await templ.connect(priest).setRoutingModuleDAO(await mock.getAddress(), [sel]);
+
+    const mocked = await templ.getMemberCount();
+    expect(mocked).to.equal(424242n);
+  });
+
+  it("emits RoutingUpdated event on successful routing change", async function () {
+    const { templ, token, accounts } = await deployTempl({ entryFee: ENTRY_FEE });
+    const [, priest, m1, m2] = accounts;
+
+    await mintToUsers(token, [m1, m2], ENTRY_FEE * 3n);
+    await joinMembers(templ, token, [m1, m2]);
+
+    const Mock = await ethers.getContractFactory("contracts/mocks/MockMembershipOverride.sol:MockMembershipOverride");
+    const mock = await Mock.deploy();
+    await mock.waitForDeployment();
+    const mockAddr = await mock.getAddress();
+
+    const getCountIface = new ethers.Interface(["function getMemberCount() view returns (uint256)"]);
+    const sel = getCountIface.getFunction("getMemberCount").selector;
+
+    const setRouteFn = templ.interface.getFunction("setRoutingModuleDAO");
+    const upgradeSelector = setRouteFn.selector;
+    const coder = ethers.AbiCoder.defaultAbiCoder();
+    const encodeParams = (module, selectors) => coder.encode(["address", "bytes4[]"], [module, selectors]);
+
+    await templ
+      .connect(m1)
+      .createProposalCallExternal(
+        await templ.getAddress(),
+        0,
+        upgradeSelector,
+        encodeParams(mockAddr, [sel]),
+        VOTING_PERIOD,
+        "Route getMemberCount",
+        "send getMemberCount to mock"
+      );
+
+    await templ.connect(m1).vote(0, true);
+    await templ.connect(m2).vote(0, true);
+    await ethers.provider.send("evm_increaseTime", [VOTING_PERIOD + DAY]);
+    await ethers.provider.send("evm_mine", []);
+
+    // Execute and check for event emission
+    const tx = await templ.executeProposal(0);
+    const receipt = await tx.wait();
+
+    // Find the RoutingUpdated event in the logs
+    const event = receipt.logs.find(
+      (log) => {
+        try {
+          const parsed = templ.interface.parseLog(log);
+          return parsed && parsed.name === "RoutingUpdated";
+        } catch {
+          return false;
+        }
+      }
+    );
+
+    expect(event).to.not.be.undefined;
+    const parsed = templ.interface.parseLog(event);
+    expect(parsed.args.module).to.equal(mockAddr);
+    expect(parsed.args.selectors).to.deep.equal([sel]);
+  });
+
+  it("reverts when module address is zero", async function () {
+    const { templ, token, accounts } = await deployTempl({
+      entryFee: ENTRY_FEE,
+      priestIsDictator: true,
+    });
+    const [, priest] = accounts;
+
+    const getCountIface = new ethers.Interface(["function getMemberCount() view returns (uint256)"]);
+    const sel = getCountIface.getFunction("getMemberCount").selector;
+
+    await expect(
+      templ.connect(priest).setRoutingModuleDAO(ethers.ZeroAddress, [sel])
+    ).to.be.revertedWithCustomError(templ, "InvalidRecipient");
+  });
+
+  it("reverts when module is not a contract (EOA)", async function () {
+    const { templ, token, accounts } = await deployTempl({
+      entryFee: ENTRY_FEE,
+      priestIsDictator: true,
+    });
+    const [, priest, eoa] = accounts;
+
+    const getCountIface = new ethers.Interface(["function getMemberCount() view returns (uint256)"]);
+    const sel = getCountIface.getFunction("getMemberCount").selector;
+
+    await expect(
+      templ.connect(priest).setRoutingModuleDAO(eoa.address, [sel])
+    ).to.be.revertedWithCustomError(templ, "InvalidCallData");
+  });
+
+  it("reverts when selectors array is empty", async function () {
+    const { templ, token, accounts } = await deployTempl({
+      entryFee: ENTRY_FEE,
+      priestIsDictator: true,
+    });
+    const [, priest] = accounts;
+
+    const Mock = await ethers.getContractFactory("contracts/mocks/MockMembershipOverride.sol:MockMembershipOverride");
+    const mock = await Mock.deploy();
+    await mock.waitForDeployment();
+
+    await expect(
+      templ.connect(priest).setRoutingModuleDAO(await mock.getAddress(), [])
+    ).to.be.revertedWithCustomError(templ, "InvalidCallData");
+  });
+
+  it("updates routing for multiple selectors in a single call", async function () {
+    const { templ, token, accounts } = await deployTempl({
+      entryFee: ENTRY_FEE,
+      priestIsDictator: true,
+    });
+    const [, priest, m1] = accounts;
+
+    await mintToUsers(token, [m1], ENTRY_FEE * 2n);
+    await joinMembers(templ, token, [m1]);
+
+    const Mock = await ethers.getContractFactory("contracts/mocks/MockMembershipOverride.sol:MockMembershipOverride");
+    const mock = await Mock.deploy();
+    await mock.waitForDeployment();
+    const mockAddr = await mock.getAddress();
+
+    const getCountIface = new ethers.Interface(["function getMemberCount() view returns (uint256)"]);
+    const isMemberIface = new ethers.Interface(["function isMember(address) view returns (bool)"]);
+    const countSel = getCountIface.getFunction("getMemberCount").selector;
+    const memberSel = isMemberIface.getFunction("isMember").selector;
+
+    // Update routing for both selectors at once
+    await templ.connect(priest).setRoutingModuleDAO(mockAddr, [countSel, memberSel]);
+
+    // Verify both selectors are routed to the mock
+    const countModule = await templ.getModuleForSelector(countSel);
+    const memberModule = await templ.getModuleForSelector(memberSel);
+
+    expect(countModule).to.equal(mockAddr);
+    expect(memberModule).to.equal(mockAddr);
+  });
+
+  it("verifies getModuleForSelector reflects routing changes", async function () {
+    const { templ, token, accounts } = await deployTempl({
+      entryFee: ENTRY_FEE,
+      priestIsDictator: true,
+    });
+    const [, priest] = accounts;
+
+    const Mock = await ethers.getContractFactory("contracts/mocks/MockMembershipOverride.sol:MockMembershipOverride");
+    const mock = await Mock.deploy();
+    await mock.waitForDeployment();
+    const mockAddr = await mock.getAddress();
+
+    const getCountIface = new ethers.Interface(["function getMemberCount() view returns (uint256)"]);
+    const sel = getCountIface.getFunction("getMemberCount").selector;
+
+    // Check initial routing
+    const membershipModule = await templ.MEMBERSHIP_MODULE();
+    const initialModule = await templ.getModuleForSelector(sel);
+    expect(initialModule).to.equal(membershipModule);
+
+    // Update routing
+    await templ.connect(priest).setRoutingModuleDAO(mockAddr, [sel]);
+
+    // Verify new routing
+    const updatedModule = await templ.getModuleForSelector(sel);
+    expect(updatedModule).to.equal(mockAddr);
+
+    // Rollback
+    await templ.connect(priest).setRoutingModuleDAO(membershipModule, [sel]);
+
+    // Verify rollback
+    const rolledBackModule = await templ.getModuleForSelector(sel);
+    expect(rolledBackModule).to.equal(membershipModule);
+  });
 });

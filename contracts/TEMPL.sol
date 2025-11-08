@@ -22,6 +22,11 @@ contract TEMPL is TemplBase {
     /// @dev Selector-to-module routing table used by the fallback for delegatecall dispatch.
     mapping(bytes4 => address) private _moduleForSelector;
 
+    /// @notice Emitted when routing is updated for one or more function selectors.
+    /// @param module Module address that will handle the specified selectors via delegatecall.
+    /// @param selectors Function selectors that were mapped to `module`.
+    event RoutingUpdated(address indexed module, bytes4[] selectors);
+
     /// @notice Initializes a new templ with the provided configuration and priest.
     /// @param _priest Wallet that oversees configuration changes until governance replaces it.
     /// @param _protocolFeeRecipient Address that receives the protocol share of every entry fee.
@@ -380,5 +385,11 @@ contract TEMPL is TemplBase {
     /// @param selectors Function selectors to associate with `module`.
     function setRoutingModuleDAO(address module, bytes4[] calldata selectors) external onlyDAO {
         _registerModule(module, selectors);
+    }
+        if (module == address(0)) revert TemplErrors.InvalidRecipient();
+        if (module.code.length == 0) revert TemplErrors.InvalidCallData();
+        if (selectors.length == 0) revert TemplErrors.InvalidCallData();
+        _registerModule(module, selectors);
+        emit RoutingUpdated(module, selectors);
     }
 }
