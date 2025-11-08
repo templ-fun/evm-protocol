@@ -3,6 +3,20 @@ const fs = require("fs");
 const path = require("path");
 require("dotenv").config();
 
+function normalizeNetworkName(value) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function resolveNetworkName(network) {
+  const envNetwork = normalizeNetworkName(process.env.HARDHAT_NETWORK);
+  if (envNetwork) return envNetwork;
+  const hreNetwork = normalizeNetworkName(hre.network?.name);
+  if (hreNetwork) return hreNetwork;
+  const providerName = normalizeNetworkName(network?.name);
+  if (providerName) return providerName;
+  return "hardhat";
+}
+
 async function waitForContractCode(address, provider, attempts = 20, delayMs = 3000) {
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     const code = await provider.getCode(address);
@@ -79,11 +93,13 @@ async function main() {
   let governanceModuleAddress = (process.env.GOVERNANCE_MODULE_ADDRESS || "").trim();
 
   const network = await hre.ethers.provider.getNetwork();
+  const networkName = resolveNetworkName(network);
   const chainIdNumber = Number(network.chainId);
 
   console.log("========================================");
   console.log("Deploying TemplFactory");
   console.log("========================================");
+  console.log("Network:", networkName);
   console.log("Network Chain ID:", network.chainId.toString());
   console.log("Deploying from:", deployer.address);
   const balance = await hre.ethers.provider.getBalance(deployer.address);
@@ -177,7 +193,7 @@ async function main() {
 
   const deploymentInfo = {
     contractVersion: "factory-1.0.0",
-    network: network.chainId === 8453n ? "base" : "local",
+    network: networkName,
     chainId: chainIdNumber,
     factoryAddress,
     protocolFeeRecipient: protocolRecipient,
@@ -202,19 +218,20 @@ async function main() {
   console.log("\n📁 Factory info saved to deployments/" + filename);
 
   if (network.chainId === 8453n && !process.env.SKIP_VERIFY_NOTE) {
+    const verifyNetwork = networkName || "base";
     console.log("\nVerification command:");
     console.log(
-      `npx hardhat verify --contract contracts/TemplFactory.sol:TemplFactory --network base ${factoryAddress} ${factoryDeployer} ${protocolRecipient} ${protocolPercentBps} ${membershipModuleAddress} ${treasuryModuleAddress} ${governanceModuleAddress}`
+      `npx hardhat verify --contract contracts/TemplFactory.sol:TemplFactory --network ${verifyNetwork} ${factoryAddress} ${factoryDeployer} ${protocolRecipient} ${protocolPercentBps} ${membershipModuleAddress} ${treasuryModuleAddress} ${governanceModuleAddress}`
     );
     console.log("\nModule verification commands:");
     console.log(
-      `npx hardhat verify --contract contracts/TemplMembership.sol:TemplMembershipModule --network base ${membershipModuleAddress}`
+      `npx hardhat verify --contract contracts/TemplMembership.sol:TemplMembershipModule --network ${verifyNetwork} ${membershipModuleAddress}`
     );
     console.log(
-      `npx hardhat verify --contract contracts/TemplTreasury.sol:TemplTreasuryModule --network base ${treasuryModuleAddress}`
+      `npx hardhat verify --contract contracts/TemplTreasury.sol:TemplTreasuryModule --network ${verifyNetwork} ${treasuryModuleAddress}`
     );
     console.log(
-      `npx hardhat verify --contract contracts/TemplGovernance.sol:TemplGovernanceModule --network base ${governanceModuleAddress}`
+      `npx hardhat verify --contract contracts/TemplGovernance.sol:TemplGovernanceModule --network ${verifyNetwork} ${governanceModuleAddress}`
     );
   }
 

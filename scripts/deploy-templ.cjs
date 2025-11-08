@@ -438,7 +438,7 @@ async function main() {
     await factory.waitForDeployment();
     factoryAddress = await factory.getAddress();
     console.log("Factory deployed at:", factoryAddress);
-    if (network.chainId !== 31337n) {
+    if (network.chainId !== 31337n && network.chainId !== 1337n) {
       console.log("Waiting for confirmations...");
       await factory.deploymentTransaction().wait(2);
     }

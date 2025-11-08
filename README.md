@@ -291,6 +291,50 @@ npx hardhat verify --contract contracts/TemplGovernance.sol:TemplGovernanceModul
 npx hardhat verify --contract contracts/TemplFactory.sol:TemplFactory --network base 0xFactory 0xFactoryDeployer 0xProtocolRecipient 1000 0xMembership 0xTreasury 0xGovernance
 ```
 
+### Production Deployment Checklist
+When you are ready to deploy everything to Base mainnet and register verified sources, follow this sequence. This “genesis” templ exists purely so block explorers have verified constructors for all components—future templs can trust these artifacts, so the first templ is not really used beyond serving as verification for all future ones.
+
+1. **Deploy the factory in prod**  
+   ```bash
+   HARDHAT_NETWORK=base \
+   FACTORY_DEPLOYER=0xFactoryOps \
+   PROTOCOL_FEE_RECIPIENT=0xProtocolMultisig \
+   PROTOCOL_BPS=1000 \
+   npm run deploy:factory
+   ```
+   Capture the emitted `FACTORY_ADDRESS` and module addresses.
+
+2. **Verify the factory + modules**  
+   ```bash
+   HARDHAT_NETWORK=base \
+   BASESCAN_API_KEY=your_key \
+   FACTORY_ADDRESS=0xFactory \
+   npm run verify:factory
+   ```
+   This step makes “verifying factory in prod” a one-liner any time you redeploy.
+
+3. **Deploy a templ through the script** (uses the new factory and any real ERC‑20 you control for smoke testing/verification)  
+   ```bash
+   HARDHAT_NETWORK=base \
+   FACTORY_ADDRESS=0xFactory \
+   TOKEN_ADDRESS=0xAccessToken \
+   ENTRY_FEE=100000000000000000000 \
+   TEMPL_NAME="Templ Verification" \
+   TEMPL_DESCRIPTION="Canonical verified templ" \
+   npm run deploy
+   ```
+   This is just to deploy all to prod and have verified artifacts; again, the first templ is mostly a verification harness.
+
+4. **Verify the templ + constructor args**  
+   ```bash
+   HARDHAT_NETWORK=base \
+   BASESCAN_API_KEY=your_key \
+   FACTORY_ADDRESS=0xFactory \
+   TEMPL_ADDRESS=0xTempl \
+   npm run verify:templ
+   ```
+   Once this succeeds, explorers show verified source for the modules, factory, and a templ instance, simplifying future audits and on-chain references.
+
 Hardhat console (ethers v6) quick taste:
 
 ```js

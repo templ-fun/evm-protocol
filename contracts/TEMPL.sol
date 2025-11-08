@@ -384,8 +384,6 @@ contract TEMPL is TemplBase {
     /// @param module Module address that will handle `selectors` via delegatecall.
     /// @param selectors Function selectors to associate with `module`.
     function setRoutingModuleDAO(address module, bytes4[] calldata selectors) external onlyDAO {
-        _registerModule(module, selectors);
-    }
         if (module == address(0)) revert TemplErrors.InvalidRecipient();
         if (module.code.length == 0) revert TemplErrors.InvalidCallData();
         if (selectors.length == 0) revert TemplErrors.InvalidCallData();

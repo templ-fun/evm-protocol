@@ -1,6 +1,20 @@
 const hre = require("hardhat");
 require("dotenv").config();
 
+function normalizeNetworkName(value) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function resolveNetworkName(network) {
+  const envNetwork = normalizeNetworkName(process.env.HARDHAT_NETWORK);
+  if (envNetwork) return envNetwork;
+  const hreNetwork = normalizeNetworkName(hre.network?.name);
+  if (hreNetwork) return hreNetwork;
+  const providerName = normalizeNetworkName(network?.name);
+  if (providerName) return providerName;
+  return "hardhat";
+}
+
 const FACTORY_EVENT_VARIANTS = [
   {
     id: 'current',
@@ -333,11 +347,13 @@ async function main() {
 
   const provider = hre.ethers.provider;
   const network = await provider.getNetwork();
+  const networkName = resolveNetworkName(network);
+  console.log(`Using Hardhat network: ${networkName} (chainId ${network.chainId})`);
   const code = await provider.getCode(templAddress);
   if (!code || code === '0x') {
     const chain = network?.chainId ? String(network.chainId) : 'unknown chain';
     throw new Error(
-      `No contract code at ${templAddress} on chain ${chain}. Ensure HARDHAT_NETWORK=base or pass --network base and set TEMPL_ADDRESS.`
+      `No contract code at ${templAddress} while connected to "${networkName}" (chain ${chain}). Ensure HARDHAT_NETWORK is set to the correct network (or pass --network ${networkName}) and provide a valid TEMPL_ADDRESS.`
     );
   }
 
