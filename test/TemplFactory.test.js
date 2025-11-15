@@ -574,6 +574,8 @@ describe("TemplFactory", function () {
         expect(await templ.postQuorumVotingPeriod()).to.equal(36 * 60 * 60);
         expect(await templ.burnAddress()).to.equal("0x000000000000000000000000000000000000dEaD");
         expect(await templ.maxMembers()).to.equal(249n);
+        expect(await templ.councilModeEnabled()).to.equal(true);
+        expect(await templ.councilMemberCount()).to.equal(1n);
 
         const templCreated = receipt.logs
             .map((log) => {
@@ -591,6 +593,7 @@ describe("TemplFactory", function () {
         expect(curveStyles).to.deep.equal([CURVE_STYLE.Exponential, CURVE_STYLE.Static]);
         expect(curveRates).to.deep.equal([10_094, 0]);
         expect(curveLengths).to.deep.equal([248, 0]);
+        expect(templCreated.args.councilMode).to.equal(true);
 
         await mintToUsers(token, [joiner], ENTRY_FEE * 5n);
         await token.connect(joiner).approve(templAddress, ENTRY_FEE);
@@ -632,6 +635,8 @@ describe("TemplFactory", function () {
 
         const templ = await getTemplAt(templAddress, ethers.provider);
         expect(await templ.priest()).to.equal(delegatedPriest.address);
+        expect(await templ.councilModeEnabled()).to.equal(true);
+        expect(await templ.councilMemberCount()).to.equal(1n);
 
         const templCreated = receipt.logs
             .map((log) => {
@@ -651,6 +656,7 @@ describe("TemplFactory", function () {
         expect(styles).to.deep.equal([CURVE_STYLE.Exponential, CURVE_STYLE.Static]);
         expect(rates).to.deep.equal([10_094, 0]);
         expect(lengths).to.deep.equal([248, 0]);
+        expect(templCreated.args.councilMode).to.equal(true);
     });
 
   it("reuses the immutable protocol configuration for every templ", async function () {
@@ -730,26 +736,30 @@ describe("TemplFactory", function () {
     const factory = await Factory.deploy((await ethers.getSigners())[0].address, protocolRecipient.address, protocolBps, modules.membershipModule, modules.treasuryModule, modules.governanceModule, modules.councilModule);
     await factory.waitForDeployment();
 
-    const templAddress = await factory.createTemplFor.staticCall(
-      priest.address,
-      await tokenA.getAddress(),
-      ENTRY_FEE,
-      DEFAULT_METADATA.name,
-      DEFAULT_METADATA.description,
-      DEFAULT_METADATA.logoLink,
-      0,
-      0
-    );
-    await factory.createTemplFor(
-      priest.address,
-      await tokenA.getAddress(),
-      ENTRY_FEE,
-      DEFAULT_METADATA.name,
-      DEFAULT_METADATA.description,
-      DEFAULT_METADATA.logoLink,
-      0,
-      0
-    );
+    const config = withCouncilDefaults({
+      priest: priest.address,
+      token: await tokenA.getAddress(),
+      entryFee: ENTRY_FEE,
+      burnBps: -1,
+      treasuryBps: -1,
+      memberPoolBps: -1,
+      quorumBps: 0,
+      executionDelaySeconds: 0,
+      burnAddress: ethers.ZeroAddress,
+      priestIsDictator: false,
+      maxMembers: 0,
+      curveProvided: false,
+      curve: defaultCurve(),
+      name: DEFAULT_METADATA.name,
+      description: DEFAULT_METADATA.description,
+      logoLink: DEFAULT_METADATA.logoLink,
+      proposalFeeBps: 0,
+      referralShareBps: 0,
+      councilMode: false
+    });
+
+    const templAddress = await factory.createTemplWithConfig.staticCall(config);
+    await factory.createTemplWithConfig(config);
     const templ = await getTemplAt(templAddress, ethers.provider);
 
     // Join a member for governance

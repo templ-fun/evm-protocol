@@ -65,19 +65,29 @@ describe("Prod Readiness", function () {
     // Allow anyone to create templs for this test
     await (await factory.connect(deployer).setPermissionless(true)).wait();
 
-    // Create templ via factory with explicit priest
-    const tx = await factory
-      .connect(deployer)
-      .createTemplFor(
-        await priest.getAddress(),
-        await token.getAddress(),
-        ENTRY_FEE,
-        "templ.fun E2E",
-        "End-to-end prod readiness",
-        "https://example.com/logo.png",
-        2500, // proposal fee bps
-        2500 // referral share bps (of member-pool slice)
-      );
+    // Create templ via factory with explicit priest (council mode disabled for democracy testing)
+    const tx = await factory.connect(deployer).createTemplWithConfig({
+      priest: await priest.getAddress(),
+      token: await token.getAddress(),
+      entryFee: ENTRY_FEE,
+      burnBps: -1,
+      treasuryBps: -1,
+      memberPoolBps: -1,
+      quorumBps: 0,
+      executionDelaySeconds: 0,
+      burnAddress: ethers.ZeroAddress,
+      priestIsDictator: false,
+      maxMembers: 0,
+      curveProvided: false,
+      curve: { primary: { style: 0, rateBps: 0, length: 0 }, additionalSegments: [] },
+      name: "templ.fun E2E",
+      description: "End-to-end prod readiness",
+      logoLink: "https://example.com/logo.png",
+      proposalFeeBps: 2_500,
+      referralShareBps: 2_500,
+      yesVoteThresholdBps: 5_000,
+      councilMode: false
+    });
     const receipt = await tx.wait();
     const templAddress = receipt.logs
       .map((l) => {

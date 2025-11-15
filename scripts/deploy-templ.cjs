@@ -288,7 +288,13 @@ async function main() {
     }
     yesVoteThresholdBps = Math.round(parsed);
   }
-  const START_COUNCIL_MODE = parseBoolean(process.env.COUNCIL_MODE || process.env.START_COUNCIL_MODE);
+  const rawCouncilMode = process.env.COUNCIL_MODE ?? process.env.START_COUNCIL_MODE;
+  const START_COUNCIL_MODE =
+    rawCouncilMode === undefined || rawCouncilMode === null
+      ? true
+      : rawCouncilMode.trim() === ""
+        ? true
+        : parseBoolean(rawCouncilMode);
   const BACKEND_URL = (process.env.BACKEND_URL || process.env.TEMPL_BACKEND_URL || '').trim();
   const TELEGRAM_CHAT_ID = (process.env.TELEGRAM_CHAT_ID || process.env.CHAT_ID || '').trim();
   const PRIEST_IS_DICTATOR = /^(?:1|true)$/i.test((process.env.PRIEST_IS_DICTATOR || '').trim());

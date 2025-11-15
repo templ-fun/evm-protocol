@@ -823,7 +823,8 @@ abstract contract TemplBase is ReentrancyGuard {
         if (period < MIN_PRE_QUORUM_VOTING_PERIOD) revert TemplErrors.VotingPeriodTooShort();
         if (period > MAX_PRE_QUORUM_VOTING_PERIOD) revert TemplErrors.VotingPeriodTooLong();
         uint256 feeBps = proposalCreationFeeBps;
-        if (feeBps > 0) {
+        bool proposerIsCouncil = councilModeEnabled && councilMembers[msg.sender];
+        if (feeBps > 0 && !proposerIsCouncil) {
             uint256 proposalFee = (entryFee * feeBps) / BPS_DENOMINATOR;
             if (proposalFee > 0) {
                 _safeTransferFrom(accessToken, msg.sender, address(this), proposalFee);

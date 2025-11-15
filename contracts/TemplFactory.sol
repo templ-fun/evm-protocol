@@ -288,7 +288,7 @@ contract TemplFactory {
             proposalFeeBps: _proposalFeeBps,
             referralShareBps: _referralShareBps,
             yesVoteThresholdBps: TemplDefaults.DEFAULT_YES_VOTE_THRESHOLD_BPS,
-            councilMode: false
+            councilMode: true
         });
         return _deploy(cfg);
     }
