@@ -248,6 +248,7 @@ async function main() {
   let membershipModuleAddress = (process.env.MEMBERSHIP_MODULE_ADDRESS || '').trim();
   let treasuryModuleAddress = (process.env.TREASURY_MODULE_ADDRESS || '').trim();
   let governanceModuleAddress = (process.env.GOVERNANCE_MODULE_ADDRESS || '').trim();
+  let councilModuleAddress = (process.env.COUNCIL_MODULE_ADDRESS || '').trim();
   const burnSplit = readSplitPercent('BURN_BPS', undefined, process.env.BURN_BPS, DEFAULT_BURN_BPS);
   const treasurySplit = readSplitPercent('TREASURY_BPS', undefined, process.env.TREASURY_BPS, DEFAULT_TREASURY_BPS);
   const memberPoolSplit = readSplitPercent('MEMBER_POOL_BPS', undefined, process.env.MEMBER_POOL_BPS, DEFAULT_MEMBER_POOL_BPS);
@@ -275,9 +276,25 @@ async function main() {
     bpsSource: process.env.REFERRAL_SHARE_BPS,
     defaultBps: 2_500
   });
+  const YES_VOTE_THRESHOLD_INPUT = (process.env.YES_VOTE_THRESHOLD_BPS || '').trim();
+  let yesVoteThresholdBps = 5_000;
+  if (YES_VOTE_THRESHOLD_INPUT) {
+    const parsed = Number(YES_VOTE_THRESHOLD_INPUT);
+    if (!Number.isFinite(parsed)) {
+      throw new Error('YES_VOTE_THRESHOLD_BPS must be a valid number');
+    }
+    if (parsed < 100 || parsed > 10_000) {
+      throw new Error('YES_VOTE_THRESHOLD_BPS must be between 100 and 10,000');
+    }
+    yesVoteThresholdBps = Math.round(parsed);
+  }
+  const START_COUNCIL_MODE = parseBoolean(process.env.COUNCIL_MODE || process.env.START_COUNCIL_MODE);
   const BACKEND_URL = (process.env.BACKEND_URL || process.env.TEMPL_BACKEND_URL || '').trim();
   const TELEGRAM_CHAT_ID = (process.env.TELEGRAM_CHAT_ID || process.env.CHAT_ID || '').trim();
   const PRIEST_IS_DICTATOR = /^(?:1|true)$/i.test((process.env.PRIEST_IS_DICTATOR || '').trim());
+  if (START_COUNCIL_MODE && PRIEST_IS_DICTATOR) {
+    throw new Error('Council mode cannot be enabled while PRIEST_IS_DICTATOR is true');
+  }
   const curveConfigEnv = resolveCurveConfigFromEnv();
 
   if (!TOKEN_ADDRESS) {
@@ -311,6 +328,7 @@ async function main() {
       membershipModuleAddress = await existingFactory.MEMBERSHIP_MODULE();
       treasuryModuleAddress = await existingFactory.TREASURY_MODULE();
       governanceModuleAddress = await existingFactory.GOVERNANCE_MODULE();
+      councilModuleAddress = await existingFactory.COUNCIL_MODULE();
     } catch (err) {
       throw new Error(`Failed to read protocol bps from factory ${FACTORY_ADDRESS_ENV}: ${err?.message || err}`);
     }
@@ -387,6 +405,8 @@ async function main() {
   console.log("Post‑Quorum Voting Period (seconds):", POST_QUORUM_VOTING_PERIOD_SECONDS ?? 36 * 60 * 60);
   console.log("Burn Address:", effectiveBurnAddress);
   console.log("Priest Dictatorship:", PRIEST_IS_DICTATOR ? 'enabled' : 'disabled');
+  console.log("Council Mode:", START_COUNCIL_MODE ? 'enabled' : 'disabled');
+  console.log("YES Vote Threshold (bps):", yesVoteThresholdBps);
   console.log('Curve configuration:', curveConfigEnv.description);
   console.log(`Protocol Bps (${protocolPercentSource}):`, protocolPercentBps);
   console.log('\nMetadata:');
@@ -405,21 +425,26 @@ async function main() {
   let factoryAddress = FACTORY_ADDRESS_ENV;
   let factoryContract;
   if (!factoryAddress) {
-    membershipModuleAddress = await deployModuleIfNeeded(
-      'Membership',
-      'TemplMembershipModule',
-      'MEMBERSHIP_MODULE_ADDRESS'
-    );
-    treasuryModuleAddress = await deployModuleIfNeeded(
-      'Treasury',
-      'TemplTreasuryModule',
-      'TREASURY_MODULE_ADDRESS'
-    );
-    governanceModuleAddress = await deployModuleIfNeeded(
-      'Governance',
-      'TemplGovernanceModule',
-      'GOVERNANCE_MODULE_ADDRESS'
-    );
+  membershipModuleAddress = await deployModuleIfNeeded(
+    'Membership',
+    'TemplMembershipModule',
+    'MEMBERSHIP_MODULE_ADDRESS'
+  );
+  treasuryModuleAddress = await deployModuleIfNeeded(
+    'Treasury',
+    'TemplTreasuryModule',
+    'TREASURY_MODULE_ADDRESS'
+  );
+  governanceModuleAddress = await deployModuleIfNeeded(
+    'Governance',
+    'TemplGovernanceModule',
+    'GOVERNANCE_MODULE_ADDRESS'
+  );
+  councilModuleAddress = await deployModuleIfNeeded(
+    'Council',
+    'TemplCouncilModule',
+    'COUNCIL_MODULE_ADDRESS'
+  );
 
     console.log("\nDeploying TemplFactory...");
     const Factory = await hre.ethers.getContractFactory("TemplFactory");
@@ -433,7 +458,8 @@ async function main() {
       protocolPercentBps,
       membershipModuleAddress,
       treasuryModuleAddress,
-      governanceModuleAddress
+      governanceModuleAddress,
+      councilModuleAddress
     );
     await factory.waitForDeployment();
     factoryAddress = await factory.getAddress();
@@ -454,12 +480,16 @@ async function main() {
     if (!governanceModuleAddress) {
       governanceModuleAddress = await factoryContract.GOVERNANCE_MODULE();
     }
+    if (!councilModuleAddress) {
+      councilModuleAddress = await factoryContract.COUNCIL_MODULE();
+    }
   }
 
   console.log("\nFactory wiring:");
   console.log("- Membership Module:", membershipModuleAddress);
   console.log("- Treasury Module:", treasuryModuleAddress);
   console.log("- Governance Module:", governanceModuleAddress);
+  console.log("- Council Module:", councilModuleAddress);
 
   console.log("\nCreating TEMPL via factory...");
   if (!Number.isFinite(MAX_MEMBERS) || MAX_MEMBERS < 0) {
@@ -484,7 +514,9 @@ async function main() {
     description: DESCRIPTION,
     logoLink: LOGO_LINK,
     proposalFeeBps: PROPOSAL_FEE_BPS,
-    referralShareBps: REFERRAL_SHARE_BPS
+    referralShareBps: REFERRAL_SHARE_BPS,
+    yesVoteThresholdBps,
+    councilMode: START_COUNCIL_MODE
   };
   const expectedTempl = await factoryContract.createTemplWithConfig.staticCall(templConfig);
   const createTx = await factoryContract.createTemplWithConfig(templConfig);
@@ -604,6 +636,7 @@ async function main() {
     membershipModule: membershipModuleAddress,
     treasuryModule: treasuryModuleAddress,
     governanceModule: governanceModuleAddress,
+    councilModule: councilModuleAddress,
     // Fee split (bps)
     burnBps: burnSplit.resolvedBps,
     treasuryBps: treasurySplit.resolvedBps,
@@ -654,10 +687,13 @@ async function main() {
       `npx hardhat verify --contract contracts/TemplGovernance.sol:TemplGovernanceModule --network base ${governanceModuleAddress}`
     );
     console.log(
-      `npx hardhat verify --contract contracts/TemplFactory.sol:TemplFactory --network base ${factoryAddress} ${(process.env.FACTORY_DEPLOYER || deployer.address).trim()} ${PROTOCOL_FEE_RECIPIENT} ${protocolPercentBps} ${membershipModuleAddress} ${treasuryModuleAddress} ${governanceModuleAddress}`
+      `npx hardhat verify --contract contracts/TemplCouncil.sol:TemplCouncilModule --network base ${councilModuleAddress}`
     );
     console.log(
-      `npx hardhat verify --contract contracts/TEMPL.sol:TEMPL --network base ${contractAddress} ${PRIEST_ADDRESS} ${PROTOCOL_FEE_RECIPIENT} ${TOKEN_ADDRESS} ${ENTRY_FEE} ${burnSplit.resolvedBps} ${treasurySplit.resolvedBps} ${memberPoolSplit.resolvedBps} ${protocolPercentBps} ${quorumPercentBps} ${(POST_QUORUM_VOTING_PERIOD_SECONDS ?? 36 * 60 * 60)} ${(BURN_ADDRESS || hre.ethers.ZeroAddress)} ${PRIEST_IS_DICTATOR} ${MAX_MEMBERS} "${NAME}" "${DESCRIPTION}" "${LOGO_LINK}" ${PROPOSAL_FEE_BPS} ${REFERRAL_SHARE_BPS} ${membershipModuleAddress} ${treasuryModuleAddress} ${governanceModuleAddress} [[[curve argument omitted; use scripts/verify-templ.cjs for templ verification]]]`
+      `npx hardhat verify --contract contracts/TemplFactory.sol:TemplFactory --network base ${factoryAddress} ${(process.env.FACTORY_DEPLOYER || deployer.address).trim()} ${PROTOCOL_FEE_RECIPIENT} ${protocolPercentBps} ${membershipModuleAddress} ${treasuryModuleAddress} ${governanceModuleAddress} ${councilModuleAddress}`
+    );
+    console.log(
+      `npx hardhat verify --contract contracts/TEMPL.sol:TEMPL --network base ${contractAddress} ${PRIEST_ADDRESS} ${PROTOCOL_FEE_RECIPIENT} ${TOKEN_ADDRESS} ${ENTRY_FEE} ${burnSplit.resolvedBps} ${treasurySplit.resolvedBps} ${memberPoolSplit.resolvedBps} ${protocolPercentBps} ${quorumPercentBps} ${(POST_QUORUM_VOTING_PERIOD_SECONDS ?? 36 * 60 * 60)} ${(BURN_ADDRESS || hre.ethers.ZeroAddress)} ${PRIEST_IS_DICTATOR} ${MAX_MEMBERS} "${NAME}" "${DESCRIPTION}" "${LOGO_LINK}" ${PROPOSAL_FEE_BPS} ${REFERRAL_SHARE_BPS} ${yesVoteThresholdBps} ${START_COUNCIL_MODE} ${membershipModuleAddress} ${treasuryModuleAddress} ${governanceModuleAddress} ${councilModuleAddress} [[[curve argument omitted; use scripts/verify-templ.cjs for templ verification]]]`
     );
     console.log("Tip: prefer npm run verify:factory and npm run verify:templ which auto-discover constructor args.");
   }

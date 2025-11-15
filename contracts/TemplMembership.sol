@@ -338,6 +338,9 @@ contract TemplMembershipModule is TemplBase {
         if (!members[voter].joined) {
             return 0;
         }
+        if (councilModeEnabled && !councilMembers[voter]) {
+            return 0;
+        }
         return 1;
     }
 

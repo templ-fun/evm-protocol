@@ -85,6 +85,20 @@ library TemplErrors {
     error DictatorshipEnabled();
     /// @notice Thrown when attempting to toggle dictatorship to its current state.
     error DictatorshipUnchanged();
+    /// @notice Thrown when an action requires council membership.
+    error NotCouncil();
+    /// @notice Thrown when attempting to add a wallet that already sits on the council.
+    error CouncilMemberExists();
+    /// @notice Thrown when attempting to remove a wallet that is not on the council.
+    error CouncilMemberMissing();
+    /// @notice Thrown when removing a council member would leave the council empty.
+    error CouncilMemberMinimum();
+    /// @notice Thrown when attempting an action that conflicts with active council governance.
+    error CouncilModeActive();
+    /// @notice Thrown when attempting a council-only action while council governance is inactive.
+    error CouncilModeInactive();
+    /// @notice Thrown when the priest bootstrap seat has already been consumed.
+    error CouncilBootstrapConsumed();
     /// @notice Thrown when the external reward registry has reached its capacity.
     error ExternalRewardLimitReached();
     /// @notice Thrown when attempting to clear an external reward token that still holds value.

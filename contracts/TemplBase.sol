@@ -23,6 +23,10 @@ abstract contract TemplBase is ReentrancyGuard {
     uint256 internal constant DEFAULT_POST_QUORUM_VOTING_PERIOD = TemplDefaults.DEFAULT_EXECUTION_DELAY;
     /// @dev Default burn address used when deployers do not provide a custom sink.
     address internal constant DEFAULT_BURN_ADDRESS = TemplDefaults.DEFAULT_BURN_ADDRESS;
+    /// @dev Default YES vote threshold applied when deployers do not override it.
+    uint256 internal constant DEFAULT_YES_VOTE_THRESHOLD_BPS = TemplDefaults.DEFAULT_YES_VOTE_THRESHOLD_BPS;
+    /// @dev Minimum allowed YES vote threshold (basis points).
+    uint256 internal constant MIN_YES_VOTE_THRESHOLD_BPS = 100;
     /// @dev Caps the number of external reward tokens tracked to keep join gas bounded.
     uint256 internal constant MAX_EXTERNAL_REWARD_TOKENS = 256;
     /// @dev Maximum entry fee supported before arithmetic would overflow downstream accounting.
@@ -84,6 +88,16 @@ abstract contract TemplBase is ReentrancyGuard {
     uint256 public proposalCreationFeeBps;
     /// @notice Basis points of the member pool share paid to a referral during joins.
     uint256 public referralShareBps;
+    /// @notice Basis points of YES votes required (relative to total votes cast) for a proposal to pass.
+    uint256 public yesVoteThresholdBps;
+    /// @notice When true, only council members may vote on proposals.
+    bool public councilModeEnabled;
+    /// @notice True once the priest-consumed bootstrap council seat has been used.
+    bool public councilBootstrapConsumed;
+    /// @notice Tracks whether an address currently sits on the council.
+    mapping(address => bool) public councilMembers;
+    /// @notice Number of active council members.
+    uint256 public councilMemberCount;
     /// @notice Pricing curve configuration that governs how entry fees scale with membership.
     CurveConfig public entryFeeCurve;
 
@@ -141,6 +155,10 @@ abstract contract TemplBase is ReentrancyGuard {
         SetQuorumBps,
         SetPostQuorumVotingPeriod,
         SetBurnAddress,
+        SetYesVoteThreshold,
+        SetCouncilMode,
+        AddCouncilMember,
+        RemoveCouncilMember,
         Undefined
     }
 
@@ -191,6 +209,8 @@ abstract contract TemplBase is ReentrancyGuard {
         uint256 newPostQuorumVotingPeriod;
         /// @notice Burn address proposed to receive burn allocations.
         address newBurnAddress;
+        /// @notice YES vote threshold (bps) proposed by SetYesVoteThreshold.
+        uint256 newYesVoteThresholdBps;
         /// @notice Target contract invoked when executing an external call proposal.
         address externalCallTarget;
         /// @notice ETH value forwarded when executing the external call.
@@ -235,6 +255,8 @@ abstract contract TemplBase is ReentrancyGuard {
         uint256 quorumJoinSequence;
         /// @notice Desired dictatorship state when the action is SetDictatorship.
         bool setDictatorship;
+        /// @notice Desired council mode state when the action is SetCouncilMode.
+        bool setCouncilMode;
     }
 
     /// @notice Total proposals ever created.
@@ -411,6 +433,21 @@ abstract contract TemplBase is ReentrancyGuard {
     /// @param newPeriod New default pre‑quorum voting period (seconds).
 
     event PreQuorumVotingPeriodUpdated(uint256 indexed previousPeriod, uint256 indexed newPeriod);
+    /// @notice Emitted when the YES vote threshold changes.
+    /// @param previousThreshold Previous threshold (bps).
+    /// @param newThreshold New threshold (bps).
+    event YesVoteThresholdUpdated(uint256 indexed previousThreshold, uint256 indexed newThreshold);
+    /// @notice Emitted when council governance mode toggles.
+    /// @param enabled True when council mode is active.
+    event CouncilModeUpdated(bool indexed enabled);
+    /// @notice Emitted when a council member is added.
+    /// @param account Wallet that was added to the council.
+    /// @param addedBy Caller that initiated the addition.
+    event CouncilMemberAdded(address indexed account, address indexed addedBy);
+    /// @notice Emitted when a council member is removed.
+    /// @param account Wallet that left the council.
+    /// @param removedBy Caller that initiated the removal.
+    event CouncilMemberRemoved(address indexed account, address indexed removedBy);
     /// @notice Emitted when dictatorship mode is toggled.
     /// @param enabled True when dictatorship is enabled, false when disabled.
     event DictatorshipModeChanged(bool indexed enabled);
@@ -593,7 +630,8 @@ abstract contract TemplBase is ReentrancyGuard {
         string memory _description,
         string memory _logoLink,
         uint256 _proposalCreationFeeBps,
-        uint256 _referralShareBps
+        uint256 _referralShareBps,
+        uint256 _yesVoteThresholdBps
     ) internal {
         if (_protocolFeeRecipient == address(0) || _accessToken == address(0)) {
             revert TemplErrors.InvalidRecipient();
@@ -621,6 +659,8 @@ abstract contract TemplBase is ReentrancyGuard {
         _setProposalCreationFee(_proposalCreationFeeBps);
         _setReferralShareBps(_referralShareBps);
         preQuorumVotingPeriod = MIN_PRE_QUORUM_VOTING_PERIOD;
+        uint256 initialYesThreshold = _yesVoteThresholdBps == 0 ? DEFAULT_YES_VOTE_THRESHOLD_BPS : _yesVoteThresholdBps;
+        _setYesVoteThreshold(initialYesThreshold);
     }
 
     /// @notice Updates the split between burn, treasury, and member pool slices.
@@ -733,6 +773,121 @@ abstract contract TemplBase is ReentrancyGuard {
             return 0;
         }
         return memberCount - 1;
+    }
+
+    /// @notice Returns the number of wallets eligible to vote under the current governance mode.
+    function _eligibleVoterCount() internal view returns (uint256 count) {
+        return councilModeEnabled ? councilMemberCount : memberCount;
+    }
+
+    /// @notice Returns true when `yesVotes` satisfies the configured YES threshold relative to total votes.
+    function _meetsYesVoteThreshold(uint256 yesVotes, uint256 noVotes) internal view returns (bool) {
+        uint256 totalVotes = yesVotes + noVotes;
+        if (totalVotes == 0) {
+            return false;
+        }
+        uint256 lhs = yesVotes * BPS_DENOMINATOR;
+        uint256 rhs = yesVoteThresholdBps * totalVotes;
+        if (yesVoteThresholdBps == BPS_DENOMINATOR) {
+            return lhs == rhs;
+        }
+        return lhs > rhs;
+    }
+
+    /// @notice Creates the base proposal structure, applies fee, and tracks proposer state.
+    /// @param _votingPeriod Requested voting period (seconds). 0 applies the default.
+    /// @param _title On-chain title for the proposal.
+    /// @param _description On-chain description for the proposal.
+    /// @return proposalId Newly created proposal id.
+    /// @return proposal Storage reference to the created proposal.
+    /// @dev Captures a pre-quorum snapshot (block, join sequence, eligible voters), applies a proposal fee
+    ///      when configured, and auto-votes YES for the proposer.
+    function _createBaseProposal(
+        uint256 _votingPeriod,
+        string memory _title,
+        string memory _description
+    ) internal returns (uint256 proposalId, Proposal storage proposal) {
+        if (bytes(_title).length > MAX_PROPOSAL_TITLE_LENGTH) revert TemplErrors.InvalidCallData();
+        if (bytes(_description).length > MAX_PROPOSAL_DESCRIPTION_LENGTH) revert TemplErrors.InvalidCallData();
+        if (!members[msg.sender].joined) revert TemplErrors.NotMember();
+        if (hasActiveProposal[msg.sender]) {
+            uint256 existingId = activeProposalId[msg.sender];
+            Proposal storage existingProposal = proposals[existingId];
+            if (!existingProposal.executed && block.timestamp < existingProposal.endTime) {
+                revert TemplErrors.ActiveProposalExists();
+            } else {
+                hasActiveProposal[msg.sender] = false;
+                activeProposalId[msg.sender] = 0;
+            }
+        }
+        uint256 period = _votingPeriod == 0 ? preQuorumVotingPeriod : _votingPeriod;
+        if (period < MIN_PRE_QUORUM_VOTING_PERIOD) revert TemplErrors.VotingPeriodTooShort();
+        if (period > MAX_PRE_QUORUM_VOTING_PERIOD) revert TemplErrors.VotingPeriodTooLong();
+        uint256 feeBps = proposalCreationFeeBps;
+        if (feeBps > 0) {
+            uint256 proposalFee = (entryFee * feeBps) / BPS_DENOMINATOR;
+            if (proposalFee > 0) {
+                _safeTransferFrom(accessToken, msg.sender, address(this), proposalFee);
+                treasuryBalance += proposalFee;
+            }
+        }
+        proposalId = proposalCount;
+        ++proposalCount;
+        proposal = proposals[proposalId];
+        proposal.id = proposalId;
+        proposal.proposer = msg.sender;
+        proposal.endTime = block.timestamp + period;
+        proposal.createdAt = block.timestamp;
+        proposal.title = _title;
+        proposal.description = _description;
+        proposal.preQuorumSnapshotBlock = block.number;
+        proposal.preQuorumJoinSequence = joinSequence;
+        proposal.executed = false;
+        bool proposerCanVote = !councilModeEnabled || councilMembers[msg.sender];
+        if (proposerCanVote) {
+            proposal.hasVoted[msg.sender] = true;
+            proposal.voteChoice[msg.sender] = true;
+            proposal.yesVotes = 1;
+        } else {
+            proposal.yesVotes = 0;
+        }
+        proposal.noVotes = 0;
+        proposal.eligibleVoters = _eligibleVoterCount();
+        proposal.quorumReachedAt = 0;
+        proposal.quorumExempt = false;
+        if (
+            proposal.eligibleVoters != 0 && !(proposal.yesVotes * BPS_DENOMINATOR < quorumBps * proposal.eligibleVoters)
+        ) {
+            proposal.quorumReachedAt = block.timestamp;
+            proposal.quorumSnapshotBlock = block.number;
+            proposal.postQuorumEligibleVoters = proposal.eligibleVoters;
+            proposal.quorumJoinSequence = proposal.preQuorumJoinSequence;
+            proposal.endTime = block.timestamp + postQuorumVotingPeriod;
+        }
+        _addActiveProposal(proposalId);
+        hasActiveProposal[msg.sender] = true;
+        activeProposalId[msg.sender] = proposalId;
+        emit ProposalCreated(proposalId, msg.sender, proposal.endTime, _title, _description);
+    }
+
+    /// @notice Returns whether `proposal` has satisfied quorum, delay, and majority conditions.
+    function _proposalPassed(Proposal storage proposal) internal view returns (bool passed) {
+        if (proposal.quorumExempt) {
+            return (!(block.timestamp < proposal.endTime) && _meetsYesVoteThreshold(proposal.yesVotes, proposal.noVotes));
+        }
+        if (proposal.quorumReachedAt == 0) {
+            return false;
+        }
+        uint256 denom = proposal.postQuorumEligibleVoters;
+        if (denom != 0) {
+            if (proposal.yesVotes * BPS_DENOMINATOR < quorumBps * denom) {
+                return false;
+            }
+        }
+        if (block.timestamp < proposal.quorumReachedAt + postQuorumVotingPeriod) {
+            return false;
+        }
+        return _meetsYesVoteThreshold(proposal.yesVotes, proposal.noVotes);
     }
 
     /// @notice Reports whether any curve segment introduces dynamic pricing.
@@ -1043,6 +1198,7 @@ abstract contract TemplBase is ReentrancyGuard {
     /// @param _enabled New dictatorship state (true to enable).
     function _updateDictatorship(bool _enabled) internal {
         if (priestIsDictator == _enabled) revert TemplErrors.DictatorshipUnchanged();
+        if (_enabled && councilModeEnabled) revert TemplErrors.CouncilModeActive();
         priestIsDictator = _enabled;
         emit DictatorshipModeChanged(_enabled);
     }
@@ -1131,6 +1287,63 @@ abstract contract TemplBase is ReentrancyGuard {
         uint256 previous = preQuorumVotingPeriod;
         preQuorumVotingPeriod = newPeriod;
         emit PreQuorumVotingPeriodUpdated(previous, newPeriod);
+    }
+
+    /// @notice Updates the YES vote threshold expressed in basis points of total votes cast.
+    /// @param newThresholdBps New threshold (must be within [MIN_YES_VOTE_THRESHOLD_BPS, 10_000]).
+    function _setYesVoteThreshold(uint256 newThresholdBps) internal {
+        if (newThresholdBps < MIN_YES_VOTE_THRESHOLD_BPS || newThresholdBps > BPS_DENOMINATOR) {
+            revert TemplErrors.InvalidPercentage();
+        }
+        uint256 previous = yesVoteThresholdBps;
+        yesVoteThresholdBps = newThresholdBps;
+        emit YesVoteThresholdUpdated(previous, newThresholdBps);
+    }
+
+    /// @notice Enables or disables council governance mode.
+    /// @param enabled True to enable council mode, false to return to membership voting.
+    function _setCouncilMode(bool enabled) internal {
+        if (councilModeEnabled == enabled) revert TemplErrors.InvalidCallData();
+        if (enabled) {
+            if (priestIsDictator) revert TemplErrors.CouncilModeActive();
+            if (councilMemberCount == 0) revert TemplErrors.NoMembers();
+        }
+        councilModeEnabled = enabled;
+        emit CouncilModeUpdated(enabled);
+    }
+
+    /// @notice Adds a member to the council.
+    /// @param account Wallet to add.
+    /// @param addedBy Caller initiating the addition (used for events).
+    function _addCouncilMember(address account, address addedBy) internal {
+        if (account == address(0)) revert TemplErrors.InvalidRecipient();
+        if (!members[account].joined) revert TemplErrors.NotMember();
+        if (councilMembers[account]) revert TemplErrors.CouncilMemberExists();
+        councilMembers[account] = true;
+        ++councilMemberCount;
+        emit CouncilMemberAdded(account, addedBy);
+    }
+
+    /// @notice Removes a member from the council.
+    /// @param account Wallet to remove.
+    /// @param removedBy Caller initiating the removal (used for events).
+    function _removeCouncilMember(address account, address removedBy) internal {
+        if (!councilMembers[account]) revert TemplErrors.CouncilMemberMissing();
+        if (councilMemberCount <= 2) revert TemplErrors.CouncilMemberMinimum();
+        councilMembers[account] = false;
+        --councilMemberCount;
+        emit CouncilMemberRemoved(account, removedBy);
+    }
+
+    /// @notice Allows the priest to add a single bootstrap council member outside of governance.
+    /// @param account Wallet receiving the bootstrap council seat.
+    /// @param caller Original msg.sender forwarded for event context.
+    function _bootstrapCouncilMember(address account, address caller) internal {
+        if (!councilModeEnabled) revert TemplErrors.CouncilModeInactive();
+        if (councilBootstrapConsumed) revert TemplErrors.CouncilBootstrapConsumed();
+        if (caller != priest) revert TemplErrors.PriestOnly();
+        councilBootstrapConsumed = true;
+        _addCouncilMember(account, caller);
     }
 
     /// @notice Executes a treasury withdrawal and emits the corresponding event.

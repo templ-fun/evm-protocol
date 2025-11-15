@@ -261,6 +261,7 @@ contract TemplGovernanceModule is TemplBase {
         return id;
     }
 
+
     /// @notice Opens a proposal to perform an arbitrary external call through the templ.
     /// @dev Reverts if `_target` is zero or if no calldata is supplied. Any revert
     ///      produced by the downstream call will be bubbled up during execution.
@@ -427,6 +428,10 @@ contract TemplGovernanceModule is TemplBase {
 
         Member storage memberInfo = members[msg.sender];
 
+        if (councilModeEnabled && !councilMembers[msg.sender]) {
+            revert TemplErrors.NotCouncil();
+        }
+
         if (proposal.quorumReachedAt == 0) {
             if (_joinedAfterSnapshot(memberInfo, proposal.preQuorumJoinSequence)) {
                 revert TemplErrors.JoinedAfterProposal();
@@ -466,7 +471,7 @@ contract TemplGovernanceModule is TemplBase {
             ) {
                 proposal.quorumReachedAt = block.timestamp;
                 proposal.quorumSnapshotBlock = block.number;
-                proposal.postQuorumEligibleVoters = memberCount;
+                proposal.postQuorumEligibleVoters = _eligibleVoterCount();
                 proposal.quorumJoinSequence = joinSequence;
                 proposal.endTime = block.timestamp + postQuorumVotingPeriod;
             }
@@ -507,7 +512,7 @@ contract TemplGovernanceModule is TemplBase {
         }
         if (proposal.executed) revert TemplErrors.AlreadyExecuted();
 
-        if (!(proposal.yesVotes > proposal.noVotes)) revert TemplErrors.ProposalNotPassed();
+        if (!_meetsYesVoteThreshold(proposal.yesVotes, proposal.noVotes)) revert TemplErrors.ProposalNotPassed();
 
         proposal.executed = true;
 
@@ -569,6 +574,14 @@ contract TemplGovernanceModule is TemplBase {
             _governanceSetPostQuorumVotingPeriod(proposal.newPostQuorumVotingPeriod);
         } else if (proposal.action == Action.SetBurnAddress) {
             _governanceSetBurnAddress(proposal.newBurnAddress);
+        } else if (proposal.action == Action.SetYesVoteThreshold) {
+            _governanceSetYesVoteThreshold(proposal.newYesVoteThresholdBps);
+        } else if (proposal.action == Action.SetCouncilMode) {
+            _governanceSetCouncilMode(proposal.setCouncilMode);
+        } else if (proposal.action == Action.AddCouncilMember) {
+            _governanceAddCouncilMember(proposal.recipient);
+        } else if (proposal.action == Action.RemoveCouncilMember) {
+            _governanceRemoveCouncilMember(proposal.recipient);
         } else {
             revert TemplErrors.InvalidCallData();
         }
@@ -691,6 +704,30 @@ contract TemplGovernanceModule is TemplBase {
         _setBurnAddress(newBurn);
     }
 
+    /// @notice Governance wrapper that updates the YES vote threshold.
+    /// @param newThresholdBps New threshold (bps).
+    function _governanceSetYesVoteThreshold(uint256 newThresholdBps) internal {
+        _setYesVoteThreshold(newThresholdBps);
+    }
+
+    /// @notice Governance wrapper that toggles council mode.
+    /// @param enabled True to enable council mode.
+    function _governanceSetCouncilMode(bool enabled) internal {
+        _setCouncilMode(enabled);
+    }
+
+    /// @notice Governance wrapper that adds a council member.
+    /// @param account Wallet to add.
+    function _governanceAddCouncilMember(address account) internal {
+        _addCouncilMember(account, address(this));
+    }
+
+    /// @notice Governance wrapper that removes a council member.
+    /// @param account Wallet to remove.
+    function _governanceRemoveCouncilMember(address account) internal {
+        _removeCouncilMember(account, address(this));
+    }
+
     /// @notice Executes the arbitrary call attached to `proposal` and bubbles up revert data.
     /// @param proposal Proposal storage reference containing the external call payload.
     /// @return returndata Raw return data from the external call.
@@ -710,70 +747,6 @@ contract TemplGovernanceModule is TemplBase {
         return _returndata;
     }
 
-    /// @notice Returns core metadata for a proposal including vote totals and status.
-    /// @param _proposalId Proposal id to inspect.
-    /// @return proposer Address that created the proposal.
-    /// @return yesVotes Number of YES votes.
-    /// @return noVotes Number of NO votes.
-    /// @return endTime Timestamp when voting/execution window closes.
-    /// @return executed Whether the proposal has been executed.
-    /// @return passed Whether the proposal can be executed based on vote outcomes.
-    /// @return title On-chain title string.
-    /// @return description On-chain description string.
-    function getProposal(
-        uint256 _proposalId
-    )
-        external
-        view
-        returns (
-            address proposer,
-            uint256 yesVotes,
-            uint256 noVotes,
-            uint256 endTime,
-            bool executed,
-            bool passed,
-            string memory title,
-            string memory description
-        )
-    {
-        if (!(_proposalId < proposalCount)) revert TemplErrors.InvalidProposal();
-        Proposal storage proposal = proposals[_proposalId];
-        passed = _proposalPassed(proposal);
-
-        return (
-            proposal.proposer,
-            proposal.yesVotes,
-            proposal.noVotes,
-            proposal.endTime,
-            proposal.executed,
-            passed,
-            proposal.title,
-            proposal.description
-        );
-    }
-
-    /// @notice Returns whether `proposal` has satisfied quorum, delay, and majority conditions.
-    /// @param proposal Proposal storage reference to evaluate.
-    /// @return passed True when the proposal can be executed.
-    function _proposalPassed(Proposal storage proposal) internal view returns (bool passed) {
-        if (proposal.quorumExempt) {
-            return (!(block.timestamp < proposal.endTime) && proposal.yesVotes > proposal.noVotes);
-        }
-        if (proposal.quorumReachedAt == 0) {
-            return false;
-        }
-        uint256 denom = proposal.postQuorumEligibleVoters;
-        if (denom != 0) {
-            if (proposal.yesVotes * BPS_DENOMINATOR < quorumBps * denom) {
-                return false;
-            }
-        }
-        if (block.timestamp < proposal.quorumReachedAt + postQuorumVotingPeriod) {
-            return false;
-        }
-        return proposal.yesVotes > proposal.noVotes;
-    }
-
     /// @notice Returns quorum-related snapshot data for a proposal.
     /// @param _proposalId Proposal id to inspect.
     /// @return eligibleVotersPreQuorum Members eligible before quorum was reached.
@@ -782,124 +755,22 @@ contract TemplGovernanceModule is TemplBase {
     /// @return quorumSnapshotBlock Block recorded when quorum was reached (if any).
     /// @return createdAt Timestamp when the proposal was created.
     /// @return quorumReachedAt Timestamp when quorum was reached (0 when never reached).
-    function getProposalSnapshots(
-        uint256 _proposalId
-    )
-        external
-        view
-        returns (
-            uint256 eligibleVotersPreQuorum,
-            uint256 eligibleVotersPostQuorum,
-            uint256 preQuorumSnapshotBlock,
-            uint256 quorumSnapshotBlock,
-            uint256 createdAt,
-            uint256 quorumReachedAt
-        )
-    {
-        if (!(_proposalId < proposalCount)) revert TemplErrors.InvalidProposal();
-        Proposal storage proposal = proposals[_proposalId];
-        return (
-            proposal.eligibleVoters,
-            proposal.postQuorumEligibleVoters,
-            proposal.preQuorumSnapshotBlock,
-            proposal.quorumSnapshotBlock,
-            proposal.createdAt,
-            proposal.quorumReachedAt
-        );
-    }
-
     /// @notice Returns the join sequence snapshots captured for proposal eligibility.
     /// @param _proposalId Proposal id to inspect.
     /// @return preQuorumJoinSequence Join sequence recorded when the proposal was created.
     /// @return quorumJoinSequence Join sequence recorded when quorum was reached (0 if never reached).
-    function getProposalJoinSequences(
-        uint256 _proposalId
-    ) external view returns (uint256 preQuorumJoinSequence, uint256 quorumJoinSequence) {
-        if (!(_proposalId < proposalCount)) revert TemplErrors.InvalidProposal();
-        Proposal storage proposal = proposals[_proposalId];
-        return (proposal.preQuorumJoinSequence, proposal.quorumJoinSequence);
-    }
-
     /// @notice Returns whether a voter participated in a proposal and their recorded choice.
     /// @param _proposalId Proposal id to inspect.
     /// @param _voter Wallet to query.
     /// @return voted True if the voter has cast a ballot.
     /// @return support Recorded support value (false when `voted` is false).
-    function hasVoted(uint256 _proposalId, address _voter) external view returns (bool voted, bool support) {
-        if (!(_proposalId < proposalCount)) revert TemplErrors.InvalidProposal();
-        Proposal storage proposal = proposals[_proposalId];
-
-        return (proposal.hasVoted[_voter], proposal.voteChoice[_voter]);
-    }
-
     /// @notice Lists proposal ids that are still within their active voting/execution window.
     /// @return proposalIds Array of currently active proposal ids.
-    function getActiveProposals() external view returns (uint256[] memory proposalIds) {
-        uint256 len = activeProposalIds.length;
-        uint256 currentTime = block.timestamp;
-        uint256[] memory temp = new uint256[](len);
-        uint256 count = 0;
-        for (uint256 i = 0; i < len; ++i) {
-            uint256 id = activeProposalIds[i];
-            if (_isActiveProposal(proposals[id], currentTime)) {
-                temp[count] = id;
-                ++count;
-            }
-        }
-        uint256[] memory activeIds = new uint256[](count);
-        for (uint256 i = 0; i < count; ++i) {
-            activeIds[i] = temp[i];
-        }
-        return activeIds;
-    }
-
     /// @notice Returns active proposal ids using offset + limit pagination.
     /// @param offset Starting index within the proposal array.
     /// @param limit Maximum number of active proposals to return (capped at 100).
     /// @return proposalIds Active proposal ids discovered in the window.
     /// @return hasMore True when additional active proposals exist beyond the window.
-    function getActiveProposalsPaginated(
-        uint256 offset,
-        uint256 limit
-    ) external view returns (uint256[] memory proposalIds, bool hasMore) {
-        if (limit == 0 || limit > 100) revert TemplErrors.LimitOutOfRange();
-        uint256 currentTime = block.timestamp;
-        uint256 len = activeProposalIds.length;
-        uint256 totalActive = 0;
-        for (uint256 i = 0; i < len; ++i) {
-            if (_isActiveProposal(proposals[activeProposalIds[i]], currentTime)) {
-                ++totalActive;
-            }
-        }
-        if (!(offset < totalActive)) {
-            return (new uint256[](0), false);
-        }
-
-        uint256[] memory tempIds = new uint256[](limit);
-        uint256 count = 0;
-        uint256 activeSeen = 0;
-        for (uint256 i = 0; i < len && count < limit; ++i) {
-            uint256 id = activeProposalIds[i];
-            if (!_isActiveProposal(proposals[id], currentTime)) {
-                continue;
-            }
-            if (activeSeen < offset) {
-                ++activeSeen;
-                continue;
-            }
-            tempIds[count] = id;
-            ++count;
-        }
-
-        hasMore = (offset + count) < totalActive;
-
-        proposalIds = new uint256[](count);
-        for (uint256 i = 0; i < count; ++i) {
-            proposalIds[i] = tempIds[i];
-        }
-
-        return (proposalIds, hasMore);
-    }
 
     /// @notice Creates the base proposal structure, applies fee, and tracks proposer state.
     /// @param _votingPeriod Requested voting period (seconds). 0 applies the default.
@@ -911,69 +782,6 @@ contract TemplGovernanceModule is TemplBase {
     ///      when configured, and auto‑votes YES for the proposer. The voting period is clamped to
     ///      `[MIN_PRE_QUORUM_VOTING_PERIOD, MAX_PRE_QUORUM_VOTING_PERIOD]` with `preQuorumVotingPeriod`
     ///      applied when callers pass zero.
-    function _createBaseProposal(
-        uint256 _votingPeriod,
-        string memory _title,
-        string memory _description
-    ) internal returns (uint256 proposalId, Proposal storage proposal) {
-        _requireDelegatecall();
-        if (bytes(_title).length > MAX_PROPOSAL_TITLE_LENGTH) revert TemplErrors.InvalidCallData();
-        if (bytes(_description).length > MAX_PROPOSAL_DESCRIPTION_LENGTH) revert TemplErrors.InvalidCallData();
-        if (!members[msg.sender].joined) revert TemplErrors.NotMember();
-        if (hasActiveProposal[msg.sender]) {
-            uint256 existingId = activeProposalId[msg.sender];
-            Proposal storage existingProposal = proposals[existingId];
-            if (!existingProposal.executed && block.timestamp < existingProposal.endTime) {
-                revert TemplErrors.ActiveProposalExists();
-            } else {
-                hasActiveProposal[msg.sender] = false;
-                activeProposalId[msg.sender] = 0;
-            }
-        }
-        uint256 period = _votingPeriod == 0 ? preQuorumVotingPeriod : _votingPeriod;
-        if (period < MIN_PRE_QUORUM_VOTING_PERIOD) revert TemplErrors.VotingPeriodTooShort();
-        if (period > MAX_PRE_QUORUM_VOTING_PERIOD) revert TemplErrors.VotingPeriodTooLong();
-        uint256 feeBps = proposalCreationFeeBps;
-        if (feeBps > 0) {
-            uint256 proposalFee = (entryFee * feeBps) / BPS_DENOMINATOR;
-            if (proposalFee > 0) {
-                _safeTransferFrom(accessToken, msg.sender, address(this), proposalFee);
-                treasuryBalance += proposalFee;
-            }
-        }
-        proposalId = proposalCount;
-        ++proposalCount;
-        proposal = proposals[proposalId];
-        proposal.id = proposalId;
-        proposal.proposer = msg.sender;
-        proposal.endTime = block.timestamp + period;
-        proposal.createdAt = block.timestamp;
-        proposal.title = _title;
-        proposal.description = _description;
-        proposal.preQuorumSnapshotBlock = block.number;
-        proposal.preQuorumJoinSequence = joinSequence;
-        proposal.executed = false;
-        proposal.hasVoted[msg.sender] = true;
-        proposal.voteChoice[msg.sender] = true;
-        proposal.yesVotes = 1;
-        proposal.noVotes = 0;
-        proposal.eligibleVoters = memberCount;
-        proposal.quorumReachedAt = 0;
-        proposal.quorumExempt = false;
-        if (
-            proposal.eligibleVoters != 0 && !(proposal.yesVotes * BPS_DENOMINATOR < quorumBps * proposal.eligibleVoters)
-        ) {
-            proposal.quorumReachedAt = block.timestamp;
-            proposal.quorumSnapshotBlock = block.number;
-            proposal.postQuorumEligibleVoters = proposal.eligibleVoters;
-            proposal.quorumJoinSequence = proposal.preQuorumJoinSequence;
-            proposal.endTime = block.timestamp + postQuorumVotingPeriod;
-        }
-        _addActiveProposal(proposalId);
-        hasActiveProposal[msg.sender] = true;
-        activeProposalId[msg.sender] = proposalId;
-        emit ProposalCreated(proposalId, msg.sender, proposal.endTime, _title, _description);
-    }
 
     /// @notice Removes up to `maxRemovals` inactive proposals from the tail of the active set.
     /// @param maxRemovals Maximum number of entries to remove.

@@ -55,6 +55,8 @@ async function deployTemplContracts({
   logoLink = "",
   proposalFeeBps = 0,
   referralShareBps = 0,
+  yesVoteThresholdBps = 5000,
+  councilMode = false,
   curve = STATIC_CURVE,
 } = {}) {
   const accounts = await ethers.getSigners();
@@ -77,6 +79,10 @@ async function deployTemplContracts({
   const GovernanceModule = await ethers.getContractFactory("TemplGovernanceModule");
   const governanceModule = await GovernanceModule.deploy();
   await governanceModule.waitForDeployment();
+
+  const CouncilModule = await ethers.getContractFactory("TemplCouncilModule");
+  const councilModule = await CouncilModule.deploy();
+  await councilModule.waitForDeployment();
 
   const TEMPL = await ethers.getContractFactory("TEMPL");
   const protocolRecipient = protocolFeeRecipient || priest.address;
@@ -101,9 +107,12 @@ async function deployTemplContracts({
     logoLink,
     proposalFeeBps,
     referralShareBps,
+    yesVoteThresholdBps,
+    councilMode,
     await membershipModule.getAddress(),
     await treasuryModule.getAddress(),
     await governanceModule.getAddress(),
+    await councilModule.getAddress(),
     normalizedCurve
   );
   await templ.waitForDeployment();

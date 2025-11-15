@@ -25,7 +25,7 @@ describe("Proposal creation fee reentrancy", function () {
     accounts = await ethers.getSigners();
     [, priest, attackerEOA] = accounts;
 
-    const { membershipModule, treasuryModule, governanceModule } = await deployTemplModules();
+    const { membershipModule, treasuryModule, governanceModule, councilModule } = await deployTemplModules();
 
     const Token = await ethers.getContractFactory(
       "contracts/mocks/ProposalFeeReentrantToken.sol:ProposalFeeReentrantToken"
@@ -53,9 +53,12 @@ describe("Proposal creation fee reentrancy", function () {
       "https://templ.fun/reentrancy.png",
       PROPOSAL_FEE_BPS,
       0,
+      5_000,
+      false,
       membershipModule,
       treasuryModule,
       governanceModule,
+      councilModule,
       STATIC_CURVE
     );
     await templ.waitForDeployment();

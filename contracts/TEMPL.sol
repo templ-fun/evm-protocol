@@ -5,6 +5,7 @@ import {TemplBase} from "./TemplBase.sol";
 import {TemplMembershipModule} from "./TemplMembership.sol";
 import {TemplTreasuryModule} from "./TemplTreasury.sol";
 import {TemplGovernanceModule} from "./TemplGovernance.sol";
+import {TemplCouncilModule} from "./TemplCouncil.sol";
 import {TemplErrors} from "./TemplErrors.sol";
 import {CurveConfig} from "./TemplCurve.sol";
 
@@ -18,6 +19,8 @@ contract TEMPL is TemplBase {
     address public immutable TREASURY_MODULE;
     /// @notice Address of the governance module implementation used for delegatecalls.
     address public immutable GOVERNANCE_MODULE;
+    /// @notice Address of the council governance module implementation used for delegatecalls.
+    address public immutable COUNCIL_MODULE;
 
     /// @dev Selector-to-module routing table used by the fallback for delegatecall dispatch.
     mapping(bytes4 => address) private _moduleForSelector;
@@ -49,6 +52,7 @@ contract TEMPL is TemplBase {
     /// @param _membershipModule Address of the deployed membership module implementation.
     /// @param _treasuryModule Address of the deployed treasury module implementation.
     /// @param _governanceModule Address of the deployed governance module implementation.
+    /// @param _councilModule Address of the deployed council governance module implementation.
     /// @param _curve Pricing curve configuration applied to future joins.
     constructor(
         address _priest,
@@ -69,9 +73,12 @@ contract TEMPL is TemplBase {
         string memory _logoLink,
         uint256 _proposalCreationFeeBps,
         uint256 _referralShareBps,
+        uint256 _yesVoteThresholdBps,
+        bool _startInCouncilMode,
         address _membershipModule,
         address _treasuryModule,
         address _governanceModule,
+        address _councilModule,
         CurveConfig memory _curve
     ) {
         _initializeTempl(
@@ -89,7 +96,8 @@ contract TEMPL is TemplBase {
             _description,
             _logoLink,
             _proposalCreationFeeBps,
-            _referralShareBps
+            _referralShareBps,
+            _yesVoteThresholdBps
         );
         if (_priest == address(0)) revert TemplErrors.InvalidRecipient();
         if (_entryFee == 0) {
@@ -98,17 +106,25 @@ contract TEMPL is TemplBase {
         if (_entryFee < 10) revert TemplErrors.EntryFeeTooSmall();
         if (_entryFee % 10 != 0) revert TemplErrors.InvalidEntryFee();
 
-        if (_membershipModule == address(0) || _treasuryModule == address(0) || _governanceModule == address(0)) {
+        if (
+            _membershipModule == address(0) ||
+            _treasuryModule == address(0) ||
+            _governanceModule == address(0) ||
+            _councilModule == address(0)
+        ) {
             revert TemplErrors.InvalidCallData();
         }
+        if (_startInCouncilMode && _priestIsDictator) revert TemplErrors.CouncilModeActive();
 
         MEMBERSHIP_MODULE = _membershipModule;
         TREASURY_MODULE = _treasuryModule;
         GOVERNANCE_MODULE = _governanceModule;
+        COUNCIL_MODULE = _councilModule;
 
         _registerMembershipSelectors(_membershipModule);
         _registerTreasurySelectors(_treasuryModule);
         _registerGovernanceSelectors(_governanceModule);
+        _registerCouncilSelectors(_councilModule);
 
         priest = _priest;
         joinPaused = false;
@@ -120,6 +136,10 @@ contract TEMPL is TemplBase {
         joinSequence = 1;
         priestMember.joinSequence = 1;
         memberCount = 1;
+        _addCouncilMember(_priest, _priest);
+        if (_startInCouncilMode) {
+            _setCouncilMode(true);
+        }
         if (_maxMembers != 0) {
             _setMaxMembers(_maxMembers);
         }
@@ -143,10 +163,16 @@ contract TEMPL is TemplBase {
     /// @return membership Selectors routed to the membership module.
     /// @return treasury Selectors routed to the treasury module.
     /// @return governance Selectors routed to the governance module.
+    /// @return council Selectors routed to the council governance module.
     function getRegisteredSelectors()
         external
         pure
-        returns (bytes4[] memory membership, bytes4[] memory treasury, bytes4[] memory governance)
+        returns (
+            bytes4[] memory membership,
+            bytes4[] memory treasury,
+            bytes4[] memory governance,
+            bytes4[] memory council
+        )
     {
         membership = new bytes4[](18);
         membership[0] = TemplMembershipModule.join.selector;
@@ -168,7 +194,7 @@ contract TEMPL is TemplBase {
         membership[16] = TemplMembershipModule.totalJoins.selector;
         membership[17] = TemplMembershipModule.getExternalRewardTokensPaginated.selector;
 
-        treasury = new bytes4[](17);
+        treasury = new bytes4[](22);
         treasury[0] = TemplTreasuryModule.withdrawTreasuryDAO.selector;
         treasury[1] = TemplTreasuryModule.updateConfigDAO.selector;
         treasury[2] = TemplTreasuryModule.setJoinPausedDAO.selector;
@@ -186,8 +212,13 @@ contract TEMPL is TemplBase {
         treasury[14] = TemplTreasuryModule.setBurnAddressDAO.selector;
         treasury[15] = TemplTreasuryModule.batchDAO.selector;
         treasury[16] = TemplTreasuryModule.setPreQuorumVotingPeriodDAO.selector;
+        treasury[17] = TemplTreasuryModule.setYesVoteThresholdBpsDAO.selector;
+        treasury[18] = TemplTreasuryModule.setCouncilModeDAO.selector;
+        treasury[19] = TemplTreasuryModule.addCouncilMemberDAO.selector;
+        treasury[20] = TemplTreasuryModule.removeCouncilMemberDAO.selector;
+        treasury[21] = TemplTreasuryModule.bootstrapCouncilMember.selector;
 
-        governance = new bytes4[](25);
+        governance = new bytes4[](19);
         governance[0] = TemplGovernanceModule.createProposalSetJoinPaused.selector;
         governance[1] = TemplGovernanceModule.createProposalUpdateConfig.selector;
         governance[2] = TemplGovernanceModule.createProposalSetMaxMembers.selector;
@@ -202,17 +233,16 @@ contract TEMPL is TemplBase {
         governance[11] = TemplGovernanceModule.createProposalSetDictatorship.selector;
         governance[12] = TemplGovernanceModule.vote.selector;
         governance[13] = TemplGovernanceModule.executeProposal.selector;
-        governance[14] = TemplGovernanceModule.getProposal.selector;
-        governance[15] = TemplGovernanceModule.getProposalSnapshots.selector;
-        governance[16] = TemplGovernanceModule.hasVoted.selector;
-        governance[17] = TemplGovernanceModule.getActiveProposals.selector;
-        governance[18] = TemplGovernanceModule.getActiveProposalsPaginated.selector;
-        governance[19] = TemplGovernanceModule.pruneInactiveProposals.selector;
-        governance[20] = TemplGovernanceModule.getProposalJoinSequences.selector;
-        governance[21] = TemplGovernanceModule.createProposalCleanupExternalRewardToken.selector;
-        governance[22] = TemplGovernanceModule.createProposalSetQuorumBps.selector;
-        governance[23] = TemplGovernanceModule.createProposalSetPostQuorumVotingPeriod.selector;
-        governance[24] = TemplGovernanceModule.createProposalSetBurnAddress.selector;
+        governance[14] = TemplGovernanceModule.pruneInactiveProposals.selector;
+        governance[15] = TemplGovernanceModule.createProposalCleanupExternalRewardToken.selector;
+        governance[16] = TemplGovernanceModule.createProposalSetQuorumBps.selector;
+        governance[17] = TemplGovernanceModule.createProposalSetPostQuorumVotingPeriod.selector;
+        governance[18] = TemplGovernanceModule.createProposalSetBurnAddress.selector;
+        council = new bytes4[](4);
+        council[0] = TemplCouncilModule.createProposalSetYesVoteThreshold.selector;
+        council[1] = TemplCouncilModule.createProposalSetCouncilMode.selector;
+        council[2] = TemplCouncilModule.createProposalAddCouncilMember.selector;
+        council[3] = TemplCouncilModule.createProposalRemoveCouncilMember.selector;
     }
 
     /// @notice Fallback routes calls to the registered module for the function selector.
@@ -264,9 +294,156 @@ contract TEMPL is TemplBase {
             payload = abi.encode(p.newPostQuorumVotingPeriod);
         } else if (action == Action.SetBurnAddress) {
             payload = abi.encode(p.newBurnAddress);
+        } else if (action == Action.SetYesVoteThreshold) {
+            payload = abi.encode(p.newYesVoteThresholdBps);
+        } else if (action == Action.SetCouncilMode) {
+            payload = abi.encode(p.setCouncilMode);
+        } else if (action == Action.AddCouncilMember || action == Action.RemoveCouncilMember) {
+            payload = abi.encode(p.recipient);
         } else {
             payload = hex"";
         }
+    }
+
+    /// @notice Returns core metadata for a proposal including vote totals and status.
+    function getProposal(
+        uint256 _proposalId
+    )
+        external
+        view
+        returns (
+            address proposer,
+            uint256 yesVotes,
+            uint256 noVotes,
+            uint256 endTime,
+            bool executed,
+            bool passed,
+            string memory title,
+            string memory description
+        )
+    {
+        if (!(_proposalId < proposalCount)) revert TemplErrors.InvalidProposal();
+        Proposal storage proposal = proposals[_proposalId];
+        passed = _proposalPassed(proposal);
+
+        return (
+            proposal.proposer,
+            proposal.yesVotes,
+            proposal.noVotes,
+            proposal.endTime,
+            proposal.executed,
+            passed,
+            proposal.title,
+            proposal.description
+        );
+    }
+
+    /// @notice Returns quorum-related snapshot data for a proposal.
+    function getProposalSnapshots(
+        uint256 _proposalId
+    )
+        external
+        view
+        returns (
+            uint256 eligibleVotersPreQuorum,
+            uint256 eligibleVotersPostQuorum,
+            uint256 preQuorumSnapshotBlock,
+            uint256 quorumSnapshotBlock,
+            uint256 createdAt,
+            uint256 quorumReachedAt
+        )
+    {
+        if (!(_proposalId < proposalCount)) revert TemplErrors.InvalidProposal();
+        Proposal storage proposal = proposals[_proposalId];
+        return (
+            proposal.eligibleVoters,
+            proposal.postQuorumEligibleVoters,
+            proposal.preQuorumSnapshotBlock,
+            proposal.quorumSnapshotBlock,
+            proposal.createdAt,
+            proposal.quorumReachedAt
+        );
+    }
+
+    /// @notice Returns the join sequence snapshots captured for proposal eligibility.
+    function getProposalJoinSequences(
+        uint256 _proposalId
+    ) external view returns (uint256 preQuorumJoinSequence, uint256 quorumJoinSequence) {
+        if (!(_proposalId < proposalCount)) revert TemplErrors.InvalidProposal();
+        Proposal storage proposal = proposals[_proposalId];
+        return (proposal.preQuorumJoinSequence, proposal.quorumJoinSequence);
+    }
+
+    /// @notice Returns whether a voter participated in a proposal and their recorded choice.
+    function hasVoted(uint256 _proposalId, address _voter) external view returns (bool voted, bool support) {
+        if (!(_proposalId < proposalCount)) revert TemplErrors.InvalidProposal();
+        Proposal storage proposal = proposals[_proposalId];
+
+        return (proposal.hasVoted[_voter], proposal.voteChoice[_voter]);
+    }
+
+    /// @notice Lists proposal ids that are still within their active voting/execution window.
+    function getActiveProposals() external view returns (uint256[] memory proposalIds) {
+        uint256 len = activeProposalIds.length;
+        uint256 currentTime = block.timestamp;
+        uint256[] memory temp = new uint256[](len);
+        uint256 count = 0;
+        for (uint256 i = 0; i < len; ++i) {
+            uint256 id = activeProposalIds[i];
+            if (_isActiveProposal(proposals[id], currentTime)) {
+                temp[count] = id;
+                ++count;
+            }
+        }
+        uint256[] memory activeIds = new uint256[](count);
+        for (uint256 i = 0; i < count; ++i) {
+            activeIds[i] = temp[i];
+        }
+        return activeIds;
+    }
+
+    /// @notice Returns active proposal ids using offset + limit pagination.
+    function getActiveProposalsPaginated(
+        uint256 offset,
+        uint256 limit
+    ) external view returns (uint256[] memory proposalIds, bool hasMore) {
+        if (limit == 0 || limit > 100) revert TemplErrors.LimitOutOfRange();
+        uint256 currentTime = block.timestamp;
+        uint256 len = activeProposalIds.length;
+        uint256 totalActive = 0;
+        for (uint256 i = 0; i < len; ++i) {
+            if (_isActiveProposal(proposals[activeProposalIds[i]], currentTime)) {
+                ++totalActive;
+            }
+        }
+        if (!(offset < totalActive)) {
+            return (new uint256[](0), false);
+        }
+
+        uint256[] memory tempIds = new uint256[](limit);
+        uint256 count = 0;
+        uint256 activeSeen = 0;
+        for (uint256 i = 0; i < len && count < limit; ++i) {
+            uint256 id = activeProposalIds[i];
+            if (!_isActiveProposal(proposals[id], currentTime)) {
+                continue;
+            }
+            if (activeSeen < offset) {
+                ++activeSeen;
+                continue;
+            }
+            tempIds[count] = id;
+            ++count;
+        }
+
+        hasMore = (offset + count) < totalActive;
+
+        proposalIds = new uint256[](count);
+        for (uint256 i = 0; i < count; ++i) {
+            proposalIds[i] = tempIds[i];
+        }
+
+        return (proposalIds, hasMore);
     }
 
     /// @notice Delegatecalls the registered `module` forwarding calldata and bubbling return/revert data.
@@ -314,7 +491,7 @@ contract TEMPL is TemplBase {
     /// @notice Registers treasury function selectors to dispatch to `module`.
     /// @param module Module address that implements treasury functions.
     function _registerTreasurySelectors(address module) internal {
-        bytes4[] memory selectors = new bytes4[](17);
+        bytes4[] memory selectors = new bytes4[](22);
         selectors[0] = TemplTreasuryModule.withdrawTreasuryDAO.selector;
         selectors[1] = TemplTreasuryModule.updateConfigDAO.selector;
         selectors[2] = TemplTreasuryModule.setJoinPausedDAO.selector;
@@ -332,13 +509,18 @@ contract TEMPL is TemplBase {
         selectors[14] = TemplTreasuryModule.setBurnAddressDAO.selector;
         selectors[15] = TemplTreasuryModule.batchDAO.selector;
         selectors[16] = TemplTreasuryModule.setPreQuorumVotingPeriodDAO.selector;
+        selectors[17] = TemplTreasuryModule.setYesVoteThresholdBpsDAO.selector;
+        selectors[18] = TemplTreasuryModule.setCouncilModeDAO.selector;
+        selectors[19] = TemplTreasuryModule.addCouncilMemberDAO.selector;
+        selectors[20] = TemplTreasuryModule.removeCouncilMemberDAO.selector;
+        selectors[21] = TemplTreasuryModule.bootstrapCouncilMember.selector;
         _registerModule(module, selectors);
     }
 
     /// @notice Registers governance function selectors to dispatch to `module`.
     /// @param module Module address that implements governance functions.
     function _registerGovernanceSelectors(address module) internal {
-        bytes4[] memory selectors = new bytes4[](25);
+        bytes4[] memory selectors = new bytes4[](19);
         selectors[0] = TemplGovernanceModule.createProposalSetJoinPaused.selector;
         selectors[1] = TemplGovernanceModule.createProposalUpdateConfig.selector;
         selectors[2] = TemplGovernanceModule.createProposalSetMaxMembers.selector;
@@ -353,17 +535,22 @@ contract TEMPL is TemplBase {
         selectors[11] = TemplGovernanceModule.createProposalSetDictatorship.selector;
         selectors[12] = TemplGovernanceModule.vote.selector;
         selectors[13] = TemplGovernanceModule.executeProposal.selector;
-        selectors[14] = TemplGovernanceModule.getProposal.selector;
-        selectors[15] = TemplGovernanceModule.getProposalSnapshots.selector;
-        selectors[16] = TemplGovernanceModule.hasVoted.selector;
-        selectors[17] = TemplGovernanceModule.getActiveProposals.selector;
-        selectors[18] = TemplGovernanceModule.getActiveProposalsPaginated.selector;
-        selectors[19] = TemplGovernanceModule.pruneInactiveProposals.selector;
-        selectors[20] = TemplGovernanceModule.getProposalJoinSequences.selector;
-        selectors[21] = TemplGovernanceModule.createProposalCleanupExternalRewardToken.selector;
-        selectors[22] = TemplGovernanceModule.createProposalSetQuorumBps.selector;
-        selectors[23] = TemplGovernanceModule.createProposalSetPostQuorumVotingPeriod.selector;
-        selectors[24] = TemplGovernanceModule.createProposalSetBurnAddress.selector;
+        selectors[14] = TemplGovernanceModule.pruneInactiveProposals.selector;
+        selectors[15] = TemplGovernanceModule.createProposalCleanupExternalRewardToken.selector;
+        selectors[16] = TemplGovernanceModule.createProposalSetQuorumBps.selector;
+        selectors[17] = TemplGovernanceModule.createProposalSetPostQuorumVotingPeriod.selector;
+        selectors[18] = TemplGovernanceModule.createProposalSetBurnAddress.selector;
+        _registerModule(module, selectors);
+    }
+
+    /// @notice Registers council governance selectors to dispatch to `module`.
+    /// @param module Module address that implements council governance functions.
+    function _registerCouncilSelectors(address module) internal {
+        bytes4[] memory selectors = new bytes4[](4);
+        selectors[0] = TemplCouncilModule.createProposalSetYesVoteThreshold.selector;
+        selectors[1] = TemplCouncilModule.createProposalSetCouncilMode.selector;
+        selectors[2] = TemplCouncilModule.createProposalAddCouncilMember.selector;
+        selectors[3] = TemplCouncilModule.createProposalRemoveCouncilMember.selector;
         _registerModule(module, selectors);
     }
 

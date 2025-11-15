@@ -15,7 +15,8 @@ describe("TemplFactory.safeDeployFor", function () {
       protocolBps,
       modules.membershipModule,
       modules.treasuryModule,
-      modules.governanceModule
+      modules.governanceModule,
+      modules.councilModule
     );
     await factory.waitForDeployment();
     return factory;

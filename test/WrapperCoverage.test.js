@@ -22,7 +22,8 @@ async function deployHarness(entryFee = ENTRY_FEE) {
     entryFee,
     modules.membershipModule,
     modules.treasuryModule,
-    modules.governanceModule
+    modules.governanceModule,
+    modules.councilModule
   );
   await templ.waitForDeployment();
   templ = await attachTemplInterface(templ);

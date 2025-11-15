@@ -69,6 +69,10 @@ contract TemplFactory {
         uint256 proposalFeeBps;
         /// @notice Referral share (bps of the member pool allocation).
         uint256 referralShareBps;
+        /// @notice YES vote threshold (bps of votes cast). 0 applies factory default.
+        uint256 yesVoteThresholdBps;
+        /// @notice Whether the templ should start in council governance mode.
+        bool councilMode;
     }
 
     /// @notice Address that receives the protocol share in newly created templs.
@@ -81,6 +85,8 @@ contract TemplFactory {
     address public immutable TREASURY_MODULE;
     /// @notice Governance module implementation used by templs deployed via this factory.
     address public immutable GOVERNANCE_MODULE;
+    /// @notice Council governance module implementation used by templs deployed via this factory.
+    address public immutable COUNCIL_MODULE;
     /// @notice Account allowed to create templs while permissionless mode is disabled.
     /// @dev Can be transferred by the current deployer via `transferDeployer`.
     address public factoryDeployer;
@@ -130,7 +136,9 @@ contract TemplFactory {
         string description,
         string logoLink,
         uint256 proposalFeeBps,
-        uint256 referralShareBps
+        uint256 referralShareBps,
+        uint256 yesVoteThresholdBps,
+        bool councilMode
     );
 
     /// @notice Emitted when factory permissionless mode is toggled.
@@ -167,12 +175,18 @@ contract TemplFactory {
         uint256 _protocolBps,
         address _membershipModule,
         address _treasuryModule,
-        address _governanceModule
+        address _governanceModule,
+        address _councilModule
     ) {
         if (_factoryDeployer == address(0)) revert TemplErrors.InvalidRecipient();
         if (_protocolFeeRecipient == address(0)) revert TemplErrors.InvalidRecipient();
         if (_protocolBps > BPS_DENOMINATOR) revert TemplErrors.InvalidPercentageSplit();
-        if (_membershipModule == address(0) || _treasuryModule == address(0) || _governanceModule == address(0)) {
+        if (
+            _membershipModule == address(0) ||
+            _treasuryModule == address(0) ||
+            _governanceModule == address(0) ||
+            _councilModule == address(0)
+        ) {
             revert TemplErrors.InvalidCallData();
         }
         PROTOCOL_FEE_RECIPIENT = _protocolFeeRecipient;
@@ -180,6 +194,7 @@ contract TemplFactory {
         MEMBERSHIP_MODULE = _membershipModule;
         TREASURY_MODULE = _treasuryModule;
         GOVERNANCE_MODULE = _governanceModule;
+        COUNCIL_MODULE = _councilModule;
         factoryDeployer = _factoryDeployer;
         permissionless = false;
     }
@@ -271,7 +286,9 @@ contract TemplFactory {
             description: _description,
             logoLink: _logoLink,
             proposalFeeBps: _proposalFeeBps,
-            referralShareBps: _referralShareBps
+            referralShareBps: _referralShareBps,
+            yesVoteThresholdBps: TemplDefaults.DEFAULT_YES_VOTE_THRESHOLD_BPS,
+            councilMode: false
         });
         return _deploy(cfg);
     }
@@ -337,6 +354,9 @@ contract TemplFactory {
         if (!cfg.curveProvided) {
             cfg.curve = _defaultCurveConfig();
         }
+        if (cfg.yesVoteThresholdBps == 0) {
+            cfg.yesVoteThresholdBps = TemplDefaults.DEFAULT_YES_VOTE_THRESHOLD_BPS;
+        }
         return _deploy(cfg);
     }
 
@@ -354,6 +374,10 @@ contract TemplFactory {
         _validatePercentSplit(burnBps, treasuryBps, memberPoolBps);
         if (cfg.proposalFeeBps > BPS_DENOMINATOR) revert TemplErrors.InvalidPercentage();
         if (cfg.referralShareBps > BPS_DENOMINATOR) revert TemplErrors.InvalidPercentage();
+        if (cfg.yesVoteThresholdBps < 100 || cfg.yesVoteThresholdBps > BPS_DENOMINATOR) {
+            revert TemplErrors.InvalidPercentage();
+        }
+        if (cfg.councilMode && cfg.priestIsDictator) revert TemplErrors.CouncilModeActive();
 
         TEMPL deployed = new TEMPL(
             cfg.priest,
@@ -374,9 +398,12 @@ contract TemplFactory {
             cfg.logoLink,
             cfg.proposalFeeBps,
             cfg.referralShareBps,
+            cfg.yesVoteThresholdBps,
+            cfg.councilMode,
             MEMBERSHIP_MODULE,
             TREASURY_MODULE,
             GOVERNANCE_MODULE,
+            COUNCIL_MODULE,
             cfg.curve
         );
         templAddress = address(deployed);
@@ -414,7 +441,9 @@ contract TemplFactory {
             cfg.description,
             cfg.logoLink,
             cfg.proposalFeeBps,
-            cfg.referralShareBps
+            cfg.referralShareBps,
+            cfg.yesVoteThresholdBps,
+            cfg.councilMode
         );
     }
 

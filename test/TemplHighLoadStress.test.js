@@ -105,9 +105,12 @@ async function setupHighLoadTempl() {
     METADATA.logo,
     0,
     0,
+    5_000,
+    false,
     modules.membershipModule,
     modules.treasuryModule,
     modules.governanceModule,
+    modules.councilModule,
     { primary: { style: CurveStyle.Exponential, rateBps: 11_000, length: 0 }, additionalSegments: [] }
   );
   await templ.waitForDeployment();

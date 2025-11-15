@@ -11,6 +11,8 @@ Quick links: [At a Glance](#protocol-at-a-glance) · [Architecture](#architectur
 - Existing members accrue pro‑rata rewards from the member‑pool slice and can claim at any time. Templs can also hold ETH or ERC‑20s as external rewards.
 - Donations (ETH or ERC‑20) sent directly to the templ address are held by the templ and governed: governance can withdraw these funds to recipients, or disband them into claimable external rewards for members. ERC‑721 NFTs can also be custodied by a templ and later moved via governance (see NFT notes below).
 - Governance is member‑only: propose, vote, and execute actions to change parameters, move treasury, update curves/metadata, or call arbitrary external contracts.
+- Optional council mode narrows voting power to a curated council while still letting any member open proposals. The priest gets a single bootstrap seat to add the first councillor, and thereafter council composition changes only via governance.
+- The YES vote threshold (bps of votes cast) is configurable per templ (default 5,000 bps for a simple majority) and can be changed via governance alongside quorum/post‑quorum windows.
 - Optional dictatorship lets a designated “priest” directly execute DAO‑only actions when enabled; otherwise all such actions flow through governance.
 - Pricing curves define how the entry fee evolves with membership growth (static, linear, exponential segments; see `CurveConfig` in `TemplCurve`).
 - Everything is modular: `TEMPL` is a router that delegatecalls membership, treasury, and governance modules over a shared storage layout, keeping concerns clean.
@@ -30,6 +32,7 @@ At runtime a templ behaves like one contract with clean separation of concerns v
 - Membership: [`TemplMembershipModule`](contracts/TemplMembership.sol)
 - Treasury: [`TemplTreasuryModule`](contracts/TemplTreasury.sol)
 - Governance: [`TemplGovernanceModule`](contracts/TemplGovernance.sol)
+- Council governance: [`TemplCouncilModule`](contracts/TemplCouncil.sol)
 - Shared storage: [`TemplBase`](contracts/TemplBase.sol)
 
 Deployers configure pricing curves, fee splits, referral rewards, proposal fees, quorum/delay, membership caps, and an optional dictatorship (priest) override. The access token is any vanilla ERC‑20 you choose.
@@ -40,7 +43,7 @@ Templ supports governance‑controlled routing updates. There is no protocol adm
 
 What is fixed vs dynamic
 - Dynamic routing table: The authoritative mapping is internal (`_moduleForSelector[bytes4] → address`) and can be changed at runtime.
-- Static helper: `getRegisteredSelectors()` returns static, canonical selector sets for the three shipped modules for tooling and quick introspection. It does not change when you update routing. To inspect the live mapping for any selector, call `getModuleForSelector(bytes4)`.
+- Static helper: `getRegisteredSelectors()` returns static, canonical selector sets for the shipped modules (membership/treasury/governance/council) for tooling and quick introspection. It does not change when you update routing. To inspect the live mapping for any selector, call `getModuleForSelector(bytes4)`.
 
 Permissions and safety
 - Only by governance (no protocol admin): `setRoutingModuleDAO(address,bytes4[])` is `onlyDAO`. With dictatorship disabled, direct calls from EOAs (including protocol devs) revert; it is only reachable during execution of a passed governance proposal targeting the router. With dictatorship enabled, the priest may call it directly.
@@ -520,7 +523,7 @@ Curves (see [`TemplCurve`](contracts/TemplCurve.sol)) support static, linear, an
   - Required: `PROTOCOL_FEE_RECIPIENT`
   - Optional: `PROTOCOL_BPS`, `FACTORY_ADDRESS` (reuse), `FACTORY_DEPLOYER` (defaults to signer address)
   - Deploys modules if not provided via env and wires them into the factory constructor.
-- [scripts/deploy-templ.cjs](scripts/deploy-templ.cjs): key envs are `FACTORY_ADDRESS` (or omit to auto‑deploy modules + factory locally), `TOKEN_ADDRESS`, `ENTRY_FEE`, plus optional metadata (`TEMPL_NAME`, `TEMPL_DESCRIPTION`, `TEMPL_LOGO_LINK`). Many toggles are supported (priest, quorum/post‑quorum voting periods, caps, fee splits, referral share, curve). Optional: `POST_QUORUM_VOTING_PERIOD_SECONDS`.
+- [scripts/deploy-templ.cjs](scripts/deploy-templ.cjs): key envs are `FACTORY_ADDRESS` (or omit to auto‑deploy modules + factory locally), `TOKEN_ADDRESS`, `ENTRY_FEE`, plus optional metadata (`TEMPL_NAME`, `TEMPL_DESCRIPTION`, `TEMPL_LOGO_LINK`). Many toggles are supported (priest, quorum/post‑quorum voting periods, caps, fee splits, referral share, curve). Optional: `POST_QUORUM_VOTING_PERIOD_SECONDS`, `YES_VOTE_THRESHOLD_BPS` (1‑10,000 bps; defaults to 5,000), and `COUNCIL_MODE`/`START_COUNCIL_MODE` to launch directly in council governance.
 - Verify helpers (see [scripts/verify-templ.cjs](scripts/verify-templ.cjs), [scripts/verify-factory.cjs](scripts/verify-factory.cjs)):
   - `verify:templ` verifies a TEMPL instance, reconstructing constructor args from chain data. Provide `TEMPL_ADDRESS` or `--templ 0x...` and run with a configured Hardhat network.
   - `verify:factory` verifies a TemplFactory deployment using on‑chain getters. Provide `FACTORY_ADDRESS` or `--factory 0x...`.
@@ -548,6 +551,7 @@ Curves (see [`TemplCurve`](contracts/TemplCurve.sol)) support static, linear, an
   - Membership cap: 249.
   - Curve: exponential primary segment at 10_094 bps for 248 paid joins, then static tail (price holds if cap expands).
   - Proposal fee: 2_500 bps (25% of current entry fee); Referral share: 2_500 bps (25% of member‑pool slice).
+  - YES vote threshold: 5_000 bps (simple majority); valid range [100, 10_000] bps via governance or deploy config.
 
 ## Indexing Notes
 - Track `ProposalCreated` then hydrate with `getProposal` + `getProposalSnapshots`.
@@ -573,6 +577,9 @@ Curves (see [`TemplCurve`](contracts/TemplCurve.sol)) support static, linear, an
 - SetQuorumBps → `abi.encode(uint256 newQuorumBps)`
 - SetPostQuorumVotingPeriod → `abi.encode(uint256 newPostQuorumVotingPeriod)`
 - SetBurnAddress → `abi.encode(address newBurnAddress)`
+- SetYesVoteThreshold → `abi.encode(uint256 newThresholdBps)`
+- SetCouncilMode → `abi.encode(bool enabled)`
+- AddCouncilMember / RemoveCouncilMember → `abi.encode(address member)`
 
 ## Safety Model
 - Vanilla ERC‑20 only: the access token must not tax, rebase, or hook transfers; accounting assumes exact in/out.

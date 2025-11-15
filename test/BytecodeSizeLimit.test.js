@@ -31,7 +31,8 @@ maybeDescribe("Bytecode size limits", function () {
       1_000,
       modules.membershipModule,
       modules.treasuryModule,
-      modules.governanceModule
+      modules.governanceModule,
+      modules.councilModule
     );
     await factory.waitForDeployment();
 
@@ -70,7 +71,8 @@ maybeDescribe("Bytecode size limits", function () {
       ["TEMPL.sol", "TEMPL", "templ router"],
       ["TemplMembership.sol", "TemplMembershipModule", "membership module"],
       ["TemplTreasury.sol", "TemplTreasuryModule", "treasury module"],
-      ["TemplGovernance.sol", "TemplGovernanceModule", "governance module"]
+      ["TemplGovernance.sol", "TemplGovernanceModule", "governance module"],
+      ["TemplCouncil.sol", "TemplCouncilModule", "council module"]
     ];
     const limit = 24_576; // EIP-170 deployed bytecode size limit
     const inflatedLimit = 60_000; // coverage instrumentation inflates sizes; allow slack under tooling

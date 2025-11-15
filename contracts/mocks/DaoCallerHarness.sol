@@ -15,7 +15,8 @@ contract DaoCallerHarness is TEMPL {
         uint256 entryFee,
         address membershipModule,
         address treasuryModule,
-        address governanceModule
+        address governanceModule,
+        address councilModule
     )
         TEMPL(
             priest,
@@ -36,9 +37,12 @@ contract DaoCallerHarness is TEMPL {
             "https://templ.fun/logo.png",
             500,
             0,
+            5_000,
+            false,
             membershipModule,
             treasuryModule,
             governanceModule,
+            councilModule,
             CurveConfig({
                 primary: CurveSegment({style: CurveStyle.Static, rateBps: 0, length: 0}),
                 additionalSegments: new CurveSegment[](0)

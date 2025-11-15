@@ -119,6 +119,36 @@ contract TemplTreasuryModule is TemplBase {
         _cleanupExternalRewardToken(token);
     }
 
+    /// @notice Governance action that updates the YES vote threshold.
+    /// @param newThresholdBps New YES threshold (bps of total votes cast).
+    function setYesVoteThresholdBpsDAO(uint256 newThresholdBps) external onlyDAO onlyDelegatecall {
+        _setYesVoteThreshold(newThresholdBps);
+    }
+
+    /// @notice Governance action that toggles council governance mode.
+    /// @param enabled Desired council mode state.
+    function setCouncilModeDAO(bool enabled) external onlyDAO onlyDelegatecall {
+        _setCouncilMode(enabled);
+    }
+
+    /// @notice Governance action that adds a council member.
+    /// @param member Wallet to add.
+    function addCouncilMemberDAO(address member) external onlyDAO onlyDelegatecall {
+        _addCouncilMember(member, msg.sender);
+    }
+
+    /// @notice Governance action that removes a council member.
+    /// @param member Wallet to remove.
+    function removeCouncilMemberDAO(address member) external onlyDAO onlyDelegatecall {
+        _removeCouncilMember(member, msg.sender);
+    }
+
+    /// @notice Priest-only helper that consumes the single bootstrap council seat.
+    /// @param member Wallet to grant the bootstrap council seat to.
+    function bootstrapCouncilMember(address member) external onlyDelegatecall {
+        _bootstrapCouncilMember(member, msg.sender);
+    }
+
     /// @notice Governance action that updates the quorum threshold in basis points.
     /// @param newQuorumBps New quorum threshold (0-10_000 bps).
     function setQuorumBpsDAO(uint256 newQuorumBps) external onlyDAO onlyDelegatecall {

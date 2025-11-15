@@ -34,7 +34,8 @@ describe("External reward remainders", function () {
       entryFee,
       modules.membershipModule,
       modules.treasuryModule,
-      modules.governanceModule
+      modules.governanceModule,
+      modules.councilModule
     );
     await templ.waitForDeployment();
     templ = await attachTemplInterface(templ);

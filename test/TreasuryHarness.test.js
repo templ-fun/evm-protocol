@@ -24,7 +24,8 @@ describe("Treasury harness withdrawals", function () {
       1_000_000n,
       modules.membershipModule,
       modules.treasuryModule,
-      modules.governanceModule
+      modules.governanceModule,
+      modules.councilModule
     );
     await harness.waitForDeployment();
     harness = await attachTemplInterface(harness);

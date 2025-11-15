@@ -33,7 +33,8 @@ describe("External reward enumeration limits + cleanup edge cases", function () 
       0,
       modules.membershipModule,
       modules.treasuryModule,
-      modules.governanceModule
+      modules.governanceModule,
+      modules.councilModule
     );
     await templ.waitForDeployment();
     templ = await attachTemplInterface(templ);
@@ -88,7 +89,8 @@ describe("External reward enumeration limits + cleanup edge cases", function () 
       0,
       modules.membershipModule,
       modules.treasuryModule,
-      modules.governanceModule
+      modules.governanceModule,
+      modules.councilModule
     );
     await templ.waitForDeployment();
     templ = await attachTemplInterface(templ);
@@ -137,7 +139,8 @@ describe("External reward enumeration limits + cleanup edge cases", function () 
       0,
       modules.membershipModule,
       modules.treasuryModule,
-      modules.governanceModule
+      modules.governanceModule,
+      modules.councilModule
     );
     await templ.waitForDeployment();
 

@@ -26,6 +26,12 @@ describe("TemplFactory", function () {
         logoLink: "https://templ.fun/alt.png"
     };
 
+    const withCouncilDefaults = (config) => ({
+        yesVoteThresholdBps: 5_000,
+        councilMode: false,
+        ...config,
+    });
+
     const defaultCurve = () => ({
         primary: { style: CURVE_STYLE.Exponential, rateBps: 11_000, length: 0 },
         additionalSegments: []
@@ -58,7 +64,8 @@ describe("TemplFactory", function () {
         1_000,
         modules.membershipModule,
         modules.treasuryModule,
-        modules.governanceModule
+        modules.governanceModule,
+        modules.councilModule
       )
     ).to.be.revertedWithCustomError(
       Factory,
@@ -66,7 +73,7 @@ describe("TemplFactory", function () {
     );
   });
 
-  it("deploys templ contracts with fixed protocol config", async function () {
+    it("deploys templ contracts with fixed protocol config", async function () {
     const [, priest, protocolRecipient, member] = await ethers.getSigners();
     const token = await deployToken();
 
@@ -78,7 +85,8 @@ describe("TemplFactory", function () {
             protocolBps,
             modules.membershipModule,
             modules.treasuryModule,
-            modules.governanceModule
+            modules.governanceModule,
+            modules.councilModule
         );
         await factory.waitForDeployment();
 
@@ -89,7 +97,7 @@ describe("TemplFactory", function () {
         const executionDelaySeconds = 5 * 24 * 60 * 60;
         const customBurnAddress = "0x00000000000000000000000000000000000000AA";
 
-        const config = {
+        const config = withCouncilDefaults({
             priest: priest.address,
             token: await token.getAddress(),
             entryFee: ENTRY_FEE,
@@ -108,7 +116,7 @@ describe("TemplFactory", function () {
             logoLink: DEFAULT_METADATA.logoLink,
             proposalFeeBps: 250,
             referralShareBps: 1_000
-        };
+        });
 
         const templAddress = await factory.createTemplWithConfig.staticCall(config);
         const tx = await factory.createTemplWithConfig(config);
@@ -131,6 +139,7 @@ describe("TemplFactory", function () {
         expect(await templ.templLogoLink()).to.equal(DEFAULT_METADATA.logoLink);
         expect(await templ.proposalCreationFeeBps()).to.equal(250n);
         expect(await templ.referralShareBps()).to.equal(1_000n);
+        expect(await templ.yesVoteThresholdBps()).to.equal(5_000n);
 
         const templCreated = receipt.logs
             .map((log) => {
@@ -148,6 +157,8 @@ describe("TemplFactory", function () {
         expect(templCreated.args.logoLink).to.equal(DEFAULT_METADATA.logoLink);
         expect(templCreated.args.proposalFeeBps).to.equal(250n);
         expect(templCreated.args.referralShareBps).to.equal(1_000n);
+        expect(templCreated.args.yesVoteThresholdBps).to.equal(5_000n);
+        expect(templCreated.args.councilMode).to.equal(false);
 
         await mintToUsers(token, [member], ENTRY_FEE * 10n);
 
@@ -191,6 +202,67 @@ describe("TemplFactory", function () {
         expect(await token.balanceOf(protocolRecipientAddress)).to.equal(protocolBalanceBefore + protocolAmount);
     });
 
+    it("configures council mode and YES threshold via factory config", async function () {
+        const [, priest, protocolRecipient] = await ethers.getSigners();
+        const token = await deployToken("Council", "CNCL");
+
+        const Factory = await ethers.getContractFactory("TemplFactory");
+        const factory = await Factory.deploy(
+            (await ethers.getSigners())[0].address,
+            protocolRecipient.address,
+            pct(10),
+            modules.membershipModule,
+            modules.treasuryModule,
+            modules.governanceModule,
+            modules.councilModule
+        );
+        await factory.waitForDeployment();
+
+        const config = withCouncilDefaults({
+            priest: priest.address,
+            token: await token.getAddress(),
+            entryFee: ENTRY_FEE,
+            burnBps: pct(30),
+            treasuryBps: pct(30),
+            memberPoolBps: pct(30),
+            quorumBps: pct(35),
+            executionDelaySeconds: 2 * 24 * 60 * 60,
+            burnAddress: "0x00000000000000000000000000000000000000BB",
+            priestIsDictator: false,
+            maxMembers: 0,
+            curveProvided: true,
+            curve: zeroCurve(),
+            name: ALT_METADATA.name,
+            description: ALT_METADATA.description,
+            logoLink: ALT_METADATA.logoLink,
+            proposalFeeBps: 0,
+            referralShareBps: 500,
+            yesVoteThresholdBps: 6_000,
+            councilMode: true
+        });
+
+        const templAddress = await factory.createTemplWithConfig.staticCall(config);
+        const receipt = await (await factory.createTemplWithConfig(config)).wait();
+
+        const templ = await getTemplAt(templAddress, ethers.provider);
+        expect(await templ.yesVoteThresholdBps()).to.equal(6_000n);
+        expect(await templ.councilModeEnabled()).to.equal(true);
+        expect(await templ.councilMemberCount()).to.equal(1n);
+
+        const templCreated = receipt.logs
+            .map((log) => {
+                try {
+                    return factory.interface.parseLog(log);
+                } catch (_) {
+                    return null;
+                }
+            })
+            .find((log) => log && log.name === "TemplCreated");
+
+        expect(templCreated.args.yesVoteThresholdBps).to.equal(6_000n);
+        expect(templCreated.args.councilMode).to.equal(true);
+    });
+
     it("enables priest dictatorship when requested in config", async function () {
         const [, priest, protocolRecipient] = await ethers.getSigners();
         const token = await deployToken("Dict", "DICT");
@@ -203,11 +275,12 @@ describe("TemplFactory", function () {
             protocolBps,
             modules.membershipModule,
             modules.treasuryModule,
-            modules.governanceModule
+            modules.governanceModule,
+            modules.councilModule
         );
         await factory.waitForDeployment();
 
-        const config = {
+        const config = withCouncilDefaults({
             priest: priest.address,
             token: await token.getAddress(),
             entryFee: ENTRY_FEE,
@@ -226,7 +299,7 @@ describe("TemplFactory", function () {
             logoLink: DEFAULT_METADATA.logoLink,
             proposalFeeBps: 0,
             referralShareBps: 0,
-        };
+        });
 
         const templAddress = await factory.createTemplWithConfig.staticCall(config);
         const tx = await factory.createTemplWithConfig(config);
@@ -266,10 +339,10 @@ describe("TemplFactory", function () {
     const token = await deployToken("Limit", "LIM");
 
         const Factory = await ethers.getContractFactory("TemplFactory");
-        const factory = await Factory.deploy((await ethers.getSigners())[0].address, protocolRecipient.address, pct(12), modules.membershipModule, modules.treasuryModule, modules.governanceModule);
+        const factory = await Factory.deploy((await ethers.getSigners())[0].address, protocolRecipient.address, pct(12), modules.membershipModule, modules.treasuryModule, modules.governanceModule, modules.councilModule);
         await factory.waitForDeployment();
 
-        const config = {
+        const config = withCouncilDefaults({
             priest: priest.address,
             token: await token.getAddress(),
             entryFee: ENTRY_FEE,
@@ -288,7 +361,7 @@ describe("TemplFactory", function () {
             logoLink: DEFAULT_METADATA.logoLink,
             proposalFeeBps: 0,
             referralShareBps: 0,
-        };
+        });
 
         const templAddress = await factory.createTemplWithConfig.staticCall(config);
         const receipt = await (await factory.createTemplWithConfig(config)).wait();
@@ -323,10 +396,10 @@ describe("TemplFactory", function () {
 
     const Factory = await ethers.getContractFactory("TemplFactory");
     const protocolBps = pct(15);
-    const factory = await Factory.deploy((await ethers.getSigners())[0].address, protocolRecipient.address, protocolBps, modules.membershipModule, modules.treasuryModule, modules.governanceModule);
+    const factory = await Factory.deploy((await ethers.getSigners())[0].address, protocolRecipient.address, protocolBps, modules.membershipModule, modules.treasuryModule, modules.governanceModule, modules.councilModule);
     await factory.waitForDeployment();
 
-    const config = {
+    const config = withCouncilDefaults({
       priest: ethers.ZeroAddress,
       token: await token.getAddress(),
       entryFee: ENTRY_FEE,
@@ -345,7 +418,7 @@ describe("TemplFactory", function () {
       logoLink: "",
       proposalFeeBps: 0,
       referralShareBps: 0
-    };
+    });
 
     const templAddress = await factory.createTemplWithConfig.staticCall(config);
     await (await factory.createTemplWithConfig(config)).wait();
@@ -366,30 +439,32 @@ describe("TemplFactory", function () {
         const [deployer, , protocolRecipient] = await ethers.getSigners();
         const token = await deployToken("Bad", "BAD");
         const Factory = await ethers.getContractFactory("TemplFactory");
-        const factory = await Factory.deploy((await ethers.getSigners())[0].address, protocolRecipient.address, pct(15), modules.membershipModule, modules.treasuryModule, modules.governanceModule);
+        const factory = await Factory.deploy((await ethers.getSigners())[0].address, protocolRecipient.address, pct(15), modules.membershipModule, modules.treasuryModule, modules.governanceModule, modules.councilModule);
         await factory.waitForDeployment();
 
         await expect(
-            factory.createTemplWithConfig({
-                priest: protocolRecipient.address,
-                token: await token.getAddress(),
-                entryFee: ENTRY_FEE,
-                burnBps: pct(40),
-                treasuryBps: pct(40),
-                memberPoolBps: pct(10),
-                quorumBps: pct(33),
-                executionDelaySeconds: 7 * 24 * 60 * 60,
-                burnAddress: ethers.ZeroAddress,
-                priestIsDictator: false,
-                maxMembers: 0,
-                curveProvided: true,
-                curve: defaultCurve(),
-                name: DEFAULT_METADATA.name,
-                description: DEFAULT_METADATA.description,
-                logoLink: DEFAULT_METADATA.logoLink,
-                proposalFeeBps: 0,
-                referralShareBps: 0
-        })
+            factory.createTemplWithConfig(
+                withCouncilDefaults({
+                    priest: protocolRecipient.address,
+                    token: await token.getAddress(),
+                    entryFee: ENTRY_FEE,
+                    burnBps: pct(40),
+                    treasuryBps: pct(40),
+                    memberPoolBps: pct(10),
+                    quorumBps: pct(33),
+                    executionDelaySeconds: 7 * 24 * 60 * 60,
+                    burnAddress: ethers.ZeroAddress,
+                    priestIsDictator: false,
+                    maxMembers: 0,
+                    curveProvided: true,
+                    curve: defaultCurve(),
+                    name: DEFAULT_METADATA.name,
+                    description: DEFAULT_METADATA.description,
+                    logoLink: DEFAULT_METADATA.logoLink,
+                    proposalFeeBps: 0,
+                    referralShareBps: 0
+                })
+            )
         ).to.be.revertedWithCustomError(factory, "InvalidPercentageSplit");
     });
 
@@ -398,10 +473,10 @@ describe("TemplFactory", function () {
         const token = await deployToken("Zero", "ZERO");
         const Factory = await ethers.getContractFactory("TemplFactory");
         const protocolBps = pct(10);
-        const factory = await Factory.deploy((await ethers.getSigners())[0].address, protocolRecipient.address, protocolBps, modules.membershipModule, modules.treasuryModule, modules.governanceModule);
+        const factory = await Factory.deploy((await ethers.getSigners())[0].address, protocolRecipient.address, protocolBps, modules.membershipModule, modules.treasuryModule, modules.governanceModule, modules.councilModule);
         await factory.waitForDeployment();
 
-        const config = {
+        const config = withCouncilDefaults({
             priest: priest.address,
             token: await token.getAddress(),
             entryFee: ENTRY_FEE,
@@ -420,7 +495,7 @@ describe("TemplFactory", function () {
             logoLink: DEFAULT_METADATA.logoLink,
             proposalFeeBps: 0,
             referralShareBps: 0,
-        };
+        });
 
         const templAddress = await factory.createTemplWithConfig.staticCall(config);
         await (await factory.createTemplWithConfig(config)).wait();
@@ -437,11 +512,11 @@ describe("TemplFactory", function () {
         const [, priest, protocolRecipient] = await ethers.getSigners();
         const token = await deployToken("Neg", "NEG");
     const Factory = await ethers.getContractFactory("TemplFactory");
-    const factory = await Factory.deploy((await ethers.getSigners())[0].address, protocolRecipient.address, pct(10), modules.membershipModule, modules.treasuryModule, modules.governanceModule);
+    const factory = await Factory.deploy((await ethers.getSigners())[0].address, protocolRecipient.address, pct(10), modules.membershipModule, modules.treasuryModule, modules.governanceModule, modules.councilModule);
         await factory.waitForDeployment();
 
         await expect(
-            factory.createTemplWithConfig({
+            factory.createTemplWithConfig(withCouncilDefaults({
                 priest: priest.address,
                 token: await token.getAddress(),
                 entryFee: ENTRY_FEE,
@@ -460,7 +535,7 @@ describe("TemplFactory", function () {
                 logoLink: DEFAULT_METADATA.logoLink,
                 proposalFeeBps: 0,
                 referralShareBps: 0,
-            })
+            }))
         ).to.be.revertedWithCustomError(factory, "InvalidPercentage");
     });
 
@@ -468,7 +543,7 @@ describe("TemplFactory", function () {
         const [deployer, joiner, protocolRecipient] = await ethers.getSigners();
         const token = await deployToken("Defaults", "DEF");
         const Factory = await ethers.getContractFactory("TemplFactory");
-        const factory = await Factory.deploy((await ethers.getSigners())[0].address, protocolRecipient.address, pct(10), modules.membershipModule, modules.treasuryModule, modules.governanceModule);
+        const factory = await Factory.deploy((await ethers.getSigners())[0].address, protocolRecipient.address, pct(10), modules.membershipModule, modules.treasuryModule, modules.governanceModule, modules.councilModule);
         await factory.waitForDeployment();
 
         const templAddress = await factory.createTempl.staticCall(
@@ -530,7 +605,7 @@ describe("TemplFactory", function () {
         const token = await deployToken("Delegated", "DLG");
 
         const Factory = await ethers.getContractFactory("TemplFactory");
-        const factory = await Factory.deploy((await ethers.getSigners())[0].address, protocolRecipient.address, pct(10), modules.membershipModule, modules.treasuryModule, modules.governanceModule);
+        const factory = await Factory.deploy((await ethers.getSigners())[0].address, protocolRecipient.address, pct(10), modules.membershipModule, modules.treasuryModule, modules.governanceModule, modules.councilModule);
         await factory.waitForDeployment();
 
         const templAddress = await factory.createTemplFor.staticCall(
@@ -585,10 +660,10 @@ describe("TemplFactory", function () {
 
     const Factory = await ethers.getContractFactory("TemplFactory");
     const protocolBps = pct(12);
-    const factory = await Factory.deploy((await ethers.getSigners())[0].address, protocolRecipient.address, protocolBps, modules.membershipModule, modules.treasuryModule, modules.governanceModule);
+    const factory = await Factory.deploy((await ethers.getSigners())[0].address, protocolRecipient.address, protocolBps, modules.membershipModule, modules.treasuryModule, modules.governanceModule, modules.councilModule);
     await factory.waitForDeployment();
 
-    const firstConfig = {
+    const firstConfig = withCouncilDefaults({
       priest: priest.address,
       token: await tokenA.getAddress(),
       entryFee: ENTRY_FEE,
@@ -607,9 +682,9 @@ describe("TemplFactory", function () {
       logoLink: DEFAULT_METADATA.logoLink,
       proposalFeeBps: 0,
       referralShareBps: 0,
-    };
+    });
 
-    const secondConfig = {
+    const secondConfig = withCouncilDefaults({
       priest: priest.address,
       token: await tokenB.getAddress(),
       entryFee: ENTRY_FEE * 2n,
@@ -628,7 +703,7 @@ describe("TemplFactory", function () {
       logoLink: "https://templ.fun/immutability",
       proposalFeeBps: 0,
       referralShareBps: 0,
-    };
+    });
 
     const firstTemplAddress = await factory.createTemplWithConfig.staticCall(firstConfig);
     await (await factory.createTemplWithConfig(firstConfig)).wait();
@@ -652,7 +727,7 @@ describe("TemplFactory", function () {
 
     const Factory = await ethers.getContractFactory("TemplFactory");
     const protocolBps = pct(10);
-    const factory = await Factory.deploy((await ethers.getSigners())[0].address, protocolRecipient.address, protocolBps, modules.membershipModule, modules.treasuryModule, modules.governanceModule);
+    const factory = await Factory.deploy((await ethers.getSigners())[0].address, protocolRecipient.address, protocolBps, modules.membershipModule, modules.treasuryModule, modules.governanceModule, modules.councilModule);
     await factory.waitForDeployment();
 
     const templAddress = await factory.createTemplFor.staticCall(
@@ -708,7 +783,7 @@ describe("TemplFactory", function () {
 
     it("reverts when deployed with zero protocol recipient", async function () {
         const Factory = await ethers.getContractFactory("TemplFactory");
-        await expect(Factory.deploy((await ethers.getSigners())[0].address, ethers.ZeroAddress, pct(10), modules.membershipModule, modules.treasuryModule, modules.governanceModule)).to.be.revertedWithCustomError(
+        await expect(Factory.deploy((await ethers.getSigners())[0].address, ethers.ZeroAddress, pct(10), modules.membershipModule, modules.treasuryModule, modules.governanceModule, modules.councilModule)).to.be.revertedWithCustomError(
             Factory,
             "InvalidRecipient"
         );
@@ -717,7 +792,7 @@ describe("TemplFactory", function () {
     it("reverts when protocol percent exceeds total", async function () {
         const [, , protocolRecipient] = await ethers.getSigners();
         const Factory = await ethers.getContractFactory("TemplFactory");
-        await expect(Factory.deploy((await ethers.getSigners())[0].address, protocolRecipient.address, 10_001, modules.membershipModule, modules.treasuryModule, modules.governanceModule)).to.be.revertedWithCustomError(
+        await expect(Factory.deploy((await ethers.getSigners())[0].address, protocolRecipient.address, 10_001, modules.membershipModule, modules.treasuryModule, modules.governanceModule, modules.councilModule)).to.be.revertedWithCustomError(
             Factory,
             "InvalidPercentageSplit"
         );
@@ -726,7 +801,7 @@ describe("TemplFactory", function () {
     it("reverts when creating templ with missing token", async function () {
         const [, , protocolRecipient] = await ethers.getSigners();
         const Factory = await ethers.getContractFactory("TemplFactory");
-        const factory = await Factory.deploy((await ethers.getSigners())[0].address, protocolRecipient.address, pct(10), modules.membershipModule, modules.treasuryModule, modules.governanceModule);
+        const factory = await Factory.deploy((await ethers.getSigners())[0].address, protocolRecipient.address, pct(10), modules.membershipModule, modules.treasuryModule, modules.governanceModule, modules.councilModule);
         await factory.waitForDeployment();
 
         await expect(
@@ -745,7 +820,7 @@ describe("TemplFactory", function () {
         const token = await deployToken("ZeroPriest", "ZP");
 
         const Factory = await ethers.getContractFactory("TemplFactory");
-        const factory = await Factory.deploy((await ethers.getSigners())[0].address, protocolRecipient.address, pct(10), modules.membershipModule, modules.treasuryModule, modules.governanceModule);
+        const factory = await Factory.deploy((await ethers.getSigners())[0].address, protocolRecipient.address, pct(10), modules.membershipModule, modules.treasuryModule, modules.governanceModule, modules.councilModule);
         await factory.waitForDeployment();
 
         await expect(
@@ -766,7 +841,7 @@ describe("TemplFactory", function () {
         const [, , protocolRecipient] = await ethers.getSigners();
         const token = await deployToken("LowFee", "LOW");
         const Factory = await ethers.getContractFactory("TemplFactory");
-        const factory = await Factory.deploy((await ethers.getSigners())[0].address, protocolRecipient.address, pct(10), modules.membershipModule, modules.treasuryModule, modules.governanceModule);
+        const factory = await Factory.deploy((await ethers.getSigners())[0].address, protocolRecipient.address, pct(10), modules.membershipModule, modules.treasuryModule, modules.governanceModule, modules.councilModule);
         await factory.waitForDeployment();
 
         await expect(
@@ -784,7 +859,7 @@ describe("TemplFactory", function () {
         const [, , protocolRecipient] = await ethers.getSigners();
         const token = await deployToken("Modulo", "MOD");
         const Factory = await ethers.getContractFactory("TemplFactory");
-        const factory = await Factory.deploy((await ethers.getSigners())[0].address, protocolRecipient.address, pct(10), modules.membershipModule, modules.treasuryModule, modules.governanceModule);
+        const factory = await Factory.deploy((await ethers.getSigners())[0].address, protocolRecipient.address, pct(10), modules.membershipModule, modules.treasuryModule, modules.governanceModule, modules.councilModule);
         await factory.waitForDeployment();
 
         await expect(
@@ -802,30 +877,32 @@ describe("TemplFactory", function () {
         const [, , protocolRecipient] = await ethers.getSigners();
         const token = await deployToken("Quorum", "QRM");
         const Factory = await ethers.getContractFactory("TemplFactory");
-        const factory = await Factory.deploy((await ethers.getSigners())[0].address, protocolRecipient.address, pct(10), modules.membershipModule, modules.treasuryModule, modules.governanceModule);
+        const factory = await Factory.deploy((await ethers.getSigners())[0].address, protocolRecipient.address, pct(10), modules.membershipModule, modules.treasuryModule, modules.governanceModule, modules.councilModule);
         await factory.waitForDeployment();
 
         await expect(
-            factory.createTemplWithConfig({
-                priest: protocolRecipient.address,
-                token: await token.getAddress(),
-                entryFee: ENTRY_FEE,
-                burnBps: pct(30),
-                treasuryBps: pct(30),
-                memberPoolBps: pct(30),
-                quorumBps: pct(101),
-                executionDelaySeconds: 7 * 24 * 60 * 60,
-                burnAddress: ethers.ZeroAddress,
-                priestIsDictator: false,
-                maxMembers: 0,
-                curveProvided: true,
-                curve: defaultCurve(),
-                name: DEFAULT_METADATA.name,
-                description: DEFAULT_METADATA.description,
-                logoLink: DEFAULT_METADATA.logoLink,
-                proposalFeeBps: 0,
-                referralShareBps: 0
-            })
+            factory.createTemplWithConfig(
+                withCouncilDefaults({
+                    priest: protocolRecipient.address,
+                    token: await token.getAddress(),
+                    entryFee: ENTRY_FEE,
+                    burnBps: pct(30),
+                    treasuryBps: pct(30),
+                    memberPoolBps: pct(30),
+                    quorumBps: pct(101),
+                    executionDelaySeconds: 7 * 24 * 60 * 60,
+                    burnAddress: ethers.ZeroAddress,
+                    priestIsDictator: false,
+                    maxMembers: 0,
+                    curveProvided: true,
+                    curve: defaultCurve(),
+                    name: DEFAULT_METADATA.name,
+                    description: DEFAULT_METADATA.description,
+                    logoLink: DEFAULT_METADATA.logoLink,
+                    proposalFeeBps: 0,
+                    referralShareBps: 0
+                })
+            )
         ).to.be.revertedWithCustomError(factory, "InvalidPercentage");
     });
 
@@ -833,10 +910,10 @@ describe("TemplFactory", function () {
         const [deployer, , protocolRecipient] = await ethers.getSigners();
         const token = await deployToken("Patched", "PTC");
         const Factory = await ethers.getContractFactory("TemplFactory");
-        const factory = await Factory.deploy((await ethers.getSigners())[0].address, protocolRecipient.address, pct(10), modules.membershipModule, modules.treasuryModule, modules.governanceModule);
+        const factory = await Factory.deploy((await ethers.getSigners())[0].address, protocolRecipient.address, pct(10), modules.membershipModule, modules.treasuryModule, modules.governanceModule, modules.councilModule);
         await factory.waitForDeployment();
 
-        const config = {
+        const config = withCouncilDefaults({
             priest: ethers.ZeroAddress,
             token: await token.getAddress(),
             entryFee: ENTRY_FEE,
@@ -855,7 +932,7 @@ describe("TemplFactory", function () {
             logoLink: DEFAULT_METADATA.logoLink,
             proposalFeeBps: 0,
             referralShareBps: 0
-        };
+        });
 
         const templAddress = await factory.createTemplWithConfig.staticCall(config);
         await (await factory.createTemplWithConfig(config)).wait();
@@ -875,10 +952,10 @@ describe("TemplFactory", function () {
         const [, priest, protocolRecipient] = await ethers.getSigners();
         const token = await deployToken("Defaults2", "DEF2");
         const Factory = await ethers.getContractFactory("TemplFactory");
-        const factory = await Factory.deploy((await ethers.getSigners())[0].address, protocolRecipient.address, pct(11), modules.membershipModule, modules.treasuryModule, modules.governanceModule);
+        const factory = await Factory.deploy((await ethers.getSigners())[0].address, protocolRecipient.address, pct(11), modules.membershipModule, modules.treasuryModule, modules.governanceModule, modules.councilModule);
         await factory.waitForDeployment();
 
-        const config = {
+        const config = withCouncilDefaults({
             priest: priest.address,
             token: await token.getAddress(),
             entryFee: ENTRY_FEE,
@@ -897,7 +974,7 @@ describe("TemplFactory", function () {
             logoLink: DEFAULT_METADATA.logoLink,
             proposalFeeBps: 0,
             referralShareBps: 0,
-        };
+        });
 
         const templAddress = await factory.createTemplWithConfig.staticCall(config);
         await factory.createTemplWithConfig(config);
@@ -914,7 +991,7 @@ describe("TemplFactory", function () {
         const [deployer, outsider, protocolRecipient] = await ethers.getSigners();
         const token = await deployToken("Access", "ACC");
         const Factory = await ethers.getContractFactory("TemplFactory");
-        const factory = await Factory.deploy(deployer.address, protocolRecipient.address, pct(10), modules.membershipModule, modules.treasuryModule, modules.governanceModule);
+        const factory = await Factory.deploy(deployer.address, protocolRecipient.address, pct(10), modules.membershipModule, modules.treasuryModule, modules.governanceModule, modules.councilModule);
         await factory.waitForDeployment();
 
         const tokenAddress = await token.getAddress();
@@ -928,7 +1005,7 @@ describe("TemplFactory", function () {
             )
         ).to.be.revertedWithCustomError(factory, "FactoryAccessRestricted");
 
-        const config = {
+        const config = withCouncilDefaults({
             priest: deployer.address,
             token: tokenAddress,
             entryFee: ENTRY_FEE,
@@ -947,7 +1024,7 @@ describe("TemplFactory", function () {
             logoLink: DEFAULT_METADATA.logoLink,
             proposalFeeBps: 0,
             referralShareBps: 0,
-        };
+        });
 
         await expect(
             factory.connect(outsider).createTemplWithConfig(config)
@@ -985,7 +1062,7 @@ describe("TemplFactory", function () {
     it("allows the factory deployer to transfer deployer role", async function () {
         const [deployer, newDeployer, outsider, protocolRecipient] = await ethers.getSigners();
         const Factory = await ethers.getContractFactory("TemplFactory");
-        const factory = await Factory.deploy(deployer.address, protocolRecipient.address, pct(10), modules.membershipModule, modules.treasuryModule, modules.governanceModule);
+        const factory = await Factory.deploy(deployer.address, protocolRecipient.address, pct(10), modules.membershipModule, modules.treasuryModule, modules.governanceModule, modules.councilModule);
         await factory.waitForDeployment();
 
         await expect(factory.connect(outsider).transferDeployer(newDeployer.address)).to.be.revertedWithCustomError(

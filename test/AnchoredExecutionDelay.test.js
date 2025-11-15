@@ -16,7 +16,7 @@ describe('Anchored execution delay after quorum', function () {
     const token = await Token.deploy('Test', 'TEST', 18);
     await token.waitForDeployment();
 
-    const { membershipModule, treasuryModule, governanceModule } = await deployTemplModules();
+    const { membershipModule, treasuryModule, governanceModule, councilModule } = await deployTemplModules();
 
     // Use a short execution delay (2 seconds) and warp time across checks.
     const Templ = await ethers.getContractFactory('TEMPL');
@@ -39,9 +39,12 @@ describe('Anchored execution delay after quorum', function () {
       'https://templ.test/logo.png',
       0,
       0,
+      5_000,
+      false,
       membershipModule,
       treasuryModule,
       governanceModule,
+      councilModule,
       { primary: { style: 2, rateBps: 11000, length: 0 }, additionalSegments: [] }
     );
     await templ.waitForDeployment();
