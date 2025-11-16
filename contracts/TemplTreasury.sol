@@ -125,6 +125,12 @@ contract TemplTreasuryModule is TemplBase {
         _setYesVoteThreshold(newThresholdBps);
     }
 
+    /// @notice Governance action that updates the instant quorum threshold.
+    /// @param newThresholdBps New instant quorum threshold (bps of eligible voters).
+    function setInstantQuorumBpsDAO(uint256 newThresholdBps) external onlyDAO onlyDelegatecall {
+        _setInstantQuorumBps(newThresholdBps);
+    }
+
     /// @notice Governance action that toggles council governance mode.
     /// @param enabled Desired council mode state.
     function setCouncilModeDAO(bool enabled) external onlyDAO onlyDelegatecall {

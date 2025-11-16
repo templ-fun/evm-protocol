@@ -49,6 +49,7 @@ contract TEMPL is TemplBase {
     /// @param _logoLink Canonical logo URL for the templ.
     /// @param _proposalCreationFeeBps Proposal creation fee expressed in basis points of the current entry fee.
     /// @param _referralShareBps Referral share expressed in basis points of the member pool allocation.
+    /// @param _instantQuorumBps Instant quorum threshold (bps) that enables immediate execution when satisfied.
     /// @param _membershipModule Address of the deployed membership module implementation.
     /// @param _treasuryModule Address of the deployed treasury module implementation.
     /// @param _governanceModule Address of the deployed governance module implementation.
@@ -74,6 +75,7 @@ contract TEMPL is TemplBase {
         uint256 _proposalCreationFeeBps,
         uint256 _referralShareBps,
         uint256 _yesVoteThresholdBps,
+        uint256 _instantQuorumBps,
         bool _startInCouncilMode,
         address _membershipModule,
         address _treasuryModule,
@@ -97,7 +99,8 @@ contract TEMPL is TemplBase {
             _logoLink,
             _proposalCreationFeeBps,
             _referralShareBps,
-            _yesVoteThresholdBps
+            _yesVoteThresholdBps,
+            _instantQuorumBps
         );
         if (_priest == address(0)) revert TemplErrors.InvalidRecipient();
         if (_entryFee == 0) {
@@ -194,7 +197,7 @@ contract TEMPL is TemplBase {
         membership[16] = TemplMembershipModule.totalJoins.selector;
         membership[17] = TemplMembershipModule.getExternalRewardTokensPaginated.selector;
 
-        treasury = new bytes4[](22);
+        treasury = new bytes4[](23);
         treasury[0] = TemplTreasuryModule.withdrawTreasuryDAO.selector;
         treasury[1] = TemplTreasuryModule.updateConfigDAO.selector;
         treasury[2] = TemplTreasuryModule.setJoinPausedDAO.selector;
@@ -217,8 +220,9 @@ contract TEMPL is TemplBase {
         treasury[19] = TemplTreasuryModule.addCouncilMemberDAO.selector;
         treasury[20] = TemplTreasuryModule.removeCouncilMemberDAO.selector;
         treasury[21] = TemplTreasuryModule.bootstrapCouncilMember.selector;
+        treasury[22] = TemplTreasuryModule.setInstantQuorumBpsDAO.selector;
 
-        governance = new bytes4[](19);
+        governance = new bytes4[](20);
         governance[0] = TemplGovernanceModule.createProposalSetJoinPaused.selector;
         governance[1] = TemplGovernanceModule.createProposalUpdateConfig.selector;
         governance[2] = TemplGovernanceModule.createProposalSetMaxMembers.selector;
@@ -238,6 +242,7 @@ contract TEMPL is TemplBase {
         governance[16] = TemplGovernanceModule.createProposalSetQuorumBps.selector;
         governance[17] = TemplGovernanceModule.createProposalSetPostQuorumVotingPeriod.selector;
         governance[18] = TemplGovernanceModule.createProposalSetBurnAddress.selector;
+        governance[19] = TemplGovernanceModule.createProposalSetInstantQuorumBps.selector;
         council = new bytes4[](4);
         council[0] = TemplCouncilModule.createProposalSetYesVoteThreshold.selector;
         council[1] = TemplCouncilModule.createProposalSetCouncilMode.selector;
@@ -296,6 +301,8 @@ contract TEMPL is TemplBase {
             payload = abi.encode(p.newBurnAddress);
         } else if (action == Action.SetYesVoteThreshold) {
             payload = abi.encode(p.newYesVoteThresholdBps);
+        } else if (action == Action.SetInstantQuorumBps) {
+            payload = abi.encode(p.newInstantQuorumBps);
         } else if (action == Action.SetCouncilMode) {
             payload = abi.encode(p.setCouncilMode);
         } else if (action == Action.AddCouncilMember || action == Action.RemoveCouncilMember) {
@@ -491,7 +498,7 @@ contract TEMPL is TemplBase {
     /// @notice Registers treasury function selectors to dispatch to `module`.
     /// @param module Module address that implements treasury functions.
     function _registerTreasurySelectors(address module) internal {
-        bytes4[] memory selectors = new bytes4[](22);
+        bytes4[] memory selectors = new bytes4[](23);
         selectors[0] = TemplTreasuryModule.withdrawTreasuryDAO.selector;
         selectors[1] = TemplTreasuryModule.updateConfigDAO.selector;
         selectors[2] = TemplTreasuryModule.setJoinPausedDAO.selector;
@@ -514,13 +521,14 @@ contract TEMPL is TemplBase {
         selectors[19] = TemplTreasuryModule.addCouncilMemberDAO.selector;
         selectors[20] = TemplTreasuryModule.removeCouncilMemberDAO.selector;
         selectors[21] = TemplTreasuryModule.bootstrapCouncilMember.selector;
+        selectors[22] = TemplTreasuryModule.setInstantQuorumBpsDAO.selector;
         _registerModule(module, selectors);
     }
 
     /// @notice Registers governance function selectors to dispatch to `module`.
     /// @param module Module address that implements governance functions.
     function _registerGovernanceSelectors(address module) internal {
-        bytes4[] memory selectors = new bytes4[](19);
+        bytes4[] memory selectors = new bytes4[](20);
         selectors[0] = TemplGovernanceModule.createProposalSetJoinPaused.selector;
         selectors[1] = TemplGovernanceModule.createProposalUpdateConfig.selector;
         selectors[2] = TemplGovernanceModule.createProposalSetMaxMembers.selector;
@@ -540,6 +548,7 @@ contract TEMPL is TemplBase {
         selectors[16] = TemplGovernanceModule.createProposalSetQuorumBps.selector;
         selectors[17] = TemplGovernanceModule.createProposalSetPostQuorumVotingPeriod.selector;
         selectors[18] = TemplGovernanceModule.createProposalSetBurnAddress.selector;
+        selectors[19] = TemplGovernanceModule.createProposalSetInstantQuorumBps.selector;
         _registerModule(module, selectors);
     }
 

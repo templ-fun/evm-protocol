@@ -54,6 +54,7 @@ describe("Proposal creation fee reentrancy", function () {
       PROPOSAL_FEE_BPS,
       0,
       5_000,
+       10_000,
       false,
       membershipModule,
       treasuryModule,

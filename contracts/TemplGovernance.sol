@@ -149,6 +149,27 @@ contract TemplGovernanceModule is TemplBase {
         return id;
     }
 
+    /// @notice Opens a proposal to update the instant quorum threshold in basis points.
+    /// @param _newInstantQuorumBps New instant quorum threshold (1-10_000 bps).
+    /// @param _votingPeriod Optional custom voting duration (seconds).
+    /// @param _title On-chain title for the proposal.
+    /// @param _description On-chain description for the proposal.
+    /// @return proposalId Newly created proposal identifier.
+    function createProposalSetInstantQuorumBps(
+        uint256 _newInstantQuorumBps,
+        uint256 _votingPeriod,
+        string calldata _title,
+        string calldata _description
+    ) external nonReentrant returns (uint256 proposalId) {
+        _requireDelegatecall();
+        if (priestIsDictator) revert TemplErrors.DictatorshipEnabled();
+        if (_newInstantQuorumBps == 0 || _newInstantQuorumBps > BPS_DENOMINATOR) revert TemplErrors.InvalidPercentage();
+        (uint256 id, Proposal storage p) = _createBaseProposal(_votingPeriod, _title, _description);
+        p.action = Action.SetInstantQuorumBps;
+        p.newInstantQuorumBps = _newInstantQuorumBps;
+        return id;
+    }
+
     /// @notice Opens a proposal to update the post‑quorum voting period in seconds.
     /// @param _newPeriodSeconds New period (seconds) applied after quorum before execution.
     /// @param _votingPeriod Optional custom voting duration (seconds).
@@ -477,6 +498,8 @@ contract TemplGovernanceModule is TemplBase {
             }
         }
 
+        _maybeTriggerInstantQuorum(proposal);
+
         emit VoteCast(_proposalId, msg.sender, _support, block.timestamp);
     }
 
@@ -495,18 +518,19 @@ contract TemplGovernanceModule is TemplBase {
             revert TemplErrors.DictatorshipEnabled();
         }
 
+        bool instant = proposal.instantQuorumMet;
         if (proposal.quorumExempt && block.timestamp < proposal.endTime) {
             revert TemplErrors.VotingNotEnded();
         }
         if (!proposal.quorumExempt) {
-            if (proposal.quorumReachedAt == 0) {
+            if (proposal.quorumReachedAt == 0 && !instant) {
                 revert TemplErrors.QuorumNotReached();
             }
-            if (block.timestamp < proposal.endTime) {
+            if (!instant && block.timestamp < proposal.endTime) {
                 revert TemplErrors.ExecutionDelayActive();
             }
             uint256 denom = proposal.postQuorumEligibleVoters;
-            if (denom != 0 && proposal.yesVotes * BPS_DENOMINATOR < quorumBps * denom) {
+            if (denom != 0 && !instant && proposal.yesVotes * BPS_DENOMINATOR < quorumBps * denom) {
                 revert TemplErrors.QuorumNotReached();
             }
         }
@@ -576,6 +600,8 @@ contract TemplGovernanceModule is TemplBase {
             _governanceSetBurnAddress(proposal.newBurnAddress);
         } else if (proposal.action == Action.SetYesVoteThreshold) {
             _governanceSetYesVoteThreshold(proposal.newYesVoteThresholdBps);
+        } else if (proposal.action == Action.SetInstantQuorumBps) {
+            _governanceSetInstantQuorumBps(proposal.newInstantQuorumBps);
         } else if (proposal.action == Action.SetCouncilMode) {
             _governanceSetCouncilMode(proposal.setCouncilMode);
         } else if (proposal.action == Action.AddCouncilMember) {
@@ -708,6 +734,12 @@ contract TemplGovernanceModule is TemplBase {
     /// @param newThresholdBps New threshold (bps).
     function _governanceSetYesVoteThreshold(uint256 newThresholdBps) internal {
         _setYesVoteThreshold(newThresholdBps);
+    }
+
+    /// @notice Governance wrapper that updates the instant quorum threshold.
+    /// @param newThresholdBps New instant quorum threshold (bps).
+    function _governanceSetInstantQuorumBps(uint256 newThresholdBps) internal {
+        _setInstantQuorumBps(newThresholdBps);
     }
 
     /// @notice Governance wrapper that toggles council mode.

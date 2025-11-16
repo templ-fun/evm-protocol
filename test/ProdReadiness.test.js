@@ -86,7 +86,8 @@ describe("Prod Readiness", function () {
       proposalFeeBps: 2_500,
       referralShareBps: 2_500,
       yesVoteThresholdBps: 5_000,
-      councilMode: false
+      councilMode: false,
+      instantQuorumBps: 10_000
     });
     const receipt = await tx.wait();
     const templAddress = receipt.logs
@@ -108,8 +109,8 @@ describe("Prod Readiness", function () {
     // Sanity: registered selectors are complete and route to expected modules
     const [mSels, tSels, gSels, cSels] = await templ.getRegisteredSelectors();
     expect(mSels.length).to.equal(18);
-    expect(tSels.length).to.equal(22);
-    expect(gSels.length).to.equal(19);
+    expect(tSels.length).to.equal(23);
+    expect(gSels.length).to.equal(20);
     expect(cSels.length).to.equal(4);
 
     for (const sel of mSels) {

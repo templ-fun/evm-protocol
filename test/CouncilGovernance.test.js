@@ -55,7 +55,6 @@ describe("Council governance", function () {
       .to.be.revertedWithCustomError(templ, "NotCouncil");
 
     await templ.connect(priest).vote(proposalId, true);
-    await templ.connect(member1).vote(proposalId, true);
     await advanceTime();
     await templ.executeProposal(proposalId);
     expect(await templ.burnAddress()).to.equal(newBurn);
@@ -71,7 +70,6 @@ describe("Council governance", function () {
     await templ.connect(member1).createProposalAddCouncilMember(member2.address, WEEK, "Add member2", "");
     let proposalId = (await templ.proposalCount()) - 1n;
     await templ.connect(priest).vote(proposalId, true);
-    await templ.connect(member1).vote(proposalId, true);
     await advanceTime();
     await templ.executeProposal(proposalId);
     expect(await templ.councilMembers(member2.address)).to.equal(true);

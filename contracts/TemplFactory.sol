@@ -73,6 +73,8 @@ contract TemplFactory {
         uint256 yesVoteThresholdBps;
         /// @notice Whether the templ should start in council governance mode.
         bool councilMode;
+        /// @notice Instant quorum threshold (bps) that enables immediate execution when satisfied. 0 applies factory default.
+        uint256 instantQuorumBps;
     }
 
     /// @notice Address that receives the protocol share in newly created templs.
@@ -138,6 +140,7 @@ contract TemplFactory {
         uint256 proposalFeeBps,
         uint256 referralShareBps,
         uint256 yesVoteThresholdBps,
+        uint256 instantQuorumBps,
         bool councilMode
     );
 
@@ -288,7 +291,8 @@ contract TemplFactory {
             proposalFeeBps: _proposalFeeBps,
             referralShareBps: _referralShareBps,
             yesVoteThresholdBps: TemplDefaults.DEFAULT_YES_VOTE_THRESHOLD_BPS,
-            councilMode: true
+            councilMode: true,
+            instantQuorumBps: TemplDefaults.DEFAULT_INSTANT_QUORUM_BPS
         });
         return _deploy(cfg);
     }
@@ -357,6 +361,9 @@ contract TemplFactory {
         if (cfg.yesVoteThresholdBps == 0) {
             cfg.yesVoteThresholdBps = TemplDefaults.DEFAULT_YES_VOTE_THRESHOLD_BPS;
         }
+        if (cfg.instantQuorumBps == 0) {
+            cfg.instantQuorumBps = TemplDefaults.DEFAULT_INSTANT_QUORUM_BPS;
+        }
         return _deploy(cfg);
     }
 
@@ -378,6 +385,9 @@ contract TemplFactory {
             revert TemplErrors.InvalidPercentage();
         }
         if (cfg.councilMode && cfg.priestIsDictator) revert TemplErrors.CouncilModeActive();
+        if (cfg.instantQuorumBps == 0 || cfg.instantQuorumBps > BPS_DENOMINATOR) {
+            revert TemplErrors.InvalidPercentage();
+        }
 
         TEMPL deployed = new TEMPL(
             cfg.priest,
@@ -399,6 +409,7 @@ contract TemplFactory {
             cfg.proposalFeeBps,
             cfg.referralShareBps,
             cfg.yesVoteThresholdBps,
+            cfg.instantQuorumBps,
             cfg.councilMode,
             MEMBERSHIP_MODULE,
             TREASURY_MODULE,
@@ -443,6 +454,7 @@ contract TemplFactory {
             cfg.proposalFeeBps,
             cfg.referralShareBps,
             cfg.yesVoteThresholdBps,
+            cfg.instantQuorumBps,
             cfg.councilMode
         );
     }

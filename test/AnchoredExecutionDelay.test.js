@@ -40,6 +40,7 @@ describe('Anchored execution delay after quorum', function () {
       0,
       0,
       5_000,
+       10_000,
       false,
       membershipModule,
       treasuryModule,
@@ -49,6 +50,11 @@ describe('Anchored execution delay after quorum', function () {
     );
     await templ.waitForDeployment();
     templ = await attachTemplInterface(templ);
+
+    // Onboard a second member so instant quorum (100% yes) requires more than the auto YES vote.
+    await token.mint(memberB.address, ethers.parseUnits('100', 18));
+    await token.connect(memberB).approve(await templ.getAddress(), ethers.parseUnits('100', 18));
+    await templ.connect(memberB).join();
 
     // Create a proposal that will hit quorum immediately (priest auto-enrolled, auto-YES).
     const tx = await templ.connect(priest).createProposalSetJoinPaused(true, 0, 'Pause', 'Test');
@@ -63,10 +69,6 @@ describe('Anchored execution delay after quorum', function () {
     expect(endTime).to.be.greaterThan(createdAt);
 
     // Prepare an external call proposal (B) that sets the global execution delay to a large value.
-    // Onboard a second member who will propose the external-call change.
-    await token.mint(memberB.address, ethers.parseUnits('100', 18));
-    await token.connect(memberB).approve(await templ.getAddress(), ethers.parseUnits('100', 18));
-    await templ.connect(memberB).join();
 
     const iface = templ.interface;
     const func = iface.getFunction('setPostQuorumVotingPeriodDAO');

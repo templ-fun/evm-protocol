@@ -288,6 +288,18 @@ async function main() {
     }
     yesVoteThresholdBps = Math.round(parsed);
   }
+  const INSTANT_QUORUM_INPUT = (process.env.INSTANT_QUORUM_BPS || "").trim();
+  let instantQuorumBps = 10_000;
+  if (INSTANT_QUORUM_INPUT) {
+    const parsed = Number(INSTANT_QUORUM_INPUT);
+    if (!Number.isFinite(parsed)) {
+      throw new Error("INSTANT_QUORUM_BPS must be a valid number");
+    }
+    if (parsed < 1 || parsed > 10_000) {
+      throw new Error("INSTANT_QUORUM_BPS must be between 1 and 10,000");
+    }
+    instantQuorumBps = Math.round(parsed);
+  }
   const rawCouncilMode = process.env.COUNCIL_MODE ?? process.env.START_COUNCIL_MODE;
   const START_COUNCIL_MODE =
     rawCouncilMode === undefined || rawCouncilMode === null
@@ -413,6 +425,7 @@ async function main() {
   console.log("Priest Dictatorship:", PRIEST_IS_DICTATOR ? 'enabled' : 'disabled');
   console.log("Council Mode:", START_COUNCIL_MODE ? 'enabled' : 'disabled');
   console.log("YES Vote Threshold (bps):", yesVoteThresholdBps);
+  console.log("Instant Quorum (bps):", instantQuorumBps);
   console.log('Curve configuration:', curveConfigEnv.description);
   console.log(`Protocol Bps (${protocolPercentSource}):`, protocolPercentBps);
   console.log('\nMetadata:');
@@ -522,7 +535,8 @@ async function main() {
     proposalFeeBps: PROPOSAL_FEE_BPS,
     referralShareBps: REFERRAL_SHARE_BPS,
     yesVoteThresholdBps,
-    councilMode: START_COUNCIL_MODE
+    councilMode: START_COUNCIL_MODE,
+    instantQuorumBps
   };
   const expectedTempl = await factoryContract.createTemplWithConfig.staticCall(templConfig);
   const createTx = await factoryContract.createTemplWithConfig(templConfig);

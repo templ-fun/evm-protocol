@@ -13,6 +13,7 @@ Quick links: [At a Glance](#protocol-at-a-glance) · [Architecture](#architectur
 - Governance is member‑only: propose, vote, and execute actions to change parameters, move treasury, update curves/metadata, or call arbitrary external contracts.
 - Council mode (default for new templs deployed via `TemplFactory`) narrows voting power to a curated council while still letting any member open proposals. The priest gets a single bootstrap seat to add the first councillor, and thereafter council composition changes only via governance. Council mode cannot be active while dictatorship is enabled; templs must return to member voting (or never enable dictatorship) before re-entering council mode.
 - The YES vote threshold (bps of votes cast) is configurable per templ (default 5,000 bps for a simple majority) and can be changed via governance alongside quorum/post‑quorum windows.
+- Instant quorum (bps of eligible voters, default 10,000 bps) lets proposals bypass the post‑quorum execution delay when a higher approval ratio is satisfied.
 - Optional dictatorship lets a designated “priest” directly execute DAO‑only actions when enabled; otherwise all such actions flow through governance. Dictatorship and council governance are mutually exclusive.
 - Pricing curves define how the entry fee evolves with membership growth (static, linear, exponential segments; see `CurveConfig` in `TemplCurve`).
 - Everything is modular: `TEMPL` is a router that delegatecalls membership, treasury, and governance modules over a shared storage layout, keeping concerns clean.
@@ -530,7 +531,7 @@ Curves (see [`TemplCurve`](contracts/TemplCurve.sol)) support static, linear, an
   - Required: `PROTOCOL_FEE_RECIPIENT`
   - Optional: `PROTOCOL_BPS`, `FACTORY_ADDRESS` (reuse), `FACTORY_DEPLOYER` (defaults to signer address)
   - Deploys modules if not provided via env and wires them into the factory constructor.
-- [scripts/deploy-templ.cjs](scripts/deploy-templ.cjs): key envs are `FACTORY_ADDRESS` (or omit to auto‑deploy modules + factory locally), `TOKEN_ADDRESS`, `ENTRY_FEE`, plus optional metadata (`TEMPL_NAME`, `TEMPL_DESCRIPTION`, `TEMPL_LOGO_LINK`). Many toggles are supported (priest, quorum/post‑quorum voting periods, caps, fee splits, referral share, curve). Optional: `POST_QUORUM_VOTING_PERIOD_SECONDS`, `YES_VOTE_THRESHOLD_BPS` (1‑10,000 bps; defaults to 5,000), and `COUNCIL_MODE`/`START_COUNCIL_MODE` (defaults to council mode when unset) to launch directly in council governance.
+- [scripts/deploy-templ.cjs](scripts/deploy-templ.cjs): key envs are `FACTORY_ADDRESS` (or omit to auto‑deploy modules + factory locally), `TOKEN_ADDRESS`, `ENTRY_FEE`, plus optional metadata (`TEMPL_NAME`, `TEMPL_DESCRIPTION`, `TEMPL_LOGO_LINK`). Many toggles are supported (priest, quorum/post‑quorum voting periods, caps, fee splits, referral share, curve). Optional: `POST_QUORUM_VOTING_PERIOD_SECONDS`, `YES_VOTE_THRESHOLD_BPS` (1‑10,000 bps; defaults to 5,000), `INSTANT_QUORUM_BPS` (1‑10,000 bps; defaults to 10,000), and `COUNCIL_MODE`/`START_COUNCIL_MODE` (defaults to council mode when unset) to launch directly in council governance.
 - Verify helpers (see [scripts/verify-templ.cjs](scripts/verify-templ.cjs), [scripts/verify-factory.cjs](scripts/verify-factory.cjs)):
   - `verify:templ` verifies a TEMPL instance, reconstructing constructor args from chain data. Provide `TEMPL_ADDRESS` or `--templ 0x...` and run with a configured Hardhat network.
   - `verify:factory` verifies a TemplFactory deployment using on‑chain getters. Provide `FACTORY_ADDRESS` or `--factory 0x...`.
@@ -582,6 +583,7 @@ Curves (see [`TemplCurve`](contracts/TemplCurve.sol)) support static, linear, an
 - ChangePriest → `abi.encode(address newPriest)`
 - SetDictatorship → `abi.encode(bool enabled)`
 - SetQuorumBps → `abi.encode(uint256 newQuorumBps)`
+- SetInstantQuorumBps → `abi.encode(uint256 newInstantQuorumBps)`
 - SetPostQuorumVotingPeriod → `abi.encode(uint256 newPostQuorumVotingPeriod)`
 - SetBurnAddress → `abi.encode(address newBurnAddress)`
 - SetYesVoteThreshold → `abi.encode(uint256 newThresholdBps)`

@@ -65,6 +65,7 @@ contract EchidnaTemplHarness {
             0, // proposal fee bps
             0, // referral share bps
             5_000, // yes vote threshold bps
+            10_000, // instant quorum bps
             false, // start in council mode
             address(membership),
             address(treasury),

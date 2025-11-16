@@ -56,6 +56,7 @@ async function deployTemplContracts({
   proposalFeeBps = 0,
   referralShareBps = 0,
   yesVoteThresholdBps = 5000,
+  instantQuorumBps = 10_000,
   councilMode = false,
   curve = STATIC_CURVE,
 } = {}) {
@@ -108,6 +109,7 @@ async function deployTemplContracts({
     proposalFeeBps,
     referralShareBps,
     yesVoteThresholdBps,
+    instantQuorumBps,
     councilMode,
     await membershipModule.getAddress(),
     await treasuryModule.getAddress(),

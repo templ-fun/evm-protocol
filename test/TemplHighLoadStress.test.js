@@ -106,6 +106,7 @@ async function setupHighLoadTempl() {
     0,
     0,
     5_000,
+     10_000,
     false,
     modules.membershipModule,
     modules.treasuryModule,

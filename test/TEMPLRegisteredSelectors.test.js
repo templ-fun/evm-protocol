@@ -55,6 +55,7 @@ describe("TEMPL.getRegisteredSelectors()", function () {
       "addCouncilMemberDAO",
       "removeCouncilMemberDAO",
       "bootstrapCouncilMember",
+      "setInstantQuorumBpsDAO",
     ].map(sel);
 
     const expectedGovernance = [
@@ -77,6 +78,7 @@ describe("TEMPL.getRegisteredSelectors()", function () {
       "createProposalSetQuorumBps",
       "createProposalSetPostQuorumVotingPeriod",
       "createProposalSetBurnAddress",
+      "createProposalSetInstantQuorumBps",
     ].map(sel);
     const expectedCouncil = [
       "createProposalSetYesVoteThreshold",

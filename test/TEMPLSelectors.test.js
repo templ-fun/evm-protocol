@@ -54,6 +54,7 @@ describe("TEMPL selector → module introspection", function () {
       "setBurnAddressDAO",
       "setYesVoteThresholdBpsDAO",
       "setCouncilModeDAO",
+      "setInstantQuorumBpsDAO",
     ]) {
       expect(await templ.getModuleForSelector(sel(fn))).to.equal(treasury);
     }
@@ -63,6 +64,7 @@ describe("TEMPL selector → module introspection", function () {
       "createProposalSetQuorumBps",
       "createProposalSetPostQuorumVotingPeriod",
       "createProposalSetBurnAddress",
+      "createProposalSetInstantQuorumBps",
     ]) {
       expect(await templ.getModuleForSelector(sel(fn))).to.equal(governance);
     }

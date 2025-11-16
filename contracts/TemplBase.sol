@@ -27,6 +27,8 @@ abstract contract TemplBase is ReentrancyGuard {
     uint256 internal constant DEFAULT_YES_VOTE_THRESHOLD_BPS = TemplDefaults.DEFAULT_YES_VOTE_THRESHOLD_BPS;
     /// @dev Minimum allowed YES vote threshold (basis points).
     uint256 internal constant MIN_YES_VOTE_THRESHOLD_BPS = 100;
+    /// @dev Default instant quorum threshold applied when deployers do not override it.
+    uint256 internal constant DEFAULT_INSTANT_QUORUM_BPS = TemplDefaults.DEFAULT_INSTANT_QUORUM_BPS;
     /// @dev Caps the number of external reward tokens tracked to keep join gas bounded.
     uint256 internal constant MAX_EXTERNAL_REWARD_TOKENS = 256;
     /// @dev Maximum entry fee supported before arithmetic would overflow downstream accounting.
@@ -90,6 +92,8 @@ abstract contract TemplBase is ReentrancyGuard {
     uint256 public referralShareBps;
     /// @notice Basis points of YES votes required (relative to total votes cast) for a proposal to pass.
     uint256 public yesVoteThresholdBps;
+    /// @notice Basis points required to enable instant execution (relative to eligible voters).
+    uint256 public instantQuorumBps;
     /// @notice When true, only council members may vote on proposals.
     bool public councilModeEnabled;
     /// @notice True once the priest-consumed bootstrap council seat has been used.
@@ -156,6 +160,7 @@ abstract contract TemplBase is ReentrancyGuard {
         SetPostQuorumVotingPeriod,
         SetBurnAddress,
         SetYesVoteThreshold,
+        SetInstantQuorumBps,
         SetCouncilMode,
         AddCouncilMember,
         RemoveCouncilMember,
@@ -210,6 +215,8 @@ abstract contract TemplBase is ReentrancyGuard {
         address newBurnAddress;
         /// @notice YES vote threshold (bps) proposed by SetYesVoteThreshold.
         uint256 newYesVoteThresholdBps;
+        /// @notice Instant quorum threshold (bps) proposed by SetInstantQuorumBps.
+        uint256 newInstantQuorumBps;
         /// @notice Target contract invoked when executing an external call proposal.
         address externalCallTarget;
         /// @notice ETH value forwarded when executing the external call.
@@ -256,6 +263,10 @@ abstract contract TemplBase is ReentrancyGuard {
         bool setDictatorship;
         /// @notice Desired council mode state when the action is SetCouncilMode.
         bool setCouncilMode;
+        /// @notice True once instant quorum threshold has been satisfied.
+        bool instantQuorumMet;
+        /// @notice Timestamp when instant quorum was satisfied.
+        uint256 instantQuorumReachedAt;
     }
 
     /// @notice Total proposals ever created.
@@ -436,6 +447,10 @@ abstract contract TemplBase is ReentrancyGuard {
     /// @param previousThreshold Previous threshold (bps).
     /// @param newThreshold New threshold (bps).
     event YesVoteThresholdUpdated(uint256 indexed previousThreshold, uint256 indexed newThreshold);
+    /// @notice Emitted when the instant quorum threshold changes.
+    /// @param previousThreshold Previous instant quorum (bps).
+    /// @param newThreshold New instant quorum (bps).
+    event InstantQuorumBpsUpdated(uint256 indexed previousThreshold, uint256 indexed newThreshold);
     /// @notice Emitted when council governance mode toggles.
     /// @param enabled True when council mode is active.
     event CouncilModeUpdated(bool indexed enabled);
@@ -613,6 +628,7 @@ abstract contract TemplBase is ReentrancyGuard {
     /// @param _logoLink Initial templ logo link.
     /// @param _proposalCreationFeeBps Proposal creation fee in basis points of the entry fee.
     /// @param _referralShareBps Referral share in basis points of the member pool allocation.
+    /// @param _instantQuorumBps Instant quorum threshold (bps) required for immediate execution.
     /// @dev Also initializes the default `preQuorumVotingPeriod` to `MIN_PRE_QUORUM_VOTING_PERIOD`.
     function _initializeTempl(
         address _protocolFeeRecipient,
@@ -630,7 +646,8 @@ abstract contract TemplBase is ReentrancyGuard {
         string memory _logoLink,
         uint256 _proposalCreationFeeBps,
         uint256 _referralShareBps,
-        uint256 _yesVoteThresholdBps
+        uint256 _yesVoteThresholdBps,
+        uint256 _instantQuorumBps
     ) internal {
         if (_protocolFeeRecipient == address(0) || _accessToken == address(0)) {
             revert TemplErrors.InvalidRecipient();
@@ -660,6 +677,8 @@ abstract contract TemplBase is ReentrancyGuard {
         preQuorumVotingPeriod = MIN_PRE_QUORUM_VOTING_PERIOD;
         uint256 initialYesThreshold = _yesVoteThresholdBps == 0 ? DEFAULT_YES_VOTE_THRESHOLD_BPS : _yesVoteThresholdBps;
         _setYesVoteThreshold(initialYesThreshold);
+        uint256 initialInstantQuorum = _instantQuorumBps == 0 ? DEFAULT_INSTANT_QUORUM_BPS : _instantQuorumBps;
+        _setInstantQuorumBps(initialInstantQuorum);
     }
 
     /// @notice Updates the split between burn, treasury, and member pool slices.
@@ -793,6 +812,33 @@ abstract contract TemplBase is ReentrancyGuard {
         return lhs > rhs;
     }
 
+    /// @notice Updates proposal state when instant quorum is satisfied.
+    function _maybeTriggerInstantQuorum(Proposal storage proposal) internal {
+        if (proposal.instantQuorumMet) {
+            return;
+        }
+        uint256 threshold = instantQuorumBps;
+        if (threshold == 0) {
+            return;
+        }
+        uint256 basis = proposal.quorumReachedAt == 0 ? proposal.eligibleVoters : proposal.postQuorumEligibleVoters;
+        if (basis == 0) {
+            return;
+        }
+        if (proposal.yesVotes * BPS_DENOMINATOR < threshold * basis) {
+            return;
+        }
+        if (proposal.quorumReachedAt == 0) {
+            proposal.quorumReachedAt = block.timestamp;
+            proposal.quorumSnapshotBlock = block.number;
+            proposal.postQuorumEligibleVoters = _eligibleVoterCount();
+            proposal.quorumJoinSequence = joinSequence;
+        }
+        proposal.instantQuorumMet = true;
+        proposal.instantQuorumReachedAt = block.timestamp;
+        proposal.endTime = block.timestamp;
+    }
+
     /// @notice Creates the base proposal structure, applies fee, and tracks proposer state.
     /// @param _votingPeriod Requested voting period (seconds). 0 applies the default.
     /// @param _title On-chain title for the proposal.
@@ -864,6 +910,7 @@ abstract contract TemplBase is ReentrancyGuard {
             proposal.quorumJoinSequence = proposal.preQuorumJoinSequence;
             proposal.endTime = block.timestamp + postQuorumVotingPeriod;
         }
+        _maybeTriggerInstantQuorum(proposal);
         _addActiveProposal(proposalId);
         hasActiveProposal[msg.sender] = true;
         activeProposalId[msg.sender] = proposalId;
@@ -875,16 +922,17 @@ abstract contract TemplBase is ReentrancyGuard {
         if (proposal.quorumExempt) {
             return (!(block.timestamp < proposal.endTime) && _meetsYesVoteThreshold(proposal.yesVotes, proposal.noVotes));
         }
-        if (proposal.quorumReachedAt == 0) {
+        bool instant = proposal.instantQuorumMet;
+        if (proposal.quorumReachedAt == 0 && !instant) {
             return false;
         }
         uint256 denom = proposal.postQuorumEligibleVoters;
-        if (denom != 0) {
+        if (denom != 0 && !instant) {
             if (proposal.yesVotes * BPS_DENOMINATOR < quorumBps * denom) {
                 return false;
             }
         }
-        if (block.timestamp < proposal.quorumReachedAt + postQuorumVotingPeriod) {
+        if (!instant && block.timestamp < proposal.quorumReachedAt + postQuorumVotingPeriod) {
             return false;
         }
         return _meetsYesVoteThreshold(proposal.yesVotes, proposal.noVotes);
@@ -1298,6 +1346,17 @@ abstract contract TemplBase is ReentrancyGuard {
         uint256 previous = yesVoteThresholdBps;
         yesVoteThresholdBps = newThresholdBps;
         emit YesVoteThresholdUpdated(previous, newThresholdBps);
+    }
+
+    /// @notice Updates the instant quorum threshold (bps of eligible voters).
+    /// @param newThresholdBps New instant quorum threshold.
+    function _setInstantQuorumBps(uint256 newThresholdBps) internal {
+        if (newThresholdBps == 0 || newThresholdBps > BPS_DENOMINATOR) {
+            revert TemplErrors.InvalidPercentage();
+        }
+        uint256 previous = instantQuorumBps;
+        instantQuorumBps = newThresholdBps;
+        emit InstantQuorumBpsUpdated(previous, newThresholdBps);
     }
 
     /// @notice Enables or disables council governance mode.

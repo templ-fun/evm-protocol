@@ -38,6 +38,7 @@ contract DaoCallerHarness is TEMPL {
             500,
             0,
             5_000,
+            10_000,
             false,
             membershipModule,
             treasuryModule,

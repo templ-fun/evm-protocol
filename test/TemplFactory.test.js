@@ -29,6 +29,7 @@ describe("TemplFactory", function () {
     const withCouncilDefaults = (config) => ({
         yesVoteThresholdBps: 5_000,
         councilMode: false,
+        instantQuorumBps: 10_000,
         ...config,
     });
 
@@ -140,6 +141,7 @@ describe("TemplFactory", function () {
         expect(await templ.proposalCreationFeeBps()).to.equal(250n);
         expect(await templ.referralShareBps()).to.equal(1_000n);
         expect(await templ.yesVoteThresholdBps()).to.equal(5_000n);
+        expect(await templ.instantQuorumBps()).to.equal(10_000n);
 
         const templCreated = receipt.logs
             .map((log) => {
@@ -158,6 +160,7 @@ describe("TemplFactory", function () {
         expect(templCreated.args.proposalFeeBps).to.equal(250n);
         expect(templCreated.args.referralShareBps).to.equal(1_000n);
         expect(templCreated.args.yesVoteThresholdBps).to.equal(5_000n);
+        expect(templCreated.args.instantQuorumBps).to.equal(10_000n);
         expect(templCreated.args.councilMode).to.equal(false);
 
         await mintToUsers(token, [member], ENTRY_FEE * 10n);
@@ -238,7 +241,8 @@ describe("TemplFactory", function () {
             proposalFeeBps: 0,
             referralShareBps: 500,
             yesVoteThresholdBps: 6_000,
-            councilMode: true
+            councilMode: true,
+            instantQuorumBps: 7_500
         });
 
         const templAddress = await factory.createTemplWithConfig.staticCall(config);
@@ -246,6 +250,7 @@ describe("TemplFactory", function () {
 
         const templ = await getTemplAt(templAddress, ethers.provider);
         expect(await templ.yesVoteThresholdBps()).to.equal(6_000n);
+        expect(await templ.instantQuorumBps()).to.equal(7_500n);
         expect(await templ.councilModeEnabled()).to.equal(true);
         expect(await templ.councilMemberCount()).to.equal(1n);
 
@@ -260,6 +265,7 @@ describe("TemplFactory", function () {
             .find((log) => log && log.name === "TemplCreated");
 
         expect(templCreated.args.yesVoteThresholdBps).to.equal(6_000n);
+        expect(templCreated.args.instantQuorumBps).to.equal(7_500n);
         expect(templCreated.args.councilMode).to.equal(true);
     });
 
@@ -657,6 +663,7 @@ describe("TemplFactory", function () {
         expect(rates).to.deep.equal([10_094, 0]);
         expect(lengths).to.deep.equal([248, 0]);
         expect(templCreated.args.councilMode).to.equal(true);
+        expect(templCreated.args.instantQuorumBps).to.equal(10_000n);
     });
 
   it("reuses the immutable protocol configuration for every templ", async function () {
