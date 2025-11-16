@@ -106,10 +106,10 @@ Governance: map a batch of selectors
 
 ```js
 // Build an array of selectors implemented by your module
-const Gov = await ethers.getContractFactory("TemplGovernanceModule");
+const Router = await ethers.getContractFactory("TEMPL");
 const selectors = [
-  Gov.interface.getFunction("getActiveProposals").selector,
-  Gov.interface.getFunction("getActiveProposalsPaginated").selector,
+  Router.interface.getFunction("getActiveProposals").selector,
+  Router.interface.getFunction("getActiveProposalsPaginated").selector,
 ];
 const params = ethers.AbiCoder.defaultAbiCoder().encode([
   "address","bytes4[]"
@@ -179,7 +179,7 @@ flowchart LR
 - Only‑DAO guard: `onlyDAO` in `TemplBase` gates actions to either the router itself (when dictatorship is disabled) or the router/priest (when enabled) (contracts/TemplBase.sol).
 - Reentrancy guards: User‑facing mutators like joins, claims, proposal creation/execution, and withdrawals use `nonReentrant` (contracts/TemplMembership.sol, contracts/TemplGovernance.sol, contracts/TemplTreasury.sol).
 - Snapshotting by join sequence: Proposals capture `preQuorumJoinSequence`; at quorum, a second snapshot anchors eligibility (`quorumJoinSequence`) (contracts/TemplBase.sol, contracts/TemplGovernance.sol).
-- Bounded enumeration: External reward tokens capped at 256; active proposals support paginated reads with a 1..100 `limit` (contracts/TemplBase.sol, contracts/TemplGovernance.sol).
+- Bounded enumeration: External reward tokens capped at 256; active proposals support paginated reads with a 1..100 `limit` (contracts/TemplBase.sol, contracts/TEMPL.sol).
 - Safe token ops: Uses OpenZeppelin `SafeERC20` for ERC‑20 transfers and explicit ETH forwarding with revert bubbling (contracts/TemplBase.sol, contracts/TemplGovernance.sol).
 - Saturating math for curves: Price growth saturates at `MAX_ENTRY_FEE` to avoid overflow during linear/exponential scaling (contracts/TemplBase.sol).
 - Governance‑controlled upgrades: `setRoutingModuleDAO(address,bytes4[])` rewires selectors under `onlyDAO` (contracts/TEMPL.sol).
