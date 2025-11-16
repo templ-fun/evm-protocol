@@ -1,7 +1,8 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
-const { deployTempl } = require("./utils/deploy");
+const { deployTempl, STATIC_CURVE } = require("./utils/deploy");
 const { mintToUsers, joinMembers } = require("./utils/mintAndPurchase");
+const { deployTemplModules } = require("./utils/modules");
 
 const ENTRY_FEE = ethers.parseUnits("100", 18);
 const TOKEN_SUPPLY = ethers.parseUnits("10000", 18);
@@ -83,5 +84,68 @@ describe("Instant quorum execution", function () {
     proposalId = (await templ.proposalCount()) - 1n;
     await expect(templ.connect(member1).executeProposal(proposalId)).to.not.be.reverted;
     expect(await templ.priestIsDictator()).to.equal(false);
+  });
+
+  it("reverts on deploy when instant quorum is below the quorum threshold", async function () {
+    const [, priest, protocol] = await ethers.getSigners();
+    const modules = await deployTemplModules();
+    const AccessToken = await ethers.getContractFactory("contracts/mocks/TestToken.sol:TestToken");
+    const accessToken = await AccessToken.deploy("Instant Access", "IA", 18);
+    await accessToken.waitForDeployment();
+    const Templ = await ethers.getContractFactory("TEMPL");
+    await expect(
+      Templ.deploy(
+        priest.address,
+        protocol.address,
+        accessToken.target,
+        ENTRY_FEE,
+        3_000,
+        3_000,
+        3_000,
+        1_000,
+        6_000,
+        WEEK,
+        "0x000000000000000000000000000000000000dEaD",
+        false,
+        0,
+        "Bad Instant",
+        "",
+        "",
+        0,
+        0,
+        5_000,
+        5_000,
+        false,
+        modules.membershipModule,
+        modules.treasuryModule,
+        modules.governanceModule,
+        modules.councilModule,
+        STATIC_CURVE
+      )
+    ).to.be.revertedWithCustomError(Templ, "InstantQuorumBelowQuorum");
+  });
+
+  it("blocks dictatorship setters from lowering instant quorum below the normal quorum", async function () {
+    const { templ, priest } = await deployTempl({
+      quorumBps: 5_000,
+      instantQuorumBps: 6_000,
+      priestIsDictator: true,
+    });
+    await expect(templ.connect(priest).setInstantQuorumBpsDAO(4_000)).to.be.revertedWithCustomError(
+      templ,
+      "InstantQuorumBelowQuorum"
+    );
+  });
+
+  it("blocks quorum updates that would exceed the instant quorum threshold", async function () {
+    const { templ, priest } = await deployTempl({
+      quorumBps: 4_000,
+      instantQuorumBps: 6_000,
+      priestIsDictator: true,
+    });
+    await expect(templ.connect(priest).setQuorumBpsDAO(7_000)).to.be.revertedWithCustomError(
+      templ,
+      "InstantQuorumBelowQuorum"
+    );
   });
 });

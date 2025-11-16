@@ -923,6 +923,40 @@ describe("TemplFactory", function () {
         ).to.be.revertedWithCustomError(factory, "InvalidPercentage");
     });
 
+    it("reverts when instant quorum bps is below the quorum threshold", async function () {
+        const [, , protocolRecipient] = await ethers.getSigners();
+        const token = await deployToken("InstantMismatch", "INST");
+        const Factory = await ethers.getContractFactory("TemplFactory");
+        const factory = await Factory.deploy((await ethers.getSigners())[0].address, protocolRecipient.address, pct(10), modules.membershipModule, modules.treasuryModule, modules.governanceModule, modules.councilModule);
+        await factory.waitForDeployment();
+
+        await expect(
+            factory.createTemplWithConfig(
+                withCouncilDefaults({
+                    priest: protocolRecipient.address,
+                    token: await token.getAddress(),
+                    entryFee: ENTRY_FEE,
+                    burnBps: pct(30),
+                    treasuryBps: pct(30),
+                    memberPoolBps: pct(30),
+                    quorumBps: pct(40),
+                    instantQuorumBps: pct(30),
+                    executionDelaySeconds: 7 * 24 * 60 * 60,
+                    burnAddress: ethers.ZeroAddress,
+                    priestIsDictator: false,
+                    maxMembers: 0,
+                    curveProvided: true,
+                    curve: defaultCurve(),
+                    name: DEFAULT_METADATA.name,
+                    description: DEFAULT_METADATA.description,
+                    logoLink: DEFAULT_METADATA.logoLink,
+                    proposalFeeBps: 0,
+                    referralShareBps: 0
+                })
+            )
+        ).to.be.revertedWithCustomError(factory, "InstantQuorumBelowQuorum");
+    });
+
     it("patches optional fields to defaults when config uses sentinel values", async function () {
         const [deployer, , protocolRecipient] = await ethers.getSigners();
         const token = await deployToken("Patched", "PTC");

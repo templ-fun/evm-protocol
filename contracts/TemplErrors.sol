@@ -81,6 +81,8 @@ library TemplErrors {
     error ExecutionDelayActive();
     /// @notice Thrown when a provided percentage value is invalid.
     error InvalidPercentage();
+    /// @notice Thrown when instant quorum is configured below the normal quorum threshold.
+    error InstantQuorumBelowQuorum();
     /// @notice Thrown when priest dictatorship mode disables proposal-based governance.
     error DictatorshipEnabled();
     /// @notice Thrown when attempting to toggle dictatorship to its current state.

@@ -282,7 +282,6 @@ contract TemplGovernanceModule is TemplBase {
         return id;
     }
 
-
     /// @notice Opens a proposal to perform an arbitrary external call through the templ.
     /// @dev Reverts if `_target` is zero or if no calldata is supplied. Any revert
     ///      produced by the downstream call will be bubbled up during execution.

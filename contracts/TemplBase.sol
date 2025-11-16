@@ -920,7 +920,8 @@ abstract contract TemplBase is ReentrancyGuard {
     /// @notice Returns whether `proposal` has satisfied quorum, delay, and majority conditions.
     function _proposalPassed(Proposal storage proposal) internal view returns (bool passed) {
         if (proposal.quorumExempt) {
-            return (!(block.timestamp < proposal.endTime) && _meetsYesVoteThreshold(proposal.yesVotes, proposal.noVotes));
+            return (!(block.timestamp < proposal.endTime) &&
+                _meetsYesVoteThreshold(proposal.yesVotes, proposal.noVotes));
         }
         bool instant = proposal.instantQuorumMet;
         if (proposal.quorumReachedAt == 0 && !instant) {
@@ -1301,9 +1302,12 @@ abstract contract TemplBase is ReentrancyGuard {
     }
 
     /// @notice Updates the quorum threshold in basis points (0-10_000).
-    /// @param newQuorumBps New quorum threshold (bps).
+    /// @param newQuorumBps New quorum threshold (bps). Cannot exceed the instant quorum threshold.
     function _setQuorumBps(uint256 newQuorumBps) internal {
         if (newQuorumBps > BPS_DENOMINATOR) revert TemplErrors.InvalidPercentage();
+        if (instantQuorumBps != 0 && newQuorumBps > instantQuorumBps) {
+            revert TemplErrors.InstantQuorumBelowQuorum();
+        }
         uint256 previous = quorumBps;
         quorumBps = newQuorumBps;
         emit QuorumBpsUpdated(previous, newQuorumBps);
@@ -1349,10 +1353,13 @@ abstract contract TemplBase is ReentrancyGuard {
     }
 
     /// @notice Updates the instant quorum threshold (bps of eligible voters).
-    /// @param newThresholdBps New instant quorum threshold.
+    /// @param newThresholdBps New instant quorum threshold. Must be at least the normal quorum threshold.
     function _setInstantQuorumBps(uint256 newThresholdBps) internal {
         if (newThresholdBps == 0 || newThresholdBps > BPS_DENOMINATOR) {
             revert TemplErrors.InvalidPercentage();
+        }
+        if (newThresholdBps < quorumBps) {
+            revert TemplErrors.InstantQuorumBelowQuorum();
         }
         uint256 previous = instantQuorumBps;
         instantQuorumBps = newThresholdBps;

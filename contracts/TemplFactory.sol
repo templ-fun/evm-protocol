@@ -73,7 +73,7 @@ contract TemplFactory {
         uint256 yesVoteThresholdBps;
         /// @notice Whether the templ should start in council governance mode.
         bool councilMode;
-        /// @notice Instant quorum threshold (bps) that enables immediate execution when satisfied. 0 applies factory default.
+        /// @notice Instant quorum threshold (bps) that enables immediate execution when satisfied. Must be ≥ quorum. 0 applies factory default.
         uint256 instantQuorumBps;
     }
 
@@ -387,6 +387,10 @@ contract TemplFactory {
         if (cfg.councilMode && cfg.priestIsDictator) revert TemplErrors.CouncilModeActive();
         if (cfg.instantQuorumBps == 0 || cfg.instantQuorumBps > BPS_DENOMINATOR) {
             revert TemplErrors.InvalidPercentage();
+        }
+        uint256 effectiveQuorumBps = cfg.quorumBps == 0 ? DEFAULT_QUORUM_BPS : cfg.quorumBps;
+        if (cfg.instantQuorumBps < effectiveQuorumBps) {
+            revert TemplErrors.InstantQuorumBelowQuorum();
         }
 
         TEMPL deployed = new TEMPL(

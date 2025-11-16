@@ -6,6 +6,7 @@ require("dotenv").config();
 const DEFAULT_BURN_BPS = 3_000;
 const DEFAULT_TREASURY_BPS = 3_000;
 const DEFAULT_MEMBER_POOL_BPS = 3_000;
+const DEFAULT_QUORUM_BPS = 3_300;
 const USE_DEFAULT_SENTINEL = -1;
 const CURVE_STYLE_INDEX = {
   static: 0,
@@ -373,6 +374,12 @@ async function main() {
   const effectiveBurnAddress = BURN_ADDRESS || DEFAULT_BURN_ADDRESS;
 
   const quorumPercentBps = QUORUM_BPS !== undefined ? Math.round(QUORUM_BPS) : 0;
+  const resolvedQuorumBps = quorumPercentBps || DEFAULT_QUORUM_BPS;
+  if (instantQuorumBps < resolvedQuorumBps) {
+    throw new Error(
+      `INSTANT_QUORUM_BPS (${instantQuorumBps}) must be at least the quorum threshold (${resolvedQuorumBps}).`
+    );
+  }
 
   const entryFee = BigInt(ENTRY_FEE);
   if (entryFee < 10n) {
@@ -419,7 +426,7 @@ async function main() {
   const network = await hre.ethers.provider.getNetwork();
   const chainIdNumber = Number(network.chainId);
   console.log("Network Chain ID:", network.chainId.toString());
-  console.log("Quorum Bps:", quorumPercentBps || 3300);
+  console.log("Quorum Bps:", resolvedQuorumBps);
   console.log("Post‑Quorum Voting Period (seconds):", POST_QUORUM_VOTING_PERIOD_SECONDS ?? 36 * 60 * 60);
   console.log("Burn Address:", effectiveBurnAddress);
   console.log("Priest Dictatorship:", PRIEST_IS_DICTATOR ? 'enabled' : 'disabled');
