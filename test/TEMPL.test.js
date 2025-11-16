@@ -666,6 +666,8 @@ describe("TEMPL Contract with DAO Governance", function () {
         });
 
         it("Should not execute failed proposals", async function () {
+            await joinMembers(templ, token, [user4]);
+
             // Create proposal
             const callData = encodeWithdrawTreasuryDAO(
                 token.target,
@@ -684,6 +686,7 @@ describe("TEMPL Contract with DAO Governance", function () {
             await templ.connect(user1).vote(0, false);
             await templ.connect(user2).vote(0, false);
             await templ.connect(user3).vote(0, true);
+            await templ.connect(user4).vote(0, false);
             await templ.connect(priest).vote(0, true);
 
             // Fast forward

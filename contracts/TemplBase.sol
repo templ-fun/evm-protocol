@@ -811,8 +811,8 @@ abstract contract TemplBase is ReentrancyGuard {
         }
         uint256 lhs = yesVotes * BPS_DENOMINATOR;
         uint256 rhs = yesVoteThresholdBps * totalVotes;
-        if (yesVoteThresholdBps == BPS_DENOMINATOR) {
-            return lhs == rhs;
+        if (lhs == rhs) {
+            return true;
         }
         return lhs > rhs;
     }
