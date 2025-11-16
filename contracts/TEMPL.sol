@@ -49,7 +49,9 @@ contract TEMPL is TemplBase {
     /// @param _logoLink Canonical logo URL for the templ.
     /// @param _proposalCreationFeeBps Proposal creation fee expressed in basis points of the current entry fee.
     /// @param _referralShareBps Referral share expressed in basis points of the member pool allocation.
+    /// @param _yesVoteThresholdBps Basis points of votes cast required for proposals to pass.
     /// @param _instantQuorumBps Instant quorum threshold (bps) that enables immediate execution when satisfied.
+    /// @param _startInCouncilMode Whether the templ should begin with council governance enabled.
     /// @param _membershipModule Address of the deployed membership module implementation.
     /// @param _treasuryModule Address of the deployed treasury module implementation.
     /// @param _governanceModule Address of the deployed governance module implementation.
@@ -313,6 +315,15 @@ contract TEMPL is TemplBase {
     }
 
     /// @notice Returns core metadata for a proposal including vote totals and status.
+    /// @param _proposalId Proposal id to inspect.
+    /// @return proposer Address that opened the proposal.
+    /// @return yesVotes Count of recorded YES votes.
+    /// @return noVotes Count of recorded NO votes.
+    /// @return endTime Timestamp when the proposal stops accepting votes (or when instant quorum fired).
+    /// @return executed True when the proposal has already been executed.
+    /// @return passed True when quorum/delay/YES thresholds are satisfied.
+    /// @return title On-chain title recorded for the proposal.
+    /// @return description On-chain description recorded for the proposal.
     function getProposal(
         uint256 _proposalId
     )
@@ -346,6 +357,13 @@ contract TEMPL is TemplBase {
     }
 
     /// @notice Returns quorum-related snapshot data for a proposal.
+    /// @param _proposalId Proposal id to inspect.
+    /// @return eligibleVotersPreQuorum Eligible voter count captured when the proposal was created.
+    /// @return eligibleVotersPostQuorum Eligible voter count captured when quorum was reached.
+    /// @return preQuorumSnapshotBlock Block number captured at proposal creation.
+    /// @return quorumSnapshotBlock Block number captured when quorum was reached (0 when never reached).
+    /// @return createdAt Timestamp when the proposal was opened.
+    /// @return quorumReachedAt Timestamp when quorum was reached (0 when not yet reached).
     function getProposalSnapshots(
         uint256 _proposalId
     )
@@ -373,6 +391,9 @@ contract TEMPL is TemplBase {
     }
 
     /// @notice Returns the join sequence snapshots captured for proposal eligibility.
+    /// @param _proposalId Proposal id to inspect.
+    /// @return preQuorumJoinSequence Join sequence frontier required to vote prior to quorum.
+    /// @return quorumJoinSequence Join sequence frontier required once quorum has been reached.
     function getProposalJoinSequences(
         uint256 _proposalId
     ) external view returns (uint256 preQuorumJoinSequence, uint256 quorumJoinSequence) {
@@ -382,6 +403,10 @@ contract TEMPL is TemplBase {
     }
 
     /// @notice Returns whether a voter participated in a proposal and their recorded choice.
+    /// @param _proposalId Proposal id to inspect.
+    /// @param _voter Wallet being checked for participation.
+    /// @return voted True when `_voter` has cast a ballot.
+    /// @return support Recorded vote choice (true for YES, false for NO).
     function hasVoted(uint256 _proposalId, address _voter) external view returns (bool voted, bool support) {
         if (!(_proposalId < proposalCount)) revert TemplErrors.InvalidProposal();
         Proposal storage proposal = proposals[_proposalId];
@@ -390,6 +415,7 @@ contract TEMPL is TemplBase {
     }
 
     /// @notice Lists proposal ids that are still within their active voting/execution window.
+    /// @return proposalIds Array of proposal ids that remain active.
     function getActiveProposals() external view returns (uint256[] memory proposalIds) {
         uint256 len = activeProposalIds.length;
         uint256 currentTime = block.timestamp;
@@ -410,6 +436,10 @@ contract TEMPL is TemplBase {
     }
 
     /// @notice Returns active proposal ids using offset + limit pagination.
+    /// @param offset Number of active proposals to skip from the start of the active set.
+    /// @param limit Maximum number of active ids to return (1-100).
+    /// @return proposalIds Array of active proposal ids bounded by the provided window.
+    /// @return hasMore True when additional active entries exist beyond the returned page.
     function getActiveProposalsPaginated(
         uint256 offset,
         uint256 limit

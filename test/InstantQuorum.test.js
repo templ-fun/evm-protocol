@@ -13,7 +13,7 @@ describe("Instant quorum execution", function () {
     const { templ, token, accounts } = await deployTempl({
       entryFee: ENTRY_FEE,
       proposalFeeBps: 0,
-      instantQuorumBps: 2_500,
+      instantQuorumBps: 6_600,
       councilMode: false,
     });
     const [, , member1, member2] = accounts;
@@ -24,12 +24,14 @@ describe("Instant quorum execution", function () {
     await templ.connect(member1).createProposalSetBurnAddress(immediateBurn, WEEK, "instant burn", "");
     const proposalId = (await templ.proposalCount()) - 1n;
 
+    await templ.connect(member2).vote(proposalId, true);
     await expect(templ.connect(member2).executeProposal(proposalId)).to.not.be.reverted;
     expect(await templ.burnAddress()).to.equal(immediateBurn);
 
     // Update instant quorum to 100% via governance
     await templ.connect(member1).createProposalSetInstantQuorumBps(10_000, WEEK, "raise instant quorum", "");
     const configProposalId = (await templ.proposalCount()) - 1n;
+    await templ.connect(member2).vote(configProposalId, true);
     await expect(templ.connect(member2).executeProposal(configProposalId)).to.not.be.reverted;
     expect(await templ.instantQuorumBps()).to.equal(10_000n);
 
@@ -43,7 +45,7 @@ describe("Instant quorum execution", function () {
     const { templ, token, accounts } = await deployTempl({
       entryFee: ENTRY_FEE,
       proposalFeeBps: 0,
-      instantQuorumBps: 3_000,
+      instantQuorumBps: 7_500,
       councilMode: true,
     });
     const [, priest, member1] = accounts;
@@ -56,6 +58,7 @@ describe("Instant quorum execution", function () {
     await templ.connect(member1).createProposalSetBurnAddress(councilBurn, WEEK, "council burn", "");
     const proposalId = (await templ.proposalCount()) - 1n;
 
+    await templ.connect(priest).vote(proposalId, true);
     await expect(templ.connect(member1).executeProposal(proposalId)).to.not.be.reverted;
     expect(await templ.burnAddress()).to.equal(councilBurn);
   });
@@ -65,9 +68,9 @@ describe("Instant quorum execution", function () {
       entryFee: ENTRY_FEE,
       proposalFeeBps: 0,
       councilMode: false,
-      instantQuorumBps: 3_000,
+      instantQuorumBps: 10_000,
     });
-    const [, , member1] = accounts;
+    const [, priest, member1] = accounts;
     await mintToUsers(token, [member1], TOKEN_SUPPLY);
     await joinMembers(templ, token, [member1]);
 
@@ -75,6 +78,7 @@ describe("Instant quorum execution", function () {
       .connect(member1)
       .createProposalSetDictatorship(true, WEEK, "enable dictatorship", "");
     let proposalId = (await templ.proposalCount()) - 1n;
+    await templ.connect(priest).vote(proposalId, true);
     await expect(templ.connect(member1).executeProposal(proposalId)).to.not.be.reverted;
     expect(await templ.priestIsDictator()).to.equal(true);
 
@@ -82,6 +86,7 @@ describe("Instant quorum execution", function () {
       .connect(member1)
       .createProposalSetDictatorship(false, WEEK, "disable dictatorship", "");
     proposalId = (await templ.proposalCount()) - 1n;
+    await templ.connect(priest).vote(proposalId, true);
     await expect(templ.connect(member1).executeProposal(proposalId)).to.not.be.reverted;
     expect(await templ.priestIsDictator()).to.equal(false);
   });

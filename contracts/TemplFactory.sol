@@ -117,6 +117,9 @@ contract TemplFactory {
     /// @param logoLink Templ logo URL.
     /// @param proposalFeeBps Proposal fee (bps of entry fee).
     /// @param referralShareBps Referral share (bps of member pool).
+    /// @param yesVoteThresholdBps YES vote threshold (bps of votes cast).
+    /// @param instantQuorumBps Instant quorum threshold (bps of eligible voters).
+    /// @param councilMode Whether the templ launched in council governance mode.
     event TemplCreated(
         address indexed templ,
         address indexed creator,
@@ -172,6 +175,7 @@ contract TemplFactory {
     /// @param _membershipModule Address of the deployed membership module implementation.
     /// @param _treasuryModule Address of the deployed treasury module implementation.
     /// @param _governanceModule Address of the deployed governance module implementation.
+    /// @param _councilModule Address of the deployed council governance module implementation.
     constructor(
         address _factoryDeployer,
         address _protocolFeeRecipient,

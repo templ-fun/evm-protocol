@@ -628,6 +628,7 @@ abstract contract TemplBase is ReentrancyGuard {
     /// @param _logoLink Initial templ logo link.
     /// @param _proposalCreationFeeBps Proposal creation fee in basis points of the entry fee.
     /// @param _referralShareBps Referral share in basis points of the member pool allocation.
+    /// @param _yesVoteThresholdBps Basis points of votes cast required for proposals to pass (0 uses default).
     /// @param _instantQuorumBps Instant quorum threshold (bps) required for immediate execution.
     /// @dev Also initializes the default `preQuorumVotingPeriod` to `MIN_PRE_QUORUM_VOTING_PERIOD`.
     function _initializeTempl(
@@ -794,12 +795,16 @@ abstract contract TemplBase is ReentrancyGuard {
     }
 
     /// @notice Returns the number of wallets eligible to vote under the current governance mode.
+    /// @return count Eligible voter count depending on council/member mode.
     function _eligibleVoterCount() internal view returns (uint256 count) {
         return councilModeEnabled ? councilMemberCount : memberCount;
     }
 
     /// @notice Returns true when `yesVotes` satisfies the configured YES threshold relative to total votes.
-    function _meetsYesVoteThreshold(uint256 yesVotes, uint256 noVotes) internal view returns (bool) {
+    /// @param yesVotes Count of YES ballots.
+    /// @param noVotes Count of NO ballots.
+    /// @return meets True when the YES ratio clears the configured threshold.
+    function _meetsYesVoteThreshold(uint256 yesVotes, uint256 noVotes) internal view returns (bool meets) {
         uint256 totalVotes = yesVotes + noVotes;
         if (totalVotes == 0) {
             return false;
@@ -813,6 +818,7 @@ abstract contract TemplBase is ReentrancyGuard {
     }
 
     /// @notice Updates proposal state when instant quorum is satisfied.
+    /// @param proposal Proposal being evaluated for instant quorum.
     function _maybeTriggerInstantQuorum(Proposal storage proposal) internal {
         if (proposal.instantQuorumMet) {
             return;
@@ -918,6 +924,8 @@ abstract contract TemplBase is ReentrancyGuard {
     }
 
     /// @notice Returns whether `proposal` has satisfied quorum, delay, and majority conditions.
+    /// @param proposal Proposal to evaluate.
+    /// @return passed True when quorum, delay, and YES ratios are satisfied.
     function _proposalPassed(Proposal storage proposal) internal view returns (bool passed) {
         if (proposal.quorumExempt) {
             return (!(block.timestamp < proposal.endTime) &&
@@ -1395,7 +1403,7 @@ abstract contract TemplBase is ReentrancyGuard {
     /// @param removedBy Caller initiating the removal (used for events).
     function _removeCouncilMember(address account, address removedBy) internal {
         if (!councilMembers[account]) revert TemplErrors.CouncilMemberMissing();
-        if (councilMemberCount <= 2) revert TemplErrors.CouncilMemberMinimum();
+        if (councilMemberCount < 3) revert TemplErrors.CouncilMemberMinimum();
         councilMembers[account] = false;
         --councilMemberCount;
         emit CouncilMemberRemoved(account, removedBy);
