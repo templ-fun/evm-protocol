@@ -13,10 +13,15 @@ async function deployTemplModules() {
   const governanceModule = await GovernanceModule.deploy();
   await governanceModule.waitForDeployment();
 
+  const CouncilModule = await ethers.getContractFactory("TemplCouncilModule");
+  const councilModule = await CouncilModule.deploy();
+  await councilModule.waitForDeployment();
+
   return {
     membershipModule: await membershipModule.getAddress(),
     treasuryModule: await treasuryModule.getAddress(),
-    governanceModule: await governanceModule.getAddress()
+    governanceModule: await governanceModule.getAddress(),
+    councilModule: await councilModule.getAddress()
   };
 }
 

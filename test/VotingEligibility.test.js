@@ -217,10 +217,13 @@ describe("Voting Eligibility Based on Join Time", function () {
             // Member2 can still vote (pre-quorum)
             await templ.connect(member2).vote(0, false);
 
-            // Result: 1 yes, 1 no - tie means proposal fails
+            // Another pre-quorum member (the auto-enrolled priest) can also reject it
+            await templ.connect(priest).vote(0, false);
+
+            // Result: 1 yes, 2 no - only pre-quorum votes counted so proposal fails
             const proposal = await templ.getProposal(0);
             expect(proposal.yesVotes).to.equal(1);
-            expect(proposal.noVotes).to.equal(1);
+            expect(proposal.noVotes).to.equal(2);
 
             // Fast forward to end
             await ethers.provider.send("evm_increaseTime", [7 * 24 * 60 * 60]);

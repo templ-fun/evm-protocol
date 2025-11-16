@@ -34,7 +34,8 @@ describe("External rewards: checkpoint updates and remainder flush", function ()
       0,
       modules.membershipModule,
       modules.treasuryModule,
-      modules.governanceModule
+      modules.governanceModule,
+      modules.councilModule
     );
     await templ.waitForDeployment();
     templ = await attachTemplInterface(templ);

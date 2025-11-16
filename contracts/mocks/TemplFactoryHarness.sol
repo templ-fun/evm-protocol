@@ -9,7 +9,8 @@ contract TemplFactoryHarness is TemplFactory {
         uint256 protocolBps,
         address membershipModule,
         address treasuryModule,
-        address governanceModule
+        address governanceModule,
+        address councilModule
     )
         TemplFactory(
             factoryDeployer,
@@ -17,7 +18,8 @@ contract TemplFactoryHarness is TemplFactory {
             protocolBps,
             membershipModule,
             treasuryModule,
-            governanceModule
+            governanceModule,
+            councilModule
         )
     {}
 }

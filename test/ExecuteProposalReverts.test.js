@@ -111,7 +111,8 @@ describe("executeProposal reverts", function () {
       ENTRY_FEE,
       modules.membershipModule,
       modules.treasuryModule,
-      modules.governanceModule
+      modules.governanceModule,
+      modules.councilModule
     );
     await harness.waitForDeployment();
     harness = await attachTemplInterface(harness);

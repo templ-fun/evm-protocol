@@ -291,9 +291,13 @@ describe("Member Pool Distribution - Exhaustive Tests", function () {
                 METADATA.logo,
                 0,
                 0,
+                5_000,
+                 10_000,
+                false,
                 modules.membershipModule,
                 modules.treasuryModule,
                 modules.governanceModule,
+                modules.councilModule,
                 STATIC_CURVE
             );
             await oddTempl.waitForDeployment();

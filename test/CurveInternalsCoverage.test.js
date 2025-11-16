@@ -32,7 +32,8 @@ describe("Curve internals coverage via harness", function () {
       0,
       modules.membershipModule,
       modules.treasuryModule,
-      modules.governanceModule
+      modules.governanceModule,
+      modules.councilModule
     );
     await templ.waitForDeployment();
     const h = await attachTemplInterface(templ);
@@ -60,4 +61,3 @@ describe("Curve internals coverage via harness", function () {
     expect(await h.harnessMulWouldOverflow(1, 1)).to.equal(false);
   });
 });
-

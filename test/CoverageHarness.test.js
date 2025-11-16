@@ -40,7 +40,8 @@ describe("TemplHarness coverage helpers", function () {
       0,
       modules.membershipModule,
       modules.treasuryModule,
-      modules.governanceModule
+      modules.governanceModule,
+      modules.councilModule
     );
     await harness.waitForDeployment();
     harness = await attachTemplInterface(harness);
@@ -70,7 +71,8 @@ describe("TemplHarness coverage helpers", function () {
         0,
         modules.membershipModule,
         modules.treasuryModule,
-        modules.governanceModule
+        modules.governanceModule,
+        modules.councilModule
       )
     ).to.be.revertedWithCustomError(Harness, "AmountZero");
   });
@@ -98,7 +100,8 @@ describe("TemplHarness coverage helpers", function () {
       0,
       modules.membershipModule,
       modules.treasuryModule,
-      modules.governanceModule
+      modules.governanceModule,
+      modules.councilModule
     );
     await capped.waitForDeployment();
     capped = await attachTemplInterface(capped);

@@ -5,6 +5,7 @@ import {TEMPL} from "../TEMPL.sol";
 import {TemplMembershipModule} from "../TemplMembership.sol";
 import {TemplTreasuryModule} from "../TemplTreasury.sol";
 import {TemplGovernanceModule} from "../TemplGovernance.sol";
+import {TemplCouncilModule} from "../TemplCouncil.sol";
 import {CurveConfig, CurveSegment, CurveStyle} from "../TemplCurve.sol";
 import {TestToken} from "../mocks/TestToken.sol";
 
@@ -36,6 +37,7 @@ contract EchidnaTemplHarness {
         TemplMembershipModule membership = new TemplMembershipModule();
         TemplTreasuryModule treasury = new TemplTreasuryModule();
         TemplGovernanceModule governance = new TemplGovernanceModule();
+        TemplCouncilModule council = new TemplCouncilModule();
 
         // Exponential curve with 11_000 bps growth, infinite tail
         CurveConfig memory curve;
@@ -62,9 +64,13 @@ contract EchidnaTemplHarness {
             "", // logo
             0, // proposal fee bps
             0, // referral share bps
+            5_000, // yes vote threshold bps
+            10_000, // instant quorum bps
+            false, // start in council mode
             address(membership),
             address(treasury),
             address(governance),
+            address(council),
             curve
         );
 

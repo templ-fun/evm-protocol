@@ -7,7 +7,7 @@ describe("Prod Readiness", function () {
   const PROTOCOL_BPS = 1000; // 10%
 
   let deployer, protocol, priest, alice, bob, carol, dave, eve;
-  let membershipModule, treasuryModule, governanceModule;
+  let membershipModule, treasuryModule, governanceModule, councilModule;
   let factory;
   let token; // access token
   let extraToken; // external reward ERC20
@@ -31,6 +31,9 @@ describe("Prod Readiness", function () {
     const Governance = await ethers.getContractFactory("TemplGovernanceModule");
     governanceModule = await Governance.deploy();
     await governanceModule.waitForDeployment();
+    const Council = await ethers.getContractFactory("TemplCouncilModule");
+    councilModule = await Council.deploy();
+    await councilModule.waitForDeployment();
 
     // Deploy factory
     const Factory = await ethers.getContractFactory("TemplFactory");
@@ -40,7 +43,8 @@ describe("Prod Readiness", function () {
       PROTOCOL_BPS,
       await membershipModule.getAddress(),
       await treasuryModule.getAddress(),
-      await governanceModule.getAddress()
+      await governanceModule.getAddress(),
+      await councilModule.getAddress()
     );
     await factory.waitForDeployment();
 
@@ -61,19 +65,30 @@ describe("Prod Readiness", function () {
     // Allow anyone to create templs for this test
     await (await factory.connect(deployer).setPermissionless(true)).wait();
 
-    // Create templ via factory with explicit priest
-    const tx = await factory
-      .connect(deployer)
-      .createTemplFor(
-        await priest.getAddress(),
-        await token.getAddress(),
-        ENTRY_FEE,
-        "templ.fun E2E",
-        "End-to-end prod readiness",
-        "https://example.com/logo.png",
-        2500, // proposal fee bps
-        2500 // referral share bps (of member-pool slice)
-      );
+    // Create templ via factory with explicit priest (council mode disabled for democracy testing)
+    const tx = await factory.connect(deployer).createTemplWithConfig({
+      priest: await priest.getAddress(),
+      token: await token.getAddress(),
+      entryFee: ENTRY_FEE,
+      burnBps: -1,
+      treasuryBps: -1,
+      memberPoolBps: -1,
+      quorumBps: 0,
+      executionDelaySeconds: 0,
+      burnAddress: ethers.ZeroAddress,
+      priestIsDictator: false,
+      maxMembers: 0,
+      curveProvided: false,
+      curve: { primary: { style: 0, rateBps: 0, length: 0 }, additionalSegments: [] },
+      name: "templ.fun E2E",
+      description: "End-to-end prod readiness",
+      logoLink: "https://example.com/logo.png",
+      proposalFeeBps: 2_500,
+      referralShareBps: 2_500,
+      yesVoteThresholdBps: 5_000,
+      councilMode: false,
+      instantQuorumBps: 10_000
+    });
     const receipt = await tx.wait();
     const templAddress = receipt.logs
       .map((l) => {
@@ -92,10 +107,11 @@ describe("Prod Readiness", function () {
     governance = await ethers.getContractAt("TemplGovernanceModule", templAddress);
 
     // Sanity: registered selectors are complete and route to expected modules
-    const [mSels, tSels, gSels] = await templ.getRegisteredSelectors();
+    const [mSels, tSels, gSels, cSels] = await templ.getRegisteredSelectors();
     expect(mSels.length).to.equal(18);
-    expect(tSels.length).to.equal(17);
-    expect(gSels.length).to.equal(25);
+    expect(tSels.length).to.equal(25);
+    expect(gSels.length).to.equal(20);
+    expect(cSels.length).to.equal(4);
 
     for (const sel of mSels) {
       expect(await templ.getModuleForSelector(sel)).to.equal(await membershipModule.getAddress());
@@ -105,6 +121,9 @@ describe("Prod Readiness", function () {
     }
     for (const sel of gSels) {
       expect(await templ.getModuleForSelector(sel)).to.equal(await governanceModule.getAddress());
+    }
+    for (const sel of cSels) {
+      expect(await templ.getModuleForSelector(sel)).to.equal(await templ.COUNCIL_MODULE());
     }
 
     // Direct calls to modules revert (delegatecall guard)
@@ -448,17 +467,17 @@ describe("Prod Readiness", function () {
     const lastId = await openVoteExecute(bob, async (s) =>
       governance.connect(s).createProposalSetBurnAddress(await protocol.getAddress(), 0, "Burn sink", "rotate")
     );
-    const [preJS, quorumJS] = await governance.getProposalJoinSequences(lastId);
-    const [eligiblePre, eligiblePost] = (await governance.getProposalSnapshots(lastId));
-    const hasVoted = await governance.hasVoted(lastId, await alice.getAddress());
+    const [preJS, quorumJS] = await templ.getProposalJoinSequences(lastId);
+    const [eligiblePre, eligiblePost] = await templ.getProposalSnapshots(lastId);
+    const hasVoted = await templ.hasVoted(lastId, await alice.getAddress());
     expect(preJS).to.be.greaterThan(0n);
     expect(eligiblePre).to.be.greaterThan(0n);
     expect(hasVoted.voted).to.equal(true);
     expect(hasVoted.support).to.equal(true);
 
-    const active = await governance.getActiveProposals();
+    const active = await templ.getActiveProposals();
     if (active.length > 0) {
-      const [page, more] = await governance.getActiveProposalsPaginated(0, Math.min(2, active.length));
+      const [page, more] = await templ.getActiveProposalsPaginated(0, Math.min(2, active.length));
       expect(page.length).to.be.gt(0);
       expect(typeof more).to.equal("boolean");
       // Prune at most 5 entries

@@ -91,6 +91,7 @@ async function main() {
   let membershipModuleAddress = (process.env.MEMBERSHIP_MODULE_ADDRESS || "").trim();
   let treasuryModuleAddress = (process.env.TREASURY_MODULE_ADDRESS || "").trim();
   let governanceModuleAddress = (process.env.GOVERNANCE_MODULE_ADDRESS || "").trim();
+  let councilModuleAddress = (process.env.COUNCIL_MODULE_ADDRESS || "").trim();
 
   const network = await hre.ethers.provider.getNetwork();
   const networkName = resolveNetworkName(network);
@@ -120,12 +121,14 @@ async function main() {
       membershipModuleAddress = await existingFactory.MEMBERSHIP_MODULE();
       treasuryModuleAddress = await existingFactory.TREASURY_MODULE();
       governanceModuleAddress = await existingFactory.GOVERNANCE_MODULE();
+      councilModuleAddress = await existingFactory.COUNCIL_MODULE();
       // Prefer the on-chain factory deployer when reusing an existing deployment
       factoryDeployer = await existingFactory.factoryDeployer();
       console.log("Existing modules:");
       console.log("  - membership:", membershipModuleAddress);
       console.log("  - treasury:", treasuryModuleAddress);
       console.log("  - governance:", governanceModuleAddress);
+      console.log("  - council:", councilModuleAddress);
     } catch (err) {
     console.warn("Warning: unable to read protocol bps from factory:", err?.message || err);
     }
@@ -151,6 +154,11 @@ async function main() {
       "TemplGovernanceModule",
       "GOVERNANCE_MODULE_ADDRESS"
     );
+    councilModuleAddress = await deployModuleIfNeeded(
+      "Council",
+      "TemplCouncilModule",
+      "COUNCIL_MODULE_ADDRESS"
+    );
 
     console.log("\nDeploying TemplFactory...");
     const Factory = await hre.ethers.getContractFactory("TemplFactory");
@@ -160,7 +168,8 @@ async function main() {
       protocolPercentBps,
       membershipModuleAddress,
       treasuryModuleAddress,
-      governanceModuleAddress
+      governanceModuleAddress,
+      councilModuleAddress
     );
     await factory.waitForDeployment();
     factoryAddress = await factory.getAddress();
@@ -185,6 +194,7 @@ async function main() {
   console.log("- Membership Module:", membershipModuleAddress);
   console.log("- Treasury Module:", treasuryModuleAddress);
   console.log("- Governance Module:", governanceModuleAddress);
+  console.log("- Council Module:", councilModuleAddress);
 
   await waitForContractCode(factoryAddress, hre.ethers.provider);
   console.log("\n✅ TemplFactory ready at:", factoryAddress);
@@ -201,6 +211,7 @@ async function main() {
     membershipModule: membershipModuleAddress,
     treasuryModule: treasuryModuleAddress,
     governanceModule: governanceModuleAddress,
+    councilModule: councilModuleAddress,
     deployedAt: new Date().toISOString(),
     deployer: deployer.address,
     deploymentTx: deploymentReceipt?.hash || null,
@@ -221,7 +232,7 @@ async function main() {
     const verifyNetwork = networkName || "base";
     console.log("\nVerification command:");
     console.log(
-      `npx hardhat verify --contract contracts/TemplFactory.sol:TemplFactory --network ${verifyNetwork} ${factoryAddress} ${factoryDeployer} ${protocolRecipient} ${protocolPercentBps} ${membershipModuleAddress} ${treasuryModuleAddress} ${governanceModuleAddress}`
+      `npx hardhat verify --contract contracts/TemplFactory.sol:TemplFactory --network ${verifyNetwork} ${factoryAddress} ${factoryDeployer} ${protocolRecipient} ${protocolPercentBps} ${membershipModuleAddress} ${treasuryModuleAddress} ${governanceModuleAddress} ${councilModuleAddress}`
     );
     console.log("\nModule verification commands:");
     console.log(
@@ -232,6 +243,9 @@ async function main() {
     );
     console.log(
       `npx hardhat verify --contract contracts/TemplGovernance.sol:TemplGovernanceModule --network ${verifyNetwork} ${governanceModuleAddress}`
+    );
+    console.log(
+      `npx hardhat verify --contract contracts/TemplCouncil.sol:TemplCouncilModule --network ${verifyNetwork} ${councilModuleAddress}`
     );
   }
 

@@ -20,10 +20,11 @@ async function getMergedTemplAbi() {
   const membership = await artifacts.readArtifact("TemplMembershipModule");
   const treasury = await artifacts.readArtifact("TemplTreasuryModule");
   const governance = await artifacts.readArtifact("TemplGovernanceModule");
+  const council = await artifacts.readArtifact("TemplCouncilModule");
 
   const merged = [];
   const seen = new Set();
-  for (const source of [templ.abi, membership.abi, treasury.abi, governance.abi]) {
+  for (const source of [templ.abi, membership.abi, treasury.abi, governance.abi, council.abi]) {
     for (const item of source) {
       const key = abiKey(item);
       if (seen.has(key)) {

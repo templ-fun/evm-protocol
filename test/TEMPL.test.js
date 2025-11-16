@@ -51,7 +51,7 @@ describe("TEMPL Contract with DAO Governance", function () {
             const percentToken = await Token.deploy("Percent", "PERC", 18);
             const customBurnAddress = "0x00000000000000000000000000000000000000CC";
             const TemplFactory = await ethers.getContractFactory("TEMPL");
-            const { membershipModule, treasuryModule, governanceModule } = await deployTemplModules();
+            const { membershipModule, treasuryModule, governanceModule, councilModule } = await deployTemplModules();
             let templDirect = await TemplFactory.deploy(
                 priest.address,
                 priest.address,
@@ -71,9 +71,13 @@ describe("TEMPL Contract with DAO Governance", function () {
                 "https://templ.direct",
                 0,
                 0,
+                5_000,
+                 10_000,
+                false,
                 membershipModule,
                 treasuryModule,
                 governanceModule,
+                councilModule,
                 STATIC_CURVE
             );
             await templDirect.waitForDeployment();
@@ -90,7 +94,7 @@ describe("TEMPL Contract with DAO Governance", function () {
 
         it("Should revert when entry fee not divisible by 10", async function () {
             const invalidFee = ENTRY_FEE + 5n;
-            const { membershipModule, treasuryModule, governanceModule } = await deployTemplModules();
+            const { membershipModule, treasuryModule, governanceModule, councilModule } = await deployTemplModules();
             const TEMPL = await ethers.getContractFactory("TEMPL");
             await expect(
                 TEMPL.deploy(
@@ -112,16 +116,20 @@ describe("TEMPL Contract with DAO Governance", function () {
                     METADATA.logo,
                     0,
                     0,
+                    5_000,
+                     10_000,
+                    false,
                     membershipModule,
                     treasuryModule,
                     governanceModule,
+                    councilModule,
                     STATIC_CURVE
                 )
             ).to.be.revertedWithCustomError(TEMPL, "InvalidEntryFee");
         });
 
         it("Should revert when required address is zero", async function () {
-            const { membershipModule, treasuryModule, governanceModule } = await deployTemplModules();
+            const { membershipModule, treasuryModule, governanceModule, councilModule } = await deployTemplModules();
             const TEMPL = await ethers.getContractFactory("TEMPL");
             await expect(
                 TEMPL.deploy(
@@ -143,16 +151,20 @@ describe("TEMPL Contract with DAO Governance", function () {
                     METADATA.logo,
                     0,
                     0,
+                    5_000,
+                     10_000,
+                    false,
                     membershipModule,
                     treasuryModule,
                     governanceModule,
+                    councilModule,
                     STATIC_CURVE
                 )
             ).to.be.revertedWithCustomError(TEMPL, "InvalidRecipient");
         });
 
         it("Should revert when protocol fee recipient is zero", async function () {
-            const { membershipModule, treasuryModule, governanceModule } = await deployTemplModules();
+            const { membershipModule, treasuryModule, governanceModule, councilModule } = await deployTemplModules();
             const TEMPL = await ethers.getContractFactory("TEMPL");
             await expect(
                 TEMPL.deploy(
@@ -174,16 +186,20 @@ describe("TEMPL Contract with DAO Governance", function () {
                     METADATA.logo,
                     0,
                     0,
+                    5_000,
+                     10_000,
+                    false,
                     membershipModule,
                     treasuryModule,
                     governanceModule,
+                    councilModule,
                     STATIC_CURVE
                 )
             ).to.be.revertedWithCustomError(TEMPL, "InvalidRecipient");
         });
 
         it("defaults quorum, execution delay and burn address when zero", async function () {
-            const { membershipModule, treasuryModule, governanceModule } = await deployTemplModules();
+            const { membershipModule, treasuryModule, governanceModule, councilModule } = await deployTemplModules();
             const TEMPL = await ethers.getContractFactory("TEMPL");
             let templZero = await TEMPL.deploy(
                 priest.address,
@@ -204,9 +220,13 @@ describe("TEMPL Contract with DAO Governance", function () {
                 METADATA.logo,
                 0,
                 0,
+                5_000,
+                 10_000,
+                false,
                 membershipModule,
                 treasuryModule,
                 governanceModule,
+                councilModule,
                 STATIC_CURVE
             );
             await templZero.waitForDeployment();
@@ -218,7 +238,7 @@ describe("TEMPL Contract with DAO Governance", function () {
         });
 
         it("reverts when quorum percent exceeds total", async function () {
-            const { membershipModule, treasuryModule, governanceModule } = await deployTemplModules();
+            const { membershipModule, treasuryModule, governanceModule, councilModule } = await deployTemplModules();
             const TEMPL = await ethers.getContractFactory("TEMPL");
             await expect(
                 TEMPL.deploy(
@@ -240,16 +260,20 @@ describe("TEMPL Contract with DAO Governance", function () {
                     METADATA.logo,
                     0,
                     0,
+                    5_000,
+                     10_000,
+                    false,
                     membershipModule,
                     treasuryModule,
                     governanceModule,
+                    councilModule,
                     STATIC_CURVE
                 )
             ).to.be.revertedWithCustomError(TEMPL, "InvalidPercentage");
         });
 
         it("reverts when fee splits do not sum to 100", async function () {
-            const { membershipModule, treasuryModule, governanceModule } = await deployTemplModules();
+            const { membershipModule, treasuryModule, governanceModule, councilModule } = await deployTemplModules();
             const TEMPL = await ethers.getContractFactory("TEMPL");
             await expect(
                 TEMPL.deploy(
@@ -271,16 +295,20 @@ describe("TEMPL Contract with DAO Governance", function () {
                     METADATA.logo,
                     0,
                     0,
+                    5_000,
+                     10_000,
+                    false,
                     membershipModule,
                     treasuryModule,
                     governanceModule,
+                    councilModule,
                     STATIC_CURVE
                 )
             ).to.be.revertedWithCustomError(TEMPL, "InvalidPercentageSplit");
         });
 
         it("Should revert when access token address is zero", async function () {
-            const { membershipModule, treasuryModule, governanceModule } = await deployTemplModules();
+            const { membershipModule, treasuryModule, governanceModule, councilModule } = await deployTemplModules();
             const TEMPL = await ethers.getContractFactory("TEMPL");
             await expect(
                 TEMPL.deploy(
@@ -302,16 +330,20 @@ describe("TEMPL Contract with DAO Governance", function () {
                     METADATA.logo,
                     0,
                     0,
+                    5_000,
+                     10_000,
+                    false,
                     membershipModule,
                     treasuryModule,
                     governanceModule,
+                    councilModule,
                     STATIC_CURVE
                 )
             ).to.be.revertedWithCustomError(TEMPL, "InvalidRecipient");
         });
 
         it("Should revert when entry fee is zero", async function () {
-            const { membershipModule, treasuryModule, governanceModule } = await deployTemplModules();
+            const { membershipModule, treasuryModule, governanceModule, councilModule } = await deployTemplModules();
             const TEMPL = await ethers.getContractFactory("TEMPL");
             await expect(
                 TEMPL.deploy(
@@ -333,9 +365,13 @@ describe("TEMPL Contract with DAO Governance", function () {
                     METADATA.logo,
                     0,
                     0,
+                    5_000,
+                     10_000,
+                    false,
                     membershipModule,
                     treasuryModule,
                     governanceModule,
+                    councilModule,
                     STATIC_CURVE
                 )
             ).to.be.revertedWithCustomError(TEMPL, "AmountZero");
@@ -630,6 +666,8 @@ describe("TEMPL Contract with DAO Governance", function () {
         });
 
         it("Should not execute failed proposals", async function () {
+            await joinMembers(templ, token, [user4]);
+
             // Create proposal
             const callData = encodeWithdrawTreasuryDAO(
                 token.target,
@@ -648,6 +686,7 @@ describe("TEMPL Contract with DAO Governance", function () {
             await templ.connect(user1).vote(0, false);
             await templ.connect(user2).vote(0, false);
             await templ.connect(user3).vote(0, true);
+            await templ.connect(user4).vote(0, false);
             await templ.connect(priest).vote(0, true);
 
             // Fast forward
@@ -1091,7 +1130,7 @@ describe("TEMPL Contract with DAO Governance", function () {
 
     describe("Edge Cases and Security", function () {
         it("Should handle very small entry fees correctly", async function () {
-            const { membershipModule, treasuryModule, governanceModule } = await deployTemplModules();
+            const { membershipModule, treasuryModule, governanceModule, councilModule } = await deployTemplModules();
             const TEMPL = await ethers.getContractFactory("TEMPL");
             let minTempl = await TEMPL.deploy(
                 priest.address,
@@ -1112,9 +1151,13 @@ describe("TEMPL Contract with DAO Governance", function () {
                 METADATA.logo,
                 0,
                 0,
+                5_000,
+                 10_000,
+                false,
                 membershipModule,
                 treasuryModule,
                 governanceModule,
+                councilModule,
                 STATIC_CURVE
             );
             await minTempl.waitForDeployment();
@@ -1129,7 +1172,7 @@ describe("TEMPL Contract with DAO Governance", function () {
 
         it("Should reject entry fee below minimum", async function () {
             const factory = await ethers.getContractFactory("TEMPL");
-            const { membershipModule, treasuryModule, governanceModule } = await deployTemplModules();
+            const { membershipModule, treasuryModule, governanceModule, councilModule } = await deployTemplModules();
             await expect(factory.deploy(
                 priest.address,
                 priest.address, // protocolFeeRecipient
@@ -1149,9 +1192,13 @@ describe("TEMPL Contract with DAO Governance", function () {
                 METADATA.logo,
                 0,
                 0,
+                5_000,
+                 10_000,
+                false,
                 membershipModule,
                 treasuryModule,
                 governanceModule,
+                councilModule,
                 STATIC_CURVE
             )).to.be.revertedWithCustomError(factory, "EntryFeeTooSmall");
         });

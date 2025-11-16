@@ -34,7 +34,7 @@ const METADATA = {
       token = await ReentrantToken.deploy("Reentrant Token", "RNT");
       await token.waitForDeployment();
 
-      const { membershipModule, treasuryModule, governanceModule } = await deployTemplModules();
+      const { membershipModule, treasuryModule, governanceModule, councilModule } = await deployTemplModules();
 
       const TemplFactory = await ethers.getContractFactory("TEMPL");
       templ = await TemplFactory.deploy(
@@ -51,16 +51,20 @@ const METADATA = {
         "0x000000000000000000000000000000000000dEaD",
         false,
         0,
-        METADATA.name,
-        METADATA.description,
-        METADATA.logo,
-        0,
-        0,
-        membershipModule,
-        treasuryModule,
-        governanceModule,
-        STATIC_CURVE
-      );
+      METADATA.name,
+      METADATA.description,
+      METADATA.logo,
+      0,
+      0,
+      5_000,
+       10_000,
+      false,
+      membershipModule,
+      treasuryModule,
+      governanceModule,
+      councilModule,
+      STATIC_CURVE
+    );
       await templ.waitForDeployment();
       templ = await attachTemplInterface(templ);
 
@@ -108,7 +112,7 @@ const METADATA = {
       token = await ReentrantToken.deploy("Reentrant Token", "RNT");
       await token.waitForDeployment();
 
-      const { membershipModule, treasuryModule, governanceModule } = await deployTemplModules();
+      const { membershipModule, treasuryModule, governanceModule, councilModule } = await deployTemplModules();
 
       const TemplFactory = await ethers.getContractFactory("TEMPL");
       templ = await TemplFactory.deploy(
@@ -125,16 +129,20 @@ const METADATA = {
         "0x000000000000000000000000000000000000dEaD",
         false,
         0,
-        METADATA.name,
-        METADATA.description,
-        METADATA.logo,
-        0,
-        0,
-        membershipModule,
-        treasuryModule,
-        governanceModule,
-        STATIC_CURVE
-      );
+      METADATA.name,
+      METADATA.description,
+      METADATA.logo,
+      0,
+      0,
+      5_000,
+       10_000,
+      false,
+      membershipModule,
+      treasuryModule,
+      governanceModule,
+      councilModule,
+      STATIC_CURVE
+    );
       await templ.waitForDeployment();
       templ = await attachTemplInterface(templ);
 

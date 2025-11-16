@@ -43,6 +43,7 @@ describe("TEMPL selector → module introspection", function () {
     const { templ } = await deployTempl();
     const treasury = await templ.TREASURY_MODULE();
     const governance = await templ.GOVERNANCE_MODULE();
+    const council = await templ.COUNCIL_MODULE();
 
     const sel = (name) => templ.interface.getFunction(name).selector;
 
@@ -51,6 +52,9 @@ describe("TEMPL selector → module introspection", function () {
       "setQuorumBpsDAO",
       "setPostQuorumVotingPeriodDAO",
       "setBurnAddressDAO",
+      "setYesVoteThresholdBpsDAO",
+      "setCouncilModeDAO",
+      "setInstantQuorumBpsDAO",
     ]) {
       expect(await templ.getModuleForSelector(sel(fn))).to.equal(treasury);
     }
@@ -60,12 +64,31 @@ describe("TEMPL selector → module introspection", function () {
       "createProposalSetQuorumBps",
       "createProposalSetPostQuorumVotingPeriod",
       "createProposalSetBurnAddress",
+      "createProposalSetInstantQuorumBps",
     ]) {
       expect(await templ.getModuleForSelector(sel(fn))).to.equal(governance);
+    }
+    for (const fn of [
+      "createProposalSetYesVoteThreshold",
+      "createProposalSetCouncilMode",
+      "createProposalAddCouncilMember",
+      "createProposalRemoveCouncilMember",
+    ]) {
+      expect(await templ.getModuleForSelector(sel(fn))).to.equal(council);
     }
 
     // Generic payload getter is implemented on TEMPL itself, not routed
     expect(await templ.getModuleForSelector(sel("getProposalActionData"))).to.equal(ethers.ZeroAddress);
+    for (const fn of [
+      "getProposal",
+      "getProposalSnapshots",
+      "getProposalJoinSequences",
+      "hasVoted",
+      "getActiveProposals",
+      "getActiveProposalsPaginated",
+    ]) {
+      expect(await templ.getModuleForSelector(sel(fn))).to.equal(ethers.ZeroAddress);
+    }
   });
 
   it("reverts InvalidCallData for non-existent payload getters", async function () {

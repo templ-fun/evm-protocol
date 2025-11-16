@@ -16,7 +16,7 @@ describe('Anchored execution delay after quorum', function () {
     const token = await Token.deploy('Test', 'TEST', 18);
     await token.waitForDeployment();
 
-    const { membershipModule, treasuryModule, governanceModule } = await deployTemplModules();
+    const { membershipModule, treasuryModule, governanceModule, councilModule } = await deployTemplModules();
 
     // Use a short execution delay (2 seconds) and warp time across checks.
     const Templ = await ethers.getContractFactory('TEMPL');
@@ -39,13 +39,22 @@ describe('Anchored execution delay after quorum', function () {
       'https://templ.test/logo.png',
       0,
       0,
+      5_000,
+       10_000,
+      false,
       membershipModule,
       treasuryModule,
       governanceModule,
+      councilModule,
       { primary: { style: 2, rateBps: 11000, length: 0 }, additionalSegments: [] }
     );
     await templ.waitForDeployment();
     templ = await attachTemplInterface(templ);
+
+    // Onboard a second member so instant quorum (100% yes) requires more than the auto YES vote.
+    await token.mint(memberB.address, ethers.parseUnits('100', 18));
+    await token.connect(memberB).approve(await templ.getAddress(), ethers.parseUnits('100', 18));
+    await templ.connect(memberB).join();
 
     // Create a proposal that will hit quorum immediately (priest auto-enrolled, auto-YES).
     const tx = await templ.connect(priest).createProposalSetJoinPaused(true, 0, 'Pause', 'Test');
@@ -60,10 +69,6 @@ describe('Anchored execution delay after quorum', function () {
     expect(endTime).to.be.greaterThan(createdAt);
 
     // Prepare an external call proposal (B) that sets the global execution delay to a large value.
-    // Onboard a second member who will propose the external-call change.
-    await token.mint(memberB.address, ethers.parseUnits('100', 18));
-    await token.connect(memberB).approve(await templ.getAddress(), ethers.parseUnits('100', 18));
-    await templ.connect(memberB).join();
 
     const iface = templ.interface;
     const func = iface.getFunction('setPostQuorumVotingPeriodDAO');

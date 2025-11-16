@@ -242,6 +242,7 @@ describe("Disband Treasury", function () {
 
     await templ.connect(m3).vote(0, false);
     await templ.connect(extraMember).vote(0, false);
+    await templ.connect(priest).vote(0, false);
 
     await advanceTimeBeyondVoting();
     await expect(templ.executeProposal(0))
