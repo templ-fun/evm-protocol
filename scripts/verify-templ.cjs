@@ -17,7 +17,15 @@ function resolveNetworkName(network) {
 
 const FACTORY_EVENT_VARIANTS = [
   {
-    id: 'current',
+    id: 'preCouncilList',
+    abi: 'event TemplCreated(address indexed templ, address indexed creator, address indexed priest, address token, uint256 entryFee, uint256 burnBps, uint256 treasuryBps, uint256 memberPoolBps, uint256 quorumBps, uint256 executionDelaySeconds, address burnAddress, bool priestIsDictator, uint256 maxMembers, uint8[] curveStyles, uint32[] curveRateBps, uint32[] curveLengths, string name, string description, string logoLink, uint256 proposalFeeBps, uint256 referralShareBps, uint256 yesVoteThresholdBps, uint256 instantQuorumBps, bool councilMode, address[] initialCouncilMembers)'
+  },
+  {
+    id: 'councilDefaults',
+    abi: 'event TemplCreated(address indexed templ, address indexed creator, address indexed priest, address token, uint256 entryFee, uint256 burnBps, uint256 treasuryBps, uint256 memberPoolBps, uint256 quorumBps, uint256 executionDelaySeconds, address burnAddress, bool priestIsDictator, uint256 maxMembers, uint8[] curveStyles, uint32[] curveRateBps, uint32[] curveLengths, string name, string description, string logoLink, uint256 proposalFeeBps, uint256 referralShareBps, uint256 yesVoteThresholdBps, uint256 instantQuorumBps, bool councilMode)'
+  },
+  {
+    id: 'legacy',
     abi: 'event TemplCreated(address indexed templ, address indexed creator, address indexed priest, address token, uint256 entryFee, uint256 burnBps, uint256 treasuryBps, uint256 memberPoolBps, uint256 quorumBps, uint256 executionDelaySeconds, address burnAddress, bool priestIsDictator, uint256 maxMembers, uint8[] curveStyles, uint32[] curveRateBps, uint32[] curveLengths, string name, string description, string logoLink, uint256 proposalFeeBps, uint256 referralShareBps)'
   }
 ].map((variant) => {
@@ -49,6 +57,24 @@ function normalizeAddress(value, label) {
     throw new Error(`${label} must be a valid 42-character hex address`);
   }
   return hre.ethers.getAddress(trimmed);
+}
+
+function parseAddressArray(value, label) {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (Array.isArray(value)) {
+    return value.map((entry, index) => normalizeAddress(entry, `${label}[${index}]`));
+  }
+  const trimmed = String(value).trim();
+  if (trimmed === '') {
+    return [];
+  }
+  return trimmed
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0)
+    .map((entry, index) => normalizeAddress(entry, `${label}[${index}]`));
 }
 
 function toSerializable(value) {
@@ -234,6 +260,9 @@ async function fetchContractSnapshot(contract) {
     burnAddress: await safeCall(contract, 'burnAddress'),
     priestIsDictator: await safeCall(contract, 'priestIsDictator', (value) => Boolean(value)),
     maxMembers: await safeCall(contract, 'maxMembers'),
+    yesVoteThresholdBps: await safeCall(contract, 'yesVoteThresholdBps'),
+    instantQuorumBps: await safeCall(contract, 'instantQuorumBps'),
+    councilMode: await safeCall(contract, 'councilModeEnabled', (value) => Boolean(value)),
     templName: await safeCall(contract, 'templName'),
     templDescription: await safeCall(contract, 'templDescription'),
     templLogoLink: await safeCall(contract, 'templLogoLink'),
@@ -243,6 +272,7 @@ async function fetchContractSnapshot(contract) {
     membershipModule: await safeCall(contract, 'MEMBERSHIP_MODULE'),
     treasuryModule: await safeCall(contract, 'TREASURY_MODULE'),
     governanceModule: await safeCall(contract, 'GOVERNANCE_MODULE'),
+    councilModule: await safeCall(contract, 'COUNCIL_MODULE'),
     entryFeeCurve: await safeCall(contract, 'entryFeeCurve', normalizeCurveValue)
   };
 }
@@ -313,6 +343,12 @@ async function fetchEventSnapshot({ provider, factoryAddress, templAddress, from
           templLogoLink: args.logoLink ?? '',
           proposalFeeBps: toSerializable(args.proposalFeeBps ?? args.proposalFee),
           referralShareBps: toSerializable(args.referralShareBps),
+          yesVoteThresholdBps: args.yesVoteThresholdBps === undefined ? undefined : toSerializable(args.yesVoteThresholdBps),
+          instantQuorumBps: args.instantQuorumBps === undefined ? undefined : toSerializable(args.instantQuorumBps),
+          councilMode: args.councilMode === undefined ? undefined : Boolean(args.councilMode),
+          initialCouncilMembers: args.initialCouncilMembers
+            ? args.initialCouncilMembers.map((addr, index) => normalizeAddress(addr, `initialCouncilMembers[${index}]`))
+            : undefined,
           curveStyles,
           curveRates,
           curveLengths
@@ -381,6 +417,9 @@ async function main() {
     burnAddress: readCliOption(process.argv, ['--burn-address']),
     priestIsDictator: readCliOption(process.argv, ['--dictator', '--priest-is-dictator']),
     maxMembers: readCliOption(process.argv, ['--max-members']),
+    yesVoteThresholdBps: readCliOption(process.argv, ['--yes-vote-threshold-bps', '--yes-threshold-bps']),
+    instantQuorumBps: readCliOption(process.argv, ['--instant-quorum-bps']),
+    councilMode: readCliOption(process.argv, ['--council-mode']),
     templName: readCliOption(process.argv, ['--templ-name', '--name']),
     templDescription: readCliOption(process.argv, ['--templ-description', '--description']),
     templLogoLink: readCliOption(process.argv, ['--templ-logo', '--logo-link']),
@@ -388,7 +427,9 @@ async function main() {
     referralShareBps: readCliOption(process.argv, ['--referral-share-bps', '--referral-bps']),
     membershipModule: readCliOption(process.argv, ['--membership-module']),
     treasuryModule: readCliOption(process.argv, ['--treasury-module']),
-    governanceModule: readCliOption(process.argv, ['--governance-module'])
+    governanceModule: readCliOption(process.argv, ['--governance-module']),
+    councilModule: readCliOption(process.argv, ['--council-module']),
+    initialCouncilMembers: readCliOption(process.argv, ['--initial-council-members'])
   };
 
   const protocolRecipientOverride = firstDefined([
@@ -413,6 +454,13 @@ async function main() {
       resolveBoolean(process.env.PRIEST_IS_DICTATOR)
     ]),
     maxMembers: firstDefined([cliOverrides.maxMembers, process.env.MAX_MEMBERS]),
+    yesVoteThresholdBps: resolveBpsLike({ bpsValues: [cliOverrides.yesVoteThresholdBps, process.env.YES_VOTE_THRESHOLD_BPS] }),
+    instantQuorumBps: resolveBpsLike({ bpsValues: [cliOverrides.instantQuorumBps, process.env.INSTANT_QUORUM_BPS] }),
+    councilMode: firstDefined([
+      resolveBoolean(cliOverrides.councilMode),
+      resolveBoolean(process.env.COUNCIL_MODE),
+      resolveBoolean(process.env.START_COUNCIL_MODE)
+    ]),
     templName: firstDefined([cliOverrides.templName, process.env.TEMPL_NAME]),
     templDescription: firstDefined([cliOverrides.templDescription, process.env.TEMPL_DESCRIPTION]),
     templLogoLink: firstDefined([cliOverrides.templLogoLink, process.env.TEMPL_LOGO_LINK]),
@@ -420,8 +468,20 @@ async function main() {
     referralShareBps: resolveBpsLike({ bpsValues: [cliOverrides.referralShareBps, process.env.REFERRAL_SHARE_BPS] }),
     membershipModule: firstDefined([cliOverrides.membershipModule, process.env.MEMBERSHIP_MODULE_ADDRESS]),
     treasuryModule: firstDefined([cliOverrides.treasuryModule, process.env.TREASURY_MODULE_ADDRESS]),
-    governanceModule: firstDefined([cliOverrides.governanceModule, process.env.GOVERNANCE_MODULE_ADDRESS])
+    governanceModule: firstDefined([cliOverrides.governanceModule, process.env.GOVERNANCE_MODULE_ADDRESS]),
+    councilModule: firstDefined([cliOverrides.councilModule, process.env.COUNCIL_MODULE_ADDRESS])
   };
+
+  const initialCouncilRaw = firstDefined(
+    [cliOverrides.initialCouncilMembers, process.env.INITIAL_COUNCIL_MEMBERS, process.env.COUNCIL_MEMBERS],
+    { allowEmpty: true }
+  );
+  const initialCouncilOverride =
+    initialCouncilRaw === undefined
+      ? undefined
+      : initialCouncilRaw === ''
+        ? []
+        : parseAddressArray(initialCouncilRaw, 'initialCouncilMembers');
 
   const constructorArgs = {
     priest: resolveField({
@@ -515,6 +575,28 @@ async function main() {
       overrideValue: envOverrides.maxMembers,
       normalizer: (value) => toSerializable(value)
     }),
+    yesVoteThresholdBps: resolveField({
+      label: 'yesVoteThresholdBps',
+      contractValue: contractSnapshot.yesVoteThresholdBps,
+      eventValue: eventSnapshot?.yesVoteThresholdBps,
+      overrideValue: envOverrides.yesVoteThresholdBps,
+      normalizer: (value) => toSerializable(value)
+    }),
+    instantQuorumBps: resolveField({
+      label: 'instantQuorumBps',
+      contractValue: contractSnapshot.instantQuorumBps,
+      eventValue: eventSnapshot?.instantQuorumBps,
+      overrideValue: envOverrides.instantQuorumBps,
+      normalizer: (value) => toSerializable(value)
+    }),
+    councilMode: resolveField({
+      label: 'councilMode',
+      contractValue: contractSnapshot.councilMode,
+      eventValue: eventSnapshot?.councilMode,
+      overrideValue: envOverrides.councilMode,
+      fallbackValue: false,
+      normalizer: (value) => Boolean(value)
+    }),
     templName: resolveField({
       label: 'templName',
       contractValue: contractSnapshot.templName,
@@ -587,6 +669,27 @@ async function main() {
       eventValue: undefined,
       overrideValue: envOverrides.governanceModule,
       normalizer: (value) => normalizeAddress(value, 'governanceModule')
+    }),
+    councilModule: resolveField({
+      label: 'councilModule',
+      contractValue: contractSnapshot.councilModule,
+      eventValue: undefined,
+      overrideValue: envOverrides.councilModule,
+      normalizer: (value) => normalizeAddress(value, 'councilModule')
+    }),
+    initialCouncilMembers: resolveField({
+      label: 'initialCouncilMembers',
+      contractValue: undefined,
+      eventValue: eventSnapshot?.initialCouncilMembers,
+      overrideValue: initialCouncilOverride,
+      fallbackValue: [],
+      normalizer: (value) => {
+        if (!Array.isArray(value)) {
+          throw new Error('initialCouncilMembers must be an array of addresses (comma-separated string or array)');
+        }
+        return value.map((entry, index) => normalizeAddress(entry, `initialCouncilMembers[${index}]`));
+      },
+      allowEmpty: true
     })
   };
 
@@ -646,10 +749,15 @@ async function main() {
     constructorArgs.templLogoLink,
     constructorArgs.proposalFeeBps,
     constructorArgs.referralShareBps,
+    constructorArgs.yesVoteThresholdBps,
+    constructorArgs.instantQuorumBps,
+    constructorArgs.councilMode,
     constructorArgs.membershipModule,
     constructorArgs.treasuryModule,
     constructorArgs.governanceModule,
-    curveArgument
+    constructorArgs.councilModule,
+    curveArgument,
+    constructorArgs.initialCouncilMembers
   ];
 
   try {
@@ -693,6 +801,20 @@ async function main() {
       const message = err?.message || String(err);
       if (/already verified/i.test(message)) {
         console.log(`Governance module ${constructorArgs.governanceModule} is already verified.`);
+      } else {
+        throw err;
+      }
+    }
+    try {
+      await hre.run('verify:verify', {
+        address: constructorArgs.councilModule,
+        contract: 'contracts/TemplCouncil.sol:TemplCouncilModule'
+      });
+      console.log(`Verified Council module at ${constructorArgs.councilModule}`);
+    } catch (err) {
+      const message = err?.message || String(err);
+      if (/already verified/i.test(message)) {
+        console.log(`Council module ${constructorArgs.councilModule} is already verified.`);
       } else {
         throw err;
       }

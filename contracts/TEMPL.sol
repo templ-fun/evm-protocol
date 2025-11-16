@@ -57,6 +57,7 @@ contract TEMPL is TemplBase {
     /// @param _governanceModule Address of the deployed governance module implementation.
     /// @param _councilModule Address of the deployed council governance module implementation.
     /// @param _curve Pricing curve configuration applied to future joins.
+    /// @param _initialCouncilMembers Pre-council wallets to auto-enroll as members + council at deploy.
     constructor(
         address _priest,
         address _protocolFeeRecipient,
@@ -83,7 +84,8 @@ contract TEMPL is TemplBase {
         address _treasuryModule,
         address _governanceModule,
         address _councilModule,
-        CurveConfig memory _curve
+        CurveConfig memory _curve,
+        address[] memory _initialCouncilMembers
     ) {
         _initializeTempl(
             _protocolFeeRecipient,
@@ -133,15 +135,16 @@ contract TEMPL is TemplBase {
 
         priest = _priest;
         joinPaused = false;
-        Member storage priestMember = members[_priest];
-        priestMember.joined = true;
-        priestMember.timestamp = block.timestamp;
-        priestMember.blockNumber = block.number;
-        priestMember.rewardSnapshot = cumulativeMemberRewards;
-        joinSequence = 1;
-        priestMember.joinSequence = 1;
-        memberCount = 1;
-        _addCouncilMember(_priest, _priest);
+        _enrollGenesisMember(_priest);
+        uint256 councilLen = _initialCouncilMembers.length;
+        for (uint256 i = 0; i < councilLen; ++i) {
+            address account = _initialCouncilMembers[i];
+            if (!members[account].joined) {
+                _enrollGenesisMember(account);
+            }
+            _addCouncilMember(account, _priest);
+        }
+        genesisMemberCount = memberCount;
         if (_startInCouncilMode) {
             _setCouncilMode(true);
         }

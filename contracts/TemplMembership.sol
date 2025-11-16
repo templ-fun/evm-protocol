@@ -124,7 +124,7 @@ contract TemplMembershipModule is TemplBase {
             emit ReferralRewardPaid(referralTarget, recipient, referralAmount);
         }
 
-        uint256 joinId = currentMemberCount == 0 ? 0 : currentMemberCount - 1;
+        uint256 joinId = _paidJoinsFromMemberCount(currentMemberCount);
 
         emit MemberJoined(
             payer,
@@ -325,10 +325,7 @@ contract TemplMembershipModule is TemplBase {
     /// @notice Historical counter for total successful joins (mirrors member count without storing extra state).
     /// @return joins Number of completed joins excluding the auto-enrolled priest.
     function totalJoins() public view returns (uint256 joins) {
-        if (memberCount == 0) {
-            return 0;
-        }
-        return memberCount - 1;
+        return _currentPaidJoins();
     }
 
     /// @notice Exposes a voter's current vote weight (1 per active member).

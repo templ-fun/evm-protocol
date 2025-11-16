@@ -99,6 +99,7 @@ Complete custom deploy (full config)
   - `name`, `description`, `logoLink`: UI metadata.
   - `proposalFeeBps`: bps of entry fee charged to proposers.
   - `referralShareBps`: bps share taken from member‑pool slice for referrers.
+  - `initialCouncilMembers`: addresses auto-enrolled as members + council seats at deploy. Include the priest address if they should vote; leaving it empty starts with zero councillors.
 - Constraints your UI must enforce:
   - Fee split must sum to 10,000 bps including protocol share (factory enforces `burn + treasury + memberPool + PROTOCOL_BPS == 10,000`).
   - Percent fields in [0, 10,000]; curve segment count ≤8.
@@ -127,7 +128,8 @@ const config = {
   description: templDescription,
   logoLink: templLogoLink,
   proposalFeeBps: 2500,
-  referralShareBps: 2500
+  referralShareBps: 2500,
+  initialCouncilMembers: [priestAddress]
 };
 // Preview the address then send the tx
 const templAddress = await factory.createTemplWithConfig.staticCall(config);

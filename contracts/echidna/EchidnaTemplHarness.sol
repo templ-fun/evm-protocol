@@ -43,6 +43,8 @@ contract EchidnaTemplHarness {
         CurveConfig memory curve;
         curve.primary = CurveSegment({style: CurveStyle.Exponential, rateBps: 11_000, length: 0});
         // no additional segments
+        address[] memory initialCouncil = new address[](1);
+        initialCouncil[0] = priest;
 
         // Deploy TEMPL root contract
         templ = new TEMPL(
@@ -71,7 +73,8 @@ contract EchidnaTemplHarness {
             address(treasury),
             address(governance),
             address(council),
-            curve
+            curve,
+            initialCouncil
         );
 
         // Initialize monotonic trackers

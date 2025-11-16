@@ -87,7 +87,8 @@ describe("Prod Readiness", function () {
       referralShareBps: 2_500,
       yesVoteThresholdBps: 5_000,
       councilMode: false,
-      instantQuorumBps: 10_000
+      instantQuorumBps: 10_000,
+      initialCouncilMembers: []
     });
     const receipt = await tx.wait();
     const templAddress = receipt.logs

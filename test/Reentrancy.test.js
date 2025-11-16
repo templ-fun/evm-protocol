@@ -63,7 +63,8 @@ const METADATA = {
       treasuryModule,
       governanceModule,
       councilModule,
-      STATIC_CURVE
+      STATIC_CURVE,
+      []
     );
       await templ.waitForDeployment();
       templ = await attachTemplInterface(templ);
@@ -141,7 +142,8 @@ const METADATA = {
       treasuryModule,
       governanceModule,
       councilModule,
-      STATIC_CURVE
+      STATIC_CURVE,
+      []
     );
       await templ.waitForDeployment();
       templ = await attachTemplInterface(templ);

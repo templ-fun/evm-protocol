@@ -75,6 +75,8 @@ contract TemplFactory {
         bool councilMode;
         /// @notice Instant quorum threshold (bps) that enables immediate execution when satisfied. Must be ≥ quorum. 0 applies factory default.
         uint256 instantQuorumBps;
+        /// @notice Addresses to auto-enroll as council members (and members) at deploy.
+        address[] initialCouncilMembers;
     }
 
     /// @notice Address that receives the protocol share in newly created templs.
@@ -120,6 +122,7 @@ contract TemplFactory {
     /// @param yesVoteThresholdBps YES vote threshold (bps of votes cast).
     /// @param instantQuorumBps Instant quorum threshold (bps of eligible voters).
     /// @param councilMode Whether the templ launched in council governance mode.
+    /// @param initialCouncilMembers Addresses auto-enrolled as council members at deploy.
     event TemplCreated(
         address indexed templ,
         address indexed creator,
@@ -144,7 +147,8 @@ contract TemplFactory {
         uint256 referralShareBps,
         uint256 yesVoteThresholdBps,
         uint256 instantQuorumBps,
-        bool councilMode
+        bool councilMode,
+        address[] initialCouncilMembers
     );
 
     /// @notice Emitted when factory permissionless mode is toggled.
@@ -275,6 +279,8 @@ contract TemplFactory {
     ) public returns (address templAddress) {
         _enforceCreationAccess();
         if (_priest == address(0)) revert TemplErrors.InvalidRecipient();
+        address[] memory initialCouncil = new address[](1);
+        initialCouncil[0] = _priest;
         CreateConfig memory cfg = CreateConfig({
             priest: _priest,
             token: _token,
@@ -296,7 +302,8 @@ contract TemplFactory {
             referralShareBps: _referralShareBps,
             yesVoteThresholdBps: TemplDefaults.DEFAULT_YES_VOTE_THRESHOLD_BPS,
             councilMode: true,
-            instantQuorumBps: TemplDefaults.DEFAULT_INSTANT_QUORUM_BPS
+            instantQuorumBps: TemplDefaults.DEFAULT_INSTANT_QUORUM_BPS,
+            initialCouncilMembers: initialCouncil
         });
         return _deploy(cfg);
     }
@@ -423,7 +430,8 @@ contract TemplFactory {
             TREASURY_MODULE,
             GOVERNANCE_MODULE,
             COUNCIL_MODULE,
-            cfg.curve
+            cfg.curve,
+            cfg.initialCouncilMembers
         );
         templAddress = address(deployed);
         uint256 extraLen = cfg.curve.additionalSegments.length;
@@ -463,7 +471,8 @@ contract TemplFactory {
             cfg.referralShareBps,
             cfg.yesVoteThresholdBps,
             cfg.instantQuorumBps,
-            cfg.councilMode
+            cfg.councilMode,
+            cfg.initialCouncilMembers
         );
     }
 

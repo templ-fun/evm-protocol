@@ -122,6 +122,8 @@ abstract contract TemplBase is ReentrancyGuard {
     mapping(address => Member) public members;
     /// @notice Number of active members (includes the auto-enrolled priest).
     uint256 public memberCount;
+    /// @notice Members that existed at genesis (priest + any pre-enrolled council members).
+    uint256 public genesisMemberCount;
     /// @notice Cumulative member-pool claims per wallet.
     mapping(address => uint256) public memberPoolClaims;
     /// @notice Aggregate rewards per member used for on-chain snapshotting.
@@ -828,13 +830,35 @@ abstract contract TemplBase is ReentrancyGuard {
         entryFee = _priceForPaidJoinsFromStorage(baseEntryFee, entryFeeCurve, _currentPaidJoins());
     }
 
-    /// @notice Returns the number of paid joins that have occurred (excludes the auto-enrolled priest).
+    /// @notice Returns the number of paid joins that have occurred (excludes genesis members).
     /// @return count Number of paid joins completed.
     function _currentPaidJoins() internal view returns (uint256 count) {
-        if (memberCount == 0) {
-            return 0;
+        return _paidJoinsFromMemberCount(memberCount);
+    }
+
+    /// @notice Computes the paid join count represented by a member total.
+    /// @param count Member total (includes genesis members).
+    /// @return paidJoins Number of paid joins represented by `count`.
+    function _paidJoinsFromMemberCount(uint256 count) internal view returns (uint256 paidJoins) {
+        if (count > genesisMemberCount) {
+            return count - genesisMemberCount;
         }
-        return memberCount - 1;
+        return 0;
+    }
+
+    /// @notice Enrolls a genesis member during contract creation without charging fees.
+    /// @param account Wallet receiving membership.
+    function _enrollGenesisMember(address account) internal {
+        if (account == address(0)) revert TemplErrors.InvalidRecipient();
+        Member storage member = members[account];
+        if (member.joined) revert TemplErrors.MemberAlreadyJoined();
+        member.joined = true;
+        member.timestamp = block.timestamp;
+        member.blockNumber = block.number;
+        member.rewardSnapshot = cumulativeMemberRewards;
+        uint256 sequence = ++joinSequence;
+        member.joinSequence = sequence;
+        ++memberCount;
     }
 
     /// @notice Returns the number of wallets eligible to vote under the current governance mode.

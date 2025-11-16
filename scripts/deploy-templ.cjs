@@ -36,6 +36,22 @@ function parseBoolean(value) {
   return /^(?:1|true|yes)$/i.test(trimmed);
 }
 
+function parseAddressList(list) {
+  if (!list) {
+    return [];
+  }
+  return list
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0)
+    .map((entry) => {
+      if (!hre.ethers.isAddress(entry)) {
+        throw new Error(`Invalid address "${entry}" in INITIAL_COUNCIL_MEMBERS`);
+      }
+      return hre.ethers.getAddress(entry);
+    });
+}
+
 function resolvePercentToBps({ label, percentSource, bpsSource, defaultBps = 0 }) {
   
   const bpsCandidate = bpsSource ?? '';
@@ -241,7 +257,7 @@ async function main() {
       "No Hardhat signer available. Set PRIVATE_KEY in your environment or configure accounts for this network."
     );
   }
-  const PRIEST_ADDRESS = process.env.PRIEST_ADDRESS || deployer.address;
+  const PRIEST_ADDRESS = hre.ethers.getAddress(process.env.PRIEST_ADDRESS || deployer.address);
   let PROTOCOL_FEE_RECIPIENT = process.env.PROTOCOL_FEE_RECIPIENT;
   const TOKEN_ADDRESS = process.env.TOKEN_ADDRESS;
   const ENTRY_FEE = process.env.ENTRY_FEE;
@@ -311,6 +327,16 @@ async function main() {
   const BACKEND_URL = (process.env.BACKEND_URL || process.env.TEMPL_BACKEND_URL || '').trim();
   const TELEGRAM_CHAT_ID = (process.env.TELEGRAM_CHAT_ID || process.env.CHAT_ID || '').trim();
   const PRIEST_IS_DICTATOR = /^(?:1|true)$/i.test((process.env.PRIEST_IS_DICTATOR || '').trim());
+  const rawInitialCouncil =
+    process.env.INITIAL_COUNCIL_MEMBERS !== undefined && process.env.INITIAL_COUNCIL_MEMBERS !== null
+      ? process.env.INITIAL_COUNCIL_MEMBERS
+      : process.env.COUNCIL_MEMBERS;
+  const initialCouncilMembers =
+    rawInitialCouncil === undefined || rawInitialCouncil === null
+      ? [PRIEST_ADDRESS]
+      : rawInitialCouncil.trim() === ""
+        ? []
+        : parseAddressList(rawInitialCouncil);
   if (START_COUNCIL_MODE && PRIEST_IS_DICTATOR) {
     throw new Error('Council mode cannot be enabled while PRIEST_IS_DICTATOR is true');
   }
@@ -431,6 +457,10 @@ async function main() {
   console.log("Burn Address:", effectiveBurnAddress);
   console.log("Priest Dictatorship:", PRIEST_IS_DICTATOR ? 'enabled' : 'disabled');
   console.log("Council Mode:", START_COUNCIL_MODE ? 'enabled' : 'disabled');
+  console.log(
+    "Initial Council Members:",
+    initialCouncilMembers.length === 0 ? '(none)' : initialCouncilMembers.join(', ')
+  );
   console.log("YES Vote Threshold (bps):", yesVoteThresholdBps);
   console.log("Instant Quorum (bps):", instantQuorumBps);
   console.log('Curve configuration:', curveConfigEnv.description);
@@ -543,7 +573,8 @@ async function main() {
     referralShareBps: REFERRAL_SHARE_BPS,
     yesVoteThresholdBps,
     councilMode: START_COUNCIL_MODE,
-    instantQuorumBps
+    instantQuorumBps,
+    initialCouncilMembers
   };
   const expectedTempl = await factoryContract.createTemplWithConfig.staticCall(templConfig);
   const createTx = await factoryContract.createTemplWithConfig(templConfig);
@@ -720,7 +751,7 @@ async function main() {
       `npx hardhat verify --contract contracts/TemplFactory.sol:TemplFactory --network base ${factoryAddress} ${(process.env.FACTORY_DEPLOYER || deployer.address).trim()} ${PROTOCOL_FEE_RECIPIENT} ${protocolPercentBps} ${membershipModuleAddress} ${treasuryModuleAddress} ${governanceModuleAddress} ${councilModuleAddress}`
     );
     console.log(
-      `npx hardhat verify --contract contracts/TEMPL.sol:TEMPL --network base ${contractAddress} ${PRIEST_ADDRESS} ${PROTOCOL_FEE_RECIPIENT} ${TOKEN_ADDRESS} ${ENTRY_FEE} ${burnSplit.resolvedBps} ${treasurySplit.resolvedBps} ${memberPoolSplit.resolvedBps} ${protocolPercentBps} ${quorumPercentBps} ${(POST_QUORUM_VOTING_PERIOD_SECONDS ?? 36 * 60 * 60)} ${(BURN_ADDRESS || hre.ethers.ZeroAddress)} ${PRIEST_IS_DICTATOR} ${MAX_MEMBERS} "${NAME}" "${DESCRIPTION}" "${LOGO_LINK}" ${PROPOSAL_FEE_BPS} ${REFERRAL_SHARE_BPS} ${yesVoteThresholdBps} ${START_COUNCIL_MODE} ${membershipModuleAddress} ${treasuryModuleAddress} ${governanceModuleAddress} ${councilModuleAddress} [[[curve argument omitted; use scripts/verify-templ.cjs for templ verification]]]`
+      `npx hardhat verify --contract contracts/TEMPL.sol:TEMPL --network base ${contractAddress} ${PRIEST_ADDRESS} ${PROTOCOL_FEE_RECIPIENT} ${TOKEN_ADDRESS} ${ENTRY_FEE} ${burnSplit.resolvedBps} ${treasurySplit.resolvedBps} ${memberPoolSplit.resolvedBps} ${protocolPercentBps} ${quorumPercentBps} ${(POST_QUORUM_VOTING_PERIOD_SECONDS ?? 36 * 60 * 60)} ${(BURN_ADDRESS || hre.ethers.ZeroAddress)} ${PRIEST_IS_DICTATOR} ${MAX_MEMBERS} "${NAME}" "${DESCRIPTION}" "${LOGO_LINK}" ${PROPOSAL_FEE_BPS} ${REFERRAL_SHARE_BPS} ${yesVoteThresholdBps} ${instantQuorumBps} ${START_COUNCIL_MODE} ${membershipModuleAddress} ${treasuryModuleAddress} ${governanceModuleAddress} ${councilModuleAddress} [[[curve argument omitted; use scripts/verify-templ.cjs for templ verification]]] [[[initial council members array]]]`
     );
     console.log("Tip: prefer npm run verify:factory and npm run verify:templ which auto-discover constructor args.");
   }

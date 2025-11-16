@@ -125,7 +125,8 @@ describe("Instant quorum execution", function () {
         modules.treasuryModule,
         modules.governanceModule,
         modules.councilModule,
-        STATIC_CURVE
+        STATIC_CURVE,
+        []
       )
     ).to.be.revertedWithCustomError(Templ, "InstantQuorumBelowQuorum");
   });

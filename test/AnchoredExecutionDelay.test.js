@@ -46,7 +46,8 @@ describe('Anchored execution delay after quorum', function () {
       treasuryModule,
       governanceModule,
       councilModule,
-      { primary: { style: 2, rateBps: 11000, length: 0 }, additionalSegments: [] }
+      { primary: { style: 2, rateBps: 11000, length: 0 }, additionalSegments: [] },
+      []
     );
     await templ.waitForDeployment();
     templ = await attachTemplInterface(templ);

@@ -59,6 +59,7 @@ async function deployTemplContracts({
   instantQuorumBps = 10_000,
   councilMode = false,
   curve = STATIC_CURVE,
+  initialCouncilMembers
 } = {}) {
   const accounts = await ethers.getSigners();
   const [owner, priest] = accounts;
@@ -89,6 +90,9 @@ async function deployTemplContracts({
   const protocolRecipient = protocolFeeRecipient || priest.address;
   const normalizedCurve = normalizeCurve(curve);
 
+  const resolvedCouncilMembers =
+    initialCouncilMembers === undefined ? [priest.address] : initialCouncilMembers;
+
   let templ = await TEMPL.deploy(
     priest.address,
     protocolRecipient,
@@ -115,7 +119,8 @@ async function deployTemplContracts({
     await treasuryModule.getAddress(),
     await governanceModule.getAddress(),
     await councilModule.getAddress(),
-    normalizedCurve
+    normalizedCurve,
+    resolvedCouncilMembers
   );
   await templ.waitForDeployment();
   templ = await attachTemplInterface(templ);

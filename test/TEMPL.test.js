@@ -78,7 +78,8 @@ describe("TEMPL Contract with DAO Governance", function () {
                 treasuryModule,
                 governanceModule,
                 councilModule,
-                STATIC_CURVE
+                STATIC_CURVE,
+                []
             );
             await templDirect.waitForDeployment();
             templDirect = await attachTemplInterface(templDirect);
@@ -123,7 +124,8 @@ describe("TEMPL Contract with DAO Governance", function () {
                     treasuryModule,
                     governanceModule,
                     councilModule,
-                    STATIC_CURVE
+                    STATIC_CURVE,
+                    []
                 )
             ).to.be.revertedWithCustomError(TEMPL, "InvalidEntryFee");
         });
@@ -158,7 +160,8 @@ describe("TEMPL Contract with DAO Governance", function () {
                     treasuryModule,
                     governanceModule,
                     councilModule,
-                    STATIC_CURVE
+                    STATIC_CURVE,
+                    []
                 )
             ).to.be.revertedWithCustomError(TEMPL, "InvalidRecipient");
         });
@@ -193,7 +196,8 @@ describe("TEMPL Contract with DAO Governance", function () {
                     treasuryModule,
                     governanceModule,
                     councilModule,
-                    STATIC_CURVE
+                    STATIC_CURVE,
+                    []
                 )
             ).to.be.revertedWithCustomError(TEMPL, "InvalidRecipient");
         });
@@ -227,7 +231,8 @@ describe("TEMPL Contract with DAO Governance", function () {
                 treasuryModule,
                 governanceModule,
                 councilModule,
-                STATIC_CURVE
+                STATIC_CURVE,
+                []
             );
             await templZero.waitForDeployment();
             templZero = await attachTemplInterface(templZero);
@@ -267,7 +272,8 @@ describe("TEMPL Contract with DAO Governance", function () {
                     treasuryModule,
                     governanceModule,
                     councilModule,
-                    STATIC_CURVE
+                    STATIC_CURVE,
+                    []
                 )
             ).to.be.revertedWithCustomError(TEMPL, "InvalidPercentage");
         });
@@ -302,7 +308,8 @@ describe("TEMPL Contract with DAO Governance", function () {
                     treasuryModule,
                     governanceModule,
                     councilModule,
-                    STATIC_CURVE
+                    STATIC_CURVE,
+                    []
                 )
             ).to.be.revertedWithCustomError(TEMPL, "InvalidPercentageSplit");
         });
@@ -337,7 +344,8 @@ describe("TEMPL Contract with DAO Governance", function () {
                     treasuryModule,
                     governanceModule,
                     councilModule,
-                    STATIC_CURVE
+                    STATIC_CURVE,
+                    []
                 )
             ).to.be.revertedWithCustomError(TEMPL, "InvalidRecipient");
         });
@@ -372,7 +380,8 @@ describe("TEMPL Contract with DAO Governance", function () {
                     treasuryModule,
                     governanceModule,
                     councilModule,
-                    STATIC_CURVE
+                    STATIC_CURVE,
+                    []
                 )
             ).to.be.revertedWithCustomError(TEMPL, "AmountZero");
         });
@@ -1158,7 +1167,8 @@ describe("TEMPL Contract with DAO Governance", function () {
                 treasuryModule,
                 governanceModule,
                 councilModule,
-                STATIC_CURVE
+                STATIC_CURVE,
+                []
             );
             await minTempl.waitForDeployment();
             minTempl = await attachTemplInterface(minTempl);
@@ -1199,7 +1209,8 @@ describe("TEMPL Contract with DAO Governance", function () {
                 treasuryModule,
                 governanceModule,
                 councilModule,
-                STATIC_CURVE
+                STATIC_CURVE,
+                []
             )).to.be.revertedWithCustomError(factory, "EntryFeeTooSmall");
         });
 

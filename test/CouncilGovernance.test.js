@@ -33,6 +33,42 @@ async function enableCouncilMode(templ, proposer, voters) {
 }
 
 describe("Council governance", function () {
+  it("auto-enrolls pre-council members without charging entry fees", async function () {
+    const accounts = await ethers.getSigners();
+    const [, priest, member1, member2, newJoiner] = accounts;
+    const { templ, token } = await deployTempl({
+      entryFee: ENTRY_FEE,
+      councilMode: true,
+      initialCouncilMembers: [priest.address, member1.address, member2.address]
+    });
+    expect(await templ.councilModeEnabled()).to.equal(true);
+    expect(await templ.memberCount()).to.equal(3n);
+    expect(await templ.genesisMemberCount()).to.equal(3n);
+    expect(await templ.totalJoins()).to.equal(0n);
+    expect(await templ.councilMemberCount()).to.equal(3n);
+    expect(await templ.councilMembers(priest.address)).to.equal(true);
+    expect(await templ.councilMembers(member1.address)).to.equal(true);
+    expect(await templ.councilMembers(member2.address)).to.equal(true);
+
+    await mintToUsers(token, [newJoiner], TOKEN_SUPPLY);
+    const templAddress = await templ.getAddress();
+    await token.connect(newJoiner).approve(templAddress, ENTRY_FEE);
+    const joinTx = await templ.connect(newJoiner).join();
+    const receipt = await joinTx.wait();
+    const memberJoined = receipt.logs
+      .map((log) => {
+        try {
+          return templ.interface.parseLog(log);
+        } catch (_) {
+          return null;
+        }
+      })
+      .find((log) => log && log.name === "MemberJoined");
+    expect(memberJoined).to.not.equal(undefined);
+    expect(memberJoined.args.joinId).to.equal(0n);
+    expect(await templ.totalJoins()).to.equal(1n);
+  });
+
   it("restricts voting to council members and supports priest bootstrap", async function () {
     const { templ, priest, member1, member2, member3 } = await setupTempl();
 

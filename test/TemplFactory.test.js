@@ -30,6 +30,7 @@ describe("TemplFactory", function () {
         yesVoteThresholdBps: 5_000,
         councilMode: false,
         instantQuorumBps: 10_000,
+        initialCouncilMembers: [],
         ...config,
     });
 
@@ -162,6 +163,7 @@ describe("TemplFactory", function () {
         expect(templCreated.args.yesVoteThresholdBps).to.equal(5_000n);
         expect(templCreated.args.instantQuorumBps).to.equal(10_000n);
         expect(templCreated.args.councilMode).to.equal(false);
+        expect(templCreated.args.initialCouncilMembers).to.deep.equal([]);
 
         await mintToUsers(token, [member], ENTRY_FEE * 10n);
 
@@ -242,7 +244,8 @@ describe("TemplFactory", function () {
             referralShareBps: 500,
             yesVoteThresholdBps: 6_000,
             councilMode: true,
-            instantQuorumBps: 7_500
+            instantQuorumBps: 7_500,
+            initialCouncilMembers: [priest.address]
         });
 
         const templAddress = await factory.createTemplWithConfig.staticCall(config);
@@ -267,6 +270,7 @@ describe("TemplFactory", function () {
         expect(templCreated.args.yesVoteThresholdBps).to.equal(6_000n);
         expect(templCreated.args.instantQuorumBps).to.equal(7_500n);
         expect(templCreated.args.councilMode).to.equal(true);
+        expect(templCreated.args.initialCouncilMembers).to.deep.equal([priest.address]);
     });
 
     it("enables priest dictatorship when requested in config", async function () {

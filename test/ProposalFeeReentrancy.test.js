@@ -60,7 +60,8 @@ describe("Proposal creation fee reentrancy", function () {
       treasuryModule,
       governanceModule,
       councilModule,
-      STATIC_CURVE
+      STATIC_CURVE,
+      []
     );
     await templ.waitForDeployment();
     templ = await attachTemplInterface(templ);

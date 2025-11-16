@@ -298,7 +298,8 @@ describe("Member Pool Distribution - Exhaustive Tests", function () {
                 modules.treasuryModule,
                 modules.governanceModule,
                 modules.councilModule,
-                STATIC_CURVE
+                STATIC_CURVE,
+                []
             );
             await oddTempl.waitForDeployment();
             oddTempl = await attachTemplInterface(oddTempl);
