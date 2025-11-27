@@ -18,7 +18,7 @@ function resolveNetworkName(network) {
 const FACTORY_EVENT_VARIANTS = [
   {
     id: 'current',
-    abi: 'event TemplCreated(address indexed templ, address indexed creator, address indexed priest, address token, uint256 entryFee, uint256 burnBps, uint256 treasuryBps, uint256 memberPoolBps, uint256 quorumBps, uint256 executionDelaySeconds, address burnAddress, bool priestIsDictator, uint256 maxMembers, uint8[] curveStyles, uint32[] curveRateBps, uint32[] curveLengths, string name, string description, string logoLink, uint256 proposalFeeBps, uint256 referralShareBps)'
+    abi: 'event TemplCreated(address indexed templ, address indexed creator, address indexed priest, address token, uint256 entryFee, uint256 burnBps, uint256 treasuryBps, uint256 memberPoolBps, uint256 quorumBps, uint256 executionDelaySeconds, address burnAddress, bool priestIsDictator, uint256 maxMembers, uint8[] curveStyles, uint32[] curveRateBps, uint32[] curveLengths, string name, string description, string logoLink, uint256 proposalFeeBps, uint256 referralShareBps, uint256 yesVoteThresholdBps, uint256 instantQuorumBps, bool councilMode)'
   }
 ].map((variant) => {
   const iface = new hre.ethers.Interface([variant.abi]);
@@ -231,6 +231,9 @@ async function fetchContractSnapshot(contract) {
     protocolBps: await safeCall(contract, 'protocolBps'),
     quorumBps: await safeCall(contract, 'quorumBps'),
     postQuorumVotingPeriod: await safeCall(contract, 'postQuorumVotingPeriod'),
+    yesVoteThresholdBps: await safeCall(contract, 'yesVoteThresholdBps'),
+    instantQuorumBps: await safeCall(contract, 'instantQuorumBps'),
+    councilModeEnabled: await safeCall(contract, 'councilModeEnabled', (value) => Boolean(value)),
     burnAddress: await safeCall(contract, 'burnAddress'),
     priestIsDictator: await safeCall(contract, 'priestIsDictator', (value) => Boolean(value)),
     maxMembers: await safeCall(contract, 'maxMembers'),
@@ -243,6 +246,7 @@ async function fetchContractSnapshot(contract) {
     membershipModule: await safeCall(contract, 'MEMBERSHIP_MODULE'),
     treasuryModule: await safeCall(contract, 'TREASURY_MODULE'),
     governanceModule: await safeCall(contract, 'GOVERNANCE_MODULE'),
+    councilModule: await safeCall(contract, 'COUNCIL_MODULE'),
     entryFeeCurve: await safeCall(contract, 'entryFeeCurve', normalizeCurveValue)
   };
 }
@@ -313,6 +317,9 @@ async function fetchEventSnapshot({ provider, factoryAddress, templAddress, from
           templLogoLink: args.logoLink ?? '',
           proposalFeeBps: toSerializable(args.proposalFeeBps ?? args.proposalFee),
           referralShareBps: toSerializable(args.referralShareBps),
+          yesVoteThresholdBps: toSerializable(args.yesVoteThresholdBps),
+          instantQuorumBps: toSerializable(args.instantQuorumBps),
+          councilMode: Boolean(args.councilMode),
           curveStyles,
           curveRates,
           curveLengths
@@ -386,9 +393,13 @@ async function main() {
     templLogoLink: readCliOption(process.argv, ['--templ-logo', '--logo-link']),
     proposalFeeBps: readCliOption(process.argv, ['--proposal-fee-bps']),
     referralShareBps: readCliOption(process.argv, ['--referral-share-bps', '--referral-bps']),
+    yesVoteThresholdBps: readCliOption(process.argv, ['--yes-vote-threshold-bps', '--yes-threshold-bps']),
+    instantQuorumBps: readCliOption(process.argv, ['--instant-quorum-bps']),
+    councilMode: readCliOption(process.argv, ['--council-mode']),
     membershipModule: readCliOption(process.argv, ['--membership-module']),
     treasuryModule: readCliOption(process.argv, ['--treasury-module']),
-    governanceModule: readCliOption(process.argv, ['--governance-module'])
+    governanceModule: readCliOption(process.argv, ['--governance-module']),
+    councilModule: readCliOption(process.argv, ['--council-module'])
   };
 
   const protocolRecipientOverride = firstDefined([
@@ -418,9 +429,13 @@ async function main() {
     templLogoLink: firstDefined([cliOverrides.templLogoLink, process.env.TEMPL_LOGO_LINK]),
     proposalFeeBps: resolveBpsLike({ bpsValues: [cliOverrides.proposalFeeBps, process.env.PROPOSAL_FEE_BPS] }),
     referralShareBps: resolveBpsLike({ bpsValues: [cliOverrides.referralShareBps, process.env.REFERRAL_SHARE_BPS] }),
+    yesVoteThresholdBps: resolveBpsLike({ bpsValues: [cliOverrides.yesVoteThresholdBps, process.env.YES_VOTE_THRESHOLD_BPS] }),
+    instantQuorumBps: resolveBpsLike({ bpsValues: [cliOverrides.instantQuorumBps, process.env.INSTANT_QUORUM_BPS] }),
+    councilMode: firstDefined([resolveBoolean(cliOverrides.councilMode), resolveBoolean(process.env.START_COUNCIL_MODE), resolveBoolean(process.env.COUNCIL_MODE)]),
     membershipModule: firstDefined([cliOverrides.membershipModule, process.env.MEMBERSHIP_MODULE_ADDRESS]),
     treasuryModule: firstDefined([cliOverrides.treasuryModule, process.env.TREASURY_MODULE_ADDRESS]),
-    governanceModule: firstDefined([cliOverrides.governanceModule, process.env.GOVERNANCE_MODULE_ADDRESS])
+    governanceModule: firstDefined([cliOverrides.governanceModule, process.env.GOVERNANCE_MODULE_ADDRESS]),
+    councilModule: firstDefined([cliOverrides.councilModule, process.env.COUNCIL_MODULE_ADDRESS])
   };
 
   const constructorArgs = {
@@ -566,6 +581,37 @@ async function main() {
         return numeric;
       }
     }),
+    yesVoteThresholdBps: resolveField({
+      label: 'yesVoteThresholdBps',
+      contractValue: contractSnapshot.yesVoteThresholdBps,
+      eventValue: eventSnapshot?.yesVoteThresholdBps,
+      overrideValue: envOverrides.yesVoteThresholdBps,
+      fallbackValue: 0,
+      normalizer: (value) => {
+        const numeric = toNumberLike(value);
+        if (numeric === undefined) throw new Error('yesVoteThresholdBps must be numeric');
+        return numeric;
+      }
+    }),
+    instantQuorumBps: resolveField({
+      label: 'instantQuorumBps',
+      contractValue: contractSnapshot.instantQuorumBps,
+      eventValue: eventSnapshot?.instantQuorumBps,
+      overrideValue: envOverrides.instantQuorumBps,
+      fallbackValue: 0,
+      normalizer: (value) => {
+        const numeric = toNumberLike(value);
+        if (numeric === undefined) throw new Error('instantQuorumBps must be numeric');
+        return numeric;
+      }
+    }),
+    councilMode: resolveField({
+      label: 'councilMode',
+      contractValue: contractSnapshot.councilModeEnabled,
+      eventValue: eventSnapshot?.councilMode,
+      overrideValue: envOverrides.councilMode,
+      normalizer: (value) => Boolean(value)
+    }),
     // Module addresses
     membershipModule: resolveField({
       label: 'membershipModule',
@@ -587,6 +633,13 @@ async function main() {
       eventValue: undefined,
       overrideValue: envOverrides.governanceModule,
       normalizer: (value) => normalizeAddress(value, 'governanceModule')
+    }),
+    councilModule: resolveField({
+      label: 'councilModule',
+      contractValue: contractSnapshot.councilModule,
+      eventValue: undefined,
+      overrideValue: envOverrides.councilModule,
+      normalizer: (value) => normalizeAddress(value, 'councilModule')
     })
   };
 
@@ -646,9 +699,13 @@ async function main() {
     constructorArgs.templLogoLink,
     constructorArgs.proposalFeeBps,
     constructorArgs.referralShareBps,
+    constructorArgs.yesVoteThresholdBps,
+    constructorArgs.instantQuorumBps,
+    constructorArgs.councilMode,
     constructorArgs.membershipModule,
     constructorArgs.treasuryModule,
     constructorArgs.governanceModule,
+    constructorArgs.councilModule,
     curveArgument
   ];
 
@@ -693,6 +750,20 @@ async function main() {
       const message = err?.message || String(err);
       if (/already verified/i.test(message)) {
         console.log(`Governance module ${constructorArgs.governanceModule} is already verified.`);
+      } else {
+        throw err;
+      }
+    }
+    try {
+      await hre.run('verify:verify', {
+        address: constructorArgs.councilModule,
+        contract: 'contracts/TemplCouncil.sol:TemplCouncilModule'
+      });
+      console.log(`Verified Council module at ${constructorArgs.councilModule}`);
+    } catch (err) {
+      const message = err?.message || String(err);
+      if (/already verified/i.test(message)) {
+        console.log(`Council module ${constructorArgs.councilModule} is already verified.`);
       } else {
         throw err;
       }
