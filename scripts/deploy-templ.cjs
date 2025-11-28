@@ -633,34 +633,47 @@ async function main() {
   
   // Use the membership ABI at the TEMPL address to access view helpers
   const membershipView = await hre.ethers.getContractAt("TemplMembershipModule", contractAddress);
-  const config = await membershipView.getConfig();
-  const treasuryInfo = await membershipView.getTreasuryInfo();
-
+  let config = null;
+  let treasuryInfo = null;
+  try {
+    config = await membershipView.getConfig();
+    treasuryInfo = await membershipView.getTreasuryInfo();
+  } catch (err) {
+    console.warn(
+      '[warn] Unable to read templ config/treasury views (token may not be a live ERC-20 yet):',
+      err?.message || err
+    );
+  }
+  
   const treasuryAvailable = treasuryInfo?.treasury ?? treasuryInfo?.[0];
   const memberPoolBalance = treasuryInfo?.memberPool ?? treasuryInfo?.[1];
   const protocolRecipient = treasuryInfo?.protocolAddress ?? treasuryInfo?.[2];
   const burnedTotal = treasuryInfo?.burned ?? treasuryInfo?.[3];
   
-  console.log("\n📋 Contract Configuration:");
-  console.log("- Token:", config[0]);
-  console.log("- Entry Fee:", config[1].toString());
-  console.log("- Paused:", config[2]);
-  console.log("- Total Joins:", config[3].toString());
-  console.log("- Treasury Balance:", config[4].toString());
-  console.log("- Member Pool Balance:", config[5].toString());
+  if (config) {
+    console.log("\n📋 Contract Configuration:");
+    console.log("- Token:", config[0]);
+    console.log("- Entry Fee:", config[1].toString());
+    console.log("- Paused:", config[2]);
+    console.log("- Total Joins:", config[3].toString());
+    console.log("- Treasury Balance:", config[4].toString());
+    console.log("- Member Pool Balance:", config[5].toString());
+  }
   
-  console.log("\n💰 Treasury Information:");
-  if (treasuryAvailable !== undefined) {
-    console.log("- Treasury Balance:", treasuryAvailable.toString());
-  }
-  if (memberPoolBalance !== undefined) {
-    console.log("- Member Pool Balance:", memberPoolBalance.toString());
-  }
-  if (protocolRecipient) {
-    console.log("- Protocol Fee Recipient:", protocolRecipient);
-  }
-  if (burnedTotal !== undefined) {
-    console.log("- Total Burned:", burnedTotal.toString());
+  if (treasuryInfo) {
+    console.log("\n💰 Treasury Information:");
+    if (treasuryAvailable !== undefined) {
+      console.log("- Treasury Balance:", treasuryAvailable.toString());
+    }
+    if (memberPoolBalance !== undefined) {
+      console.log("- Member Pool Balance:", memberPoolBalance.toString());
+    }
+    if (protocolRecipient) {
+      console.log("- Protocol Fee Recipient:", protocolRecipient);
+    }
+    if (burnedTotal !== undefined) {
+      console.log("- Total Burned:", burnedTotal.toString());
+    }
   }
   
   // Save deployment info

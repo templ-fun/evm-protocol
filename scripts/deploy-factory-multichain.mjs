@@ -157,7 +157,7 @@ async function main() {
 
   for (const ctx of chainContexts) {
     console.log(`\n=== Deploying to ${ctx.name} (chain ${ctx.chainId}) ===`);
-    const chainResult = { chainId: ctx.chainId, txs: {} };
+    const chainResult = { chainId: ctx.chainId.toString(), txs: {} };
 
     const membership = await deployContract(
       "membership module",

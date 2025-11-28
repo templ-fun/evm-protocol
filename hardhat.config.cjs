@@ -36,6 +36,14 @@ const viaIRDefault = process.env.SOLC_VIA_IR === "false" ? false : true;
 const runsDefault = process.env.SOLC_RUNS ? (parseInt(process.env.SOLC_RUNS, 10) || 500) : 500;
 
 /** @type import("hardhat/config").HardhatUserConfig */
+const sharedEtherscanKey = process.env.ETHERSCAN_API_KEY || "";
+const perNetworkKeys = {
+  mainnet: process.env.ETHERSCAN_API_KEY || "",
+  base: process.env.BASESCAN_API_KEY || process.env.ETHERSCAN_API_KEY || "",
+  optimism: process.env.OPTIMISM_API_KEY || process.env.ETHERSCAN_API_KEY || "",
+  arbitrum: process.env.ARBISCAN_API_KEY || process.env.ETHERSCAN_API_KEY || ""
+};
+
 const config = {
   solidity: {
     version: "0.8.23",
@@ -76,12 +84,8 @@ const config = {
     }
   },
   etherscan: {
-    apiKey: {
-      mainnet: process.env.ETHERSCAN_API_KEY || "",
-      base: process.env.BASESCAN_API_KEY || process.env.ETHERSCAN_API_KEY || "",
-      optimism: process.env.OPTIMISM_API_KEY || process.env.ETHERSCAN_API_KEY || "",
-      arbitrum: process.env.ARBISCAN_API_KEY || process.env.ETHERSCAN_API_KEY || ""
-    },
+    // Prefer the single-key v2 Etherscan API when ETHERSCAN_API_KEY is set; fall back to per-network keys otherwise.
+    apiKey: sharedEtherscanKey || perNetworkKeys,
     customChains: [
       {
         network: "base",
