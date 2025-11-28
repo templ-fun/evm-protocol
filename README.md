@@ -1,4 +1,4 @@
-# templ.fun Protocol
+# templ.fun protocol - WARNING: NOT AUDITED
 
 <img width="100%" alt="templ.fun" src="https://github.com/user-attachments/assets/287b7300-2314-4b88-b4be-1cf0190f4989" />
 
