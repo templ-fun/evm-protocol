@@ -11,7 +11,7 @@ Quick links: [At a Glance](#protocol-at-a-glance) · [Architecture](#architectur
 - Existing members accrue pro‑rata rewards from the member‑pool slice and can claim at any time. Templs can also hold ETH or ERC‑20s as external rewards.
 - Donations (ETH or ERC‑20) sent directly to the templ address are held by the templ and governed: governance can withdraw these funds to recipients, or disband them into claimable external rewards for members. ERC‑721 NFTs can also be custodied by a templ and later moved via governance (see NFT notes below).
 - Governance is member‑only: propose, vote, and execute actions to change parameters, move treasury, update curves/metadata, or call arbitrary external contracts.
-- Council mode (default for new templs deployed via `TemplFactory`) narrows voting power to a curated council while still letting any member open proposals. The priest gets a single bootstrap seat to add the first councillor, and thereafter council composition changes only via governance. Council mode cannot be active while dictatorship is enabled; templs must return to member voting (or never enable dictatorship) before re-entering council mode.
+- Council mode (default for new templs deployed via `TemplFactory`) narrows voting power to a curated council while still letting any member open proposals. The priest gets a single bootstrap seat to add another council member, and thereafter council composition changes only via governance. Council mode cannot be active while dictatorship is enabled; templs must return to member voting (or never enable dictatorship) before re-entering council mode.
 - The YES vote threshold (bps of votes cast) is configurable per templ (default 5,100 bps, i.e. 51%) and can be changed via governance alongside quorum/post‑quorum windows.
 - Instant quorum (bps of eligible voters, default 10,000 bps) lets proposals bypass the post‑quorum execution delay when a higher approval ratio—never lower than the normal quorum threshold—is satisfied.
 - Optional dictatorship lets a designated “priest” directly execute DAO‑only actions when enabled; when active it blocks normal proposal create/vote/execute flows (except toggling dictatorship). Dictatorship and council governance are mutually exclusive.
@@ -25,7 +25,7 @@ Priest bootstrap
 ## Templ Factories
 
 - Base: [`0xc47c3088a0be67a5c29c3649be6e7ca8e8aeb5e3`](https://basescan.org/address/0xc47c3088a0be67a5c29c3649be6e7ca8e8aeb5e3)
-- The factory now delegates TEMPL construction to a dedicated `TemplDeployer` helper, keeping the factory bytecode well under the 24,576 byte EIP-170 limit.
+- The factory delegates TEMPL construction to a dedicated `TemplDeployer` helper, keeping the factory bytecode well under the 24,576 byte EIP-170 limit.
 - Deterministic multichain deployment: `node scripts/deploy-factory-multichain.mjs` deploys the modules, `TemplDeployer`, and `TemplFactory` to mainnet/Base/Optimism/Arbitrum using the same constructor args so the factory address matches across chains. Defaults to the shared treasury multisig `0x420f7D96FcEFe9D4708312F454c677ceB61D8420` and `PROTOCOL_BPS=1000`; override via env. Requires a deployer with the same starting nonce on every chain (fresh key recommended) plus `RPC_MAINNET_URL`, `RPC_BASE_URL`, `RPC_OPTIMISM_URL`, `RPC_ARBITRUM_URL`, and `PRIVATE_KEY`. Outputs to `scripts/out/factory-addresses.json` and prints verification commands per chain.
 
 ## Architecture
@@ -48,7 +48,7 @@ Deployers configure pricing curves, fee splits, referral rewards, proposal fees,
 - Disable council mode via the `SetCouncilMode` proposal type (or the corresponding DAO call while dictatorship is enabled) to return to member-wide voting.
 
 #### Migrating Existing Templs to Council Governance
-Templs deployed before council governance was introduced (or deployed with `councilMode=false`) can adopt council governance through the following process:
+Templs deployed with `councilMode=false` can adopt council governance through the following process:
 
 **Prerequisites**:
 - Priest must already be a member (true for all templs) so `councilMemberCount > 0`
