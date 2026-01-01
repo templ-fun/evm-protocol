@@ -2,6 +2,7 @@
 pragma solidity ^0.8.23;
 
 import {TEMPL} from "../TEMPL.sol";
+import {TemplBase} from "../TemplBase.sol";
 import {TemplMembershipModule} from "../TemplMembership.sol";
 import {TemplTreasuryModule} from "../TemplTreasury.sol";
 import {TemplGovernanceModule} from "../TemplGovernance.sol";
@@ -55,7 +56,7 @@ contract EchidnaTemplHarness {
             3000, // member pool bps
             1000, // protocol bps
             3300, // quorum bps
-            1, // execution delay (short so Echidna can pass time if needed)
+            TemplBase.MIN_POST_QUORUM_VOTING_PERIOD, // execution delay (min allowed)
             0x000000000000000000000000000000000000dEaD, // burn sink
             false, // dictatorship off
             0, // no member cap
