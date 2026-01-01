@@ -318,7 +318,7 @@ contract TemplMembershipModule is TemplBase {
     /// @return token Address of the access token required for membership.
     /// @return fee Current entry fee denominated in the access token.
     /// @return joinPaused Whether membership joins are paused.
-    /// @return joins Historical count of successful joins (excluding the auto-enrolled priest).
+    /// @return joins Total count of successful joins (excluding the auto-enrolled priest).
     /// @return treasury Treasury balance currently available to governance.
     /// @return pool Aggregate member pool balance reserved for claims.
     /// @return burnBpsOut Burn allocation expressed in basis points.
@@ -363,7 +363,7 @@ contract TemplMembershipModule is TemplBase {
         return memberCount;
     }
 
-    /// @notice Historical counter for total successful joins (mirrors member count without storing extra state).
+    /// @notice Total counter for successful joins (mirrors member count without storing extra state).
     /// @return joins Number of completed joins excluding the auto-enrolled priest.
     function totalJoins() public view returns (uint256 joins) {
         if (memberCount == 0) {

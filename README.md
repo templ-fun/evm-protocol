@@ -41,7 +41,7 @@ At runtime a templ behaves like one contract with clean separation of concerns v
 Deployers configure pricing curves, fee splits, referral rewards, proposal fees, quorum/delay, membership caps, and an optional dictatorship (priest) override. The access token is any vanilla ERC‑20 you choose.
 
 ### Council governance
-- Factory-created templs start in council mode by default. The priest is the first council member and can consume a single bootstrap seat to add another member before governance is live. Afterward, council composition changes only through proposals (or DAO calls while dictatorship is enabled and council mode is off).
+- Factory-created templs start in council mode by default. The priest is the first council member and can consume a single bootstrap seat to add another member without a governance vote. Afterward, council composition changes only through proposals (or DAO calls while dictatorship is enabled and council mode is off).
 - Council mode restricts voting to the council set but any member can still pay the proposal fee to open a proposal.
 - Proposal fees apply equally to council and non-council proposers (no council fee waiver).
 - Council mode and dictatorship are mutually exclusive. Enabling dictatorship requires council mode to be disabled, and attempts to toggle council mode on while dictatorship is active revert.
@@ -201,7 +201,7 @@ Security notes
 - In dictatorship mode, the priest (a templ‑specific address chosen at deploy time or by governance) can perform any `onlyDAO` action (including `batchDAO`). Keep dictatorship disabled for decentralized control.
 
 Storage/layout policy
-- Modules share a single storage layout via `TemplBase`. Keep layout compatible across upgrades. For changes to storage‑backed structs after a mainnet launch, preserve slot order or introduce reserved/deprecated fields to avoid state corruption on upgrade.
+- Modules share a single storage layout via `TemplBase`. Keep layout compatible across upgrades. For changes to storage‑backed structs, preserve slot order or introduce reserved/deprecated fields to avoid state corruption on upgrade.
 
 ## How It Works
 
@@ -681,35 +681,34 @@ See tests by topic in [test/](test/).
 Council mode and dictatorship are **mutually exclusive** to prevent governance centralization attacks:
 - **Why**: Allowing both simultaneously would let a dictator priest unilaterally control a council-only templ, bypassing the council's governance entirely.
 - **Enforcement**: The contract enforces this at multiple layers:
-  - Deploy-time validation in `TEMPL` constructor (contracts/TEMPL.sol:122) and `TemplFactory` (contracts/TemplFactory.sol:391)
-  - Runtime checks when enabling dictatorship (contracts/TemplBase.sol:1301)
-  - Runtime checks when enabling council mode (contracts/TemplBase.sol:1425)
+  - Deploy-time validation in the `TEMPL` constructor and `TemplFactory` (see `contracts/TEMPL.sol`, `contracts/TemplFactory.sol`).
+  - Runtime checks when enabling dictatorship or council mode (see `contracts/TemplBase.sol`).
 - **To switch modes**: A templ must first disable one mode via governance before enabling the other.
 
 #### Council Member Minimum (1 Member)
-Removing council members is blocked when it would leave the council empty (`councilMemberCount <= 1`):
+Removing council members is blocked when it would leave the council empty (`councilMemberCount < 2`):
 - **Why**: Council mode requires at least one eligible voter; a zero-member council deadlocks all council voting.
-- **Enforcement**: `_createCouncilMemberProposal` reverts with `CouncilMemberMinimum` when attempting to remove the last member (contracts/TemplCouncil.sol:118).
+- **Enforcement**: Removal proposals and DAO removal paths revert with `CouncilMemberMinimum` (see `contracts/TemplCouncil.sol`, `contracts/TemplBase.sol`).
 - **Bootstrap scenario**: The priest starts as the only council member and gets a single bootstrap seat to add a second member. Council governance can run with one member, but adding more improves resilience.
 
 #### Instant Quorum Execution & endTime Mutation
 When instant quorum is satisfied (default: 100% of eligible voters cast YES votes), proposals can be executed immediately:
-- **Behavior**: Upon reaching the instant quorum threshold, the contract **mutates the proposal's `endTime` to `block.timestamp`** (contracts/TemplBase.sol:888), effectively closing the voting window; an explicit `executeProposal` call is still required to perform the action.
+- **Behavior**: Upon reaching the instant quorum threshold, the contract **mutates the proposal's `endTime` to `block.timestamp`** (see `contracts/TemplBase.sol`), effectively closing the voting window; an explicit `executeProposal` call is still required to perform the action.
 - **Why this matters**:
   - The `endTime` field no longer reflects the originally configured voting period when instant quorum triggers.
   - This is **by design** to allow rapid execution when overwhelming support exists.
   - Indexers and UIs should check `instantQuorumMet` and `instantQuorumReachedAt` fields to detect this state.
-- **Security guarantee**: Instant quorum threshold (`instantQuorumBps`) must always be ≥ normal quorum (`quorumBps`) to prevent weakening quorum requirements. This invariant is enforced in the constructor (contracts/TemplBase.sol:724) and both DAO setters (contracts/TemplBase.sol:1346-1347, 1362-1364).
+- **Security guarantee**: Instant quorum threshold (`instantQuorumBps`) must always be ≥ normal quorum (`quorumBps`) to prevent weakening quorum requirements. This invariant is enforced in the constructor and DAO setters (see `contracts/TemplBase.sol`).
 - **Example**: With `instantQuorumBps = 7_500` (75%), a proposal receiving 75%+ YES votes from eligible voters can execute immediately without waiting for the post-quorum delay.
 
 #### Council Bootstrap Seat
 The priest receives **one single-use bootstrap seat** to add a council member to kickstart council governance:
-- **Purpose**: Allows the initial priest to add a second council member without requiring a full governance vote, enabling council governance to begin with at least 2 members (priest + one bootstrap addition).
+- **Purpose**: Allows the initial priest to add a second council member without requiring a full governance vote; council governance can still operate with a single member.
 - **Requirements**:
-  - Council mode must be enabled (`councilModeEnabled == true`) before the bootstrap can be used (contracts/TemplBase.sol:1466).
+  - Council mode must be enabled (`councilModeEnabled == true`) before the bootstrap can be used (see `contracts/TemplBase.sol`).
   - The target address must be an existing member (`joined == true`).
   - The target address cannot already be on the council.
-- **Single-use guarantee**: After calling `bootstrapCouncilMember` once, the seat is permanently consumed and `councilBootstrapConsumed` is set to `true`, preventing any further bootstrap attempts (contracts/TemplBase.sol:1467).
+- **Single-use guarantee**: After calling `bootstrapCouncilMember` once, the seat is permanently consumed and `councilBootstrapConsumed` is set to `true`, preventing any further bootstrap attempts (see `contracts/TemplBase.sol`).
 - **Typical usage pattern**: Deploy with `councilMode=true` → priest is automatically added as first council member → priest uses bootstrap seat to add second member → subsequent council changes via governance proposals.
 
 #### Proposal Fee Uniformity
