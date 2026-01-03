@@ -134,6 +134,7 @@ contract TemplMembershipModule is TemplBase {
         joiningMember.joined = true;
         joiningMember.timestamp = block.timestamp;
         joiningMember.blockNumber = block.number;
+        joiningMember.joinRewardEventSequence = ++rewardEventSequence;
 
         uint256 sequence = ++joinSequence;
         memberCount = currentMemberCount + 1;
@@ -187,7 +188,7 @@ contract TemplMembershipModule is TemplBase {
     /// @notice Returns the member pool allocation pending for a given wallet.
     /// @param member Wallet to inspect.
     /// @return amount Claimable balance denominated in the access token.
-    function getClaimableMemberRewards(address member) public view returns (uint256 amount) {
+    function getClaimableMemberRewards(address member) public view onlyDelegatecall returns (uint256 amount) {
         if (!members[member].joined) {
             return 0;
         }
@@ -199,7 +200,7 @@ contract TemplMembershipModule is TemplBase {
 
     /// @notice Lists ERC-20 (or ETH) reward tokens with active external pools.
     /// @return tokens Array of reward token addresses currently tracked.
-    function getExternalRewardTokens() external view returns (address[] memory tokens) {
+    function getExternalRewardTokens() external view onlyDelegatecall returns (address[] memory tokens) {
         return externalRewardTokens;
     }
 
@@ -210,7 +211,7 @@ contract TemplMembershipModule is TemplBase {
     /// @return remainder Remainder carried forward for the next distribution.
     function getExternalRewardState(
         address token
-    ) external view returns (uint256 poolBalance, uint256 cumulativeRewards, uint256 remainder) {
+    ) external view onlyDelegatecall returns (uint256 poolBalance, uint256 cumulativeRewards, uint256 remainder) {
         ExternalRewardState storage rewards = externalRewards[token];
         return (rewards.poolBalance, rewards.cumulativeRewards, rewards.rewardRemainder);
     }
@@ -219,7 +220,10 @@ contract TemplMembershipModule is TemplBase {
     /// @param member Wallet to inspect.
     /// @param token ERC-20 token address or address(0) for ETH.
     /// @return amount Claimable balance of the external reward for the member.
-    function getClaimableExternalReward(address member, address token) public view returns (uint256 amount) {
+    function getClaimableExternalReward(
+        address member,
+        address token
+    ) public view onlyDelegatecall returns (uint256 amount) {
         if (!members[member].joined) {
             return 0;
         }
@@ -294,7 +298,9 @@ contract TemplMembershipModule is TemplBase {
     /// @return joined True if the wallet has joined.
     /// @return timestamp Block timestamp when the join completed.
     /// @return blockNumber Block number when the join completed.
-    function getJoinDetails(address user) external view returns (bool joined, uint256 timestamp, uint256 blockNumber) {
+    function getJoinDetails(
+        address user
+    ) external view onlyDelegatecall returns (bool joined, uint256 timestamp, uint256 blockNumber) {
         Member storage m = members[user];
         return (m.joined, m.timestamp, m.blockNumber);
     }
@@ -307,6 +313,7 @@ contract TemplMembershipModule is TemplBase {
     function getTreasuryInfo()
         external
         view
+        onlyDelegatecall
         returns (uint256 treasury, uint256 memberPool, address protocolAddress, uint256 burned)
     {
         uint256 current = IERC20(accessToken).balanceOf(address(this));
@@ -328,6 +335,7 @@ contract TemplMembershipModule is TemplBase {
     function getConfig()
         external
         view
+        onlyDelegatecall
         returns (
             address token,
             uint256 fee,
@@ -359,13 +367,13 @@ contract TemplMembershipModule is TemplBase {
 
     /// @notice Returns the number of active members.
     /// @return count Number of wallets with active membership (includes the auto-enrolled priest).
-    function getMemberCount() external view returns (uint256 count) {
+    function getMemberCount() external view onlyDelegatecall returns (uint256 count) {
         return memberCount;
     }
 
     /// @notice Total counter for successful joins (mirrors member count without storing extra state).
     /// @return joins Number of completed joins excluding the auto-enrolled priest.
-    function totalJoins() public view returns (uint256 joins) {
+    function totalJoins() public view onlyDelegatecall returns (uint256 joins) {
         if (memberCount == 0) {
             return 0;
         }
@@ -375,7 +383,7 @@ contract TemplMembershipModule is TemplBase {
     /// @notice Exposes a voter's current vote weight (1 per active member).
     /// @param voter Address to inspect for voting rights.
     /// @return weight Voting weight (1 when the wallet is a member, 0 otherwise).
-    function getVoteWeight(address voter) external view returns (uint256 weight) {
+    function getVoteWeight(address voter) external view onlyDelegatecall returns (uint256 weight) {
         if (!members[voter].joined) {
             return 0;
         }
@@ -393,7 +401,7 @@ contract TemplMembershipModule is TemplBase {
     function getExternalRewardTokensPaginated(
         uint256 offset,
         uint256 limit
-    ) external view returns (address[] memory tokens, bool hasMore) {
+    ) external view onlyDelegatecall returns (address[] memory tokens, bool hasMore) {
         uint256 len = externalRewardTokens.length;
         if (!(offset < len)) {
             return (new address[](0), false);

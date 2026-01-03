@@ -116,6 +116,8 @@ abstract contract TemplBase is ReentrancyGuard {
         uint256 rewardSnapshot;
         /// @notice Monotonic join sequence assigned at the time of entry (0 when never joined).
         uint256 joinSequence;
+        /// @notice Reward event sequence captured when the member joined.
+        uint256 joinRewardEventSequence;
     }
 
     /// @notice Membership records keyed by wallet address.
@@ -140,6 +142,8 @@ abstract contract TemplBase is ReentrancyGuard {
         uint64 timestamp;
         /// @notice Cumulative rewards per member at that checkpoint.
         uint256 cumulative;
+        /// @notice Monotonic sequence used to order checkpoints within a block.
+        uint256 eventSequence;
     }
 
     enum Action {
@@ -267,6 +271,8 @@ abstract contract TemplBase is ReentrancyGuard {
         bool instantQuorumMet;
         /// @notice Timestamp when instant quorum was satisfied.
         uint256 instantQuorumReachedAt;
+        /// @notice Council membership epoch snapshot captured at proposal creation (0 = member-wide voting).
+        uint256 councilSnapshotEpoch;
     }
 
     /// @notice Total proposals ever created.
@@ -500,6 +506,14 @@ abstract contract TemplBase is ReentrancyGuard {
     mapping(address => uint256) internal externalRewardTokenIndex;
     /// @notice Member snapshots for each external reward token.
     mapping(address => mapping(address => uint256)) internal memberExternalRewardSnapshots;
+    /// @notice Monotonic sequence used to order joins vs external reward checkpoints.
+    uint256 public rewardEventSequence;
+    /// @notice Monotonic epoch that advances when council membership changes.
+    uint256 public councilEpoch;
+    /// @notice Council membership epoch when a wallet was last added.
+    mapping(address => uint256) internal councilJoinEpoch;
+    /// @notice Council membership epoch when a wallet was last removed.
+    mapping(address => uint256) internal councilLeaveEpoch;
     /// @dev Restricts a function so only wallets that successfully joined may call it.
     modifier onlyMember() {
         if (!members[msg.sender].joined) revert TemplErrors.NotMember();
@@ -531,23 +545,15 @@ abstract contract TemplBase is ReentrancyGuard {
     /// @notice Persists a new external reward checkpoint so future joins can baseline correctly.
     /// @param rewards External reward state to record a checkpoint for.
     function _recordExternalCheckpoint(ExternalRewardState storage rewards) internal {
-        RewardCheckpoint memory checkpoint = RewardCheckpoint({
-            blockNumber: uint64(block.number),
-            timestamp: uint64(block.timestamp),
-            cumulative: rewards.cumulativeRewards
-        });
-        uint256 len = rewards.checkpoints.length;
-        if (len == 0) {
-            rewards.checkpoints.push(checkpoint);
-            return;
-        }
-        RewardCheckpoint storage last = rewards.checkpoints[len - 1];
-        if (last.blockNumber == checkpoint.blockNumber) {
-            last.timestamp = checkpoint.timestamp;
-            last.cumulative = checkpoint.cumulative;
-        } else {
-            rewards.checkpoints.push(checkpoint);
-        }
+        uint256 nextSequence = ++rewardEventSequence;
+        rewards.checkpoints.push(
+            RewardCheckpoint({
+                blockNumber: uint64(block.number),
+                timestamp: uint64(block.timestamp),
+                cumulative: rewards.cumulativeRewards,
+                eventSequence: nextSequence
+            })
+        );
     }
 
     /// @notice Determines the cumulative rewards baseline for a member using join-time snapshots.
@@ -563,20 +569,14 @@ abstract contract TemplBase is ReentrancyGuard {
         if (len == 0) {
             return rewards.cumulativeRewards;
         }
-
-        uint256 memberBlockNumber = memberInfo.blockNumber;
-        uint256 memberTimestamp = memberInfo.timestamp;
+        uint256 memberEventSequence = memberInfo.joinRewardEventSequence;
         uint256 low = 0;
         uint256 high = len;
 
         while (low < high) {
             uint256 mid = (low + high) >> 1;
             RewardCheckpoint storage cp = checkpoints[mid];
-            if (memberBlockNumber < cp.blockNumber) {
-                high = mid;
-            } else if (memberBlockNumber > cp.blockNumber) {
-                low = mid + 1;
-            } else if (memberTimestamp < cp.timestamp) {
+            if (memberEventSequence < cp.eventSequence) {
                 high = mid;
             } else {
                 low = mid + 1;
@@ -853,6 +853,19 @@ abstract contract TemplBase is ReentrancyGuard {
         return councilModeEnabled ? councilMemberCount : memberCount;
     }
 
+    /// @notice Checks whether `account` was a council member at `snapshotEpoch`.
+    /// @param account Wallet to evaluate.
+    /// @param snapshotEpoch Council membership epoch captured by a proposal.
+    /// @return isMember True when the account was on the council at the snapshot epoch.
+    function _isCouncilMemberAtEpoch(address account, uint256 snapshotEpoch) internal view returns (bool isMember) {
+        uint256 joinedAt = councilJoinEpoch[account];
+        if (joinedAt == 0 || joinedAt > snapshotEpoch) {
+            return false;
+        }
+        uint256 leftAt = councilLeaveEpoch[account];
+        return leftAt == 0 || leftAt > snapshotEpoch;
+    }
+
     /// @notice Returns true when `yesVotes` satisfies the configured YES threshold relative to total votes.
     /// @param yesVotes Count of YES ballots.
     /// @param noVotes Count of NO ballots.
@@ -894,7 +907,9 @@ abstract contract TemplBase is ReentrancyGuard {
         if (proposal.quorumReachedAt == 0) {
             proposal.quorumReachedAt = block.timestamp;
             proposal.quorumSnapshotBlock = block.number;
-            proposal.postQuorumEligibleVoters = _eligibleVoterCount();
+            proposal.postQuorumEligibleVoters = proposal.councilSnapshotEpoch == 0
+                ? _eligibleVoterCount()
+                : proposal.eligibleVoters;
             proposal.quorumJoinSequence = joinSequence;
         }
         proposal.instantQuorumMet = true;
@@ -951,7 +966,9 @@ abstract contract TemplBase is ReentrancyGuard {
         proposal.preQuorumSnapshotBlock = block.number;
         proposal.preQuorumJoinSequence = joinSequence;
         proposal.executed = false;
-        bool proposerCanVote = !councilModeEnabled || councilMembers[msg.sender];
+        uint256 councilSnapshotEpoch = councilModeEnabled ? councilEpoch : 0;
+        proposal.councilSnapshotEpoch = councilSnapshotEpoch;
+        bool proposerCanVote = councilSnapshotEpoch == 0 || _isCouncilMemberAtEpoch(msg.sender, councilSnapshotEpoch);
         if (proposerCanVote) {
             proposal.hasVoted[msg.sender] = true;
             proposal.voteChoice[msg.sender] = true;
@@ -960,7 +977,7 @@ abstract contract TemplBase is ReentrancyGuard {
             proposal.yesVotes = 0;
         }
         proposal.noVotes = 0;
-        proposal.eligibleVoters = _eligibleVoterCount();
+        proposal.eligibleVoters = councilSnapshotEpoch == 0 ? memberCount : councilMemberCount;
         proposal.quorumReachedAt = 0;
         proposal.quorumExempt = false;
         if (
@@ -1460,6 +1477,10 @@ abstract contract TemplBase is ReentrancyGuard {
         if (councilMembers[account]) revert TemplErrors.CouncilMemberExists();
         councilMembers[account] = true;
         ++councilMemberCount;
+        uint256 nextEpoch = councilEpoch + 1;
+        councilEpoch = nextEpoch;
+        councilJoinEpoch[account] = nextEpoch;
+        councilLeaveEpoch[account] = 0;
         emit CouncilMemberAdded(account, addedBy);
     }
 
@@ -1471,6 +1492,9 @@ abstract contract TemplBase is ReentrancyGuard {
         if (councilMemberCount < 2) revert TemplErrors.CouncilMemberMinimum();
         councilMembers[account] = false;
         --councilMemberCount;
+        uint256 nextEpoch = councilEpoch + 1;
+        councilEpoch = nextEpoch;
+        councilLeaveEpoch[account] = nextEpoch;
         emit CouncilMemberRemoved(account, removedBy);
     }
 

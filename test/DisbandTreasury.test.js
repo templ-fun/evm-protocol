@@ -602,6 +602,38 @@ describe("Disband Treasury", function () {
     ).to.equal(0n);
   });
 
+  it("lets same-block joiners claim external disband shares", async function () {
+    const OtherToken = await ethers.getContractFactory("TestToken");
+    const otherToken = await OtherToken.deploy("Other", "OTH", 18);
+    const donation = ethers.parseUnits("9", 18);
+    const joiner = accounts[5];
+
+    await otherToken.mint(owner.address, donation);
+    await otherToken.transfer(await templ.getAddress(), donation);
+
+    await templ
+      .connect(m1)
+      .createProposalDisbandTreasury(otherToken.target, VOTING_PERIOD);
+    await templ.connect(m1).vote(0, true);
+    await templ.connect(m2).vote(0, true);
+    await advanceTimeBeyondVoting();
+
+    await mintToUsers(token, [joiner], ENTRY_FEE);
+    await token.connect(joiner).approve(await templ.getAddress(), ENTRY_FEE);
+
+    await ethers.provider.send("evm_setAutomine", [false]);
+    const txOverrides = { gasLimit: 1_000_000 };
+    const joinTx = await templ.connect(joiner).join(txOverrides);
+    const execTx = await templ.connect(m1).executeProposal(0, txOverrides);
+
+    await ethers.provider.send("evm_mine");
+    await ethers.provider.send("evm_setAutomine", [true]);
+    await Promise.all([joinTx.wait(), execTx.wait()]);
+
+    const expectedPerMember = donation / (await templ.getMemberCount());
+    expect(await templ.getClaimableExternalReward(joiner.address, otherToken.target)).to.equal(expectedPerMember);
+  });
+
   it("distributes donated ETH into external claim balances", async function () {
     const donation = ethers.parseUnits("9", 18);
     await owner.sendTransaction({ to: await templ.getAddress(), value: donation });

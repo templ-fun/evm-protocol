@@ -31,8 +31,7 @@ contract TemplGovernanceModule is TemplBase {
         string calldata _title,
         string calldata _description
     ) external nonReentrant returns (uint256 proposalId) {
-        _requireDelegatecall();
-        if (priestIsDictator) revert TemplErrors.DictatorshipEnabled();
+        _requireDelegatecallAndNotDictator();
         (uint256 id, Proposal storage p) = _createBaseProposal(_votingPeriod, _title, _description);
         p.action = Action.SetJoinPaused;
         p.joinPaused = _paused;
@@ -59,8 +58,7 @@ contract TemplGovernanceModule is TemplBase {
         string calldata _title,
         string calldata _description
     ) external nonReentrant returns (uint256 proposalId) {
-        _requireDelegatecall();
-        if (priestIsDictator) revert TemplErrors.DictatorshipEnabled();
+        _requireDelegatecallAndNotDictator();
         if (_newEntryFee > 0) {
             if (_newEntryFee < 10) revert TemplErrors.EntryFeeTooSmall();
             if (_newEntryFee % 10 != 0) revert TemplErrors.InvalidEntryFee();
@@ -91,8 +89,7 @@ contract TemplGovernanceModule is TemplBase {
         string calldata _title,
         string calldata _description
     ) external nonReentrant returns (uint256 proposalId) {
-        _requireDelegatecall();
-        if (priestIsDictator) revert TemplErrors.DictatorshipEnabled();
+        _requireDelegatecallAndNotDictator();
         if (_newMaxMembers > 0 && _newMaxMembers < memberCount) {
             revert TemplErrors.MemberLimitTooLow();
         }
@@ -118,8 +115,7 @@ contract TemplGovernanceModule is TemplBase {
         string calldata _title,
         string calldata _description
     ) external nonReentrant returns (uint256 proposalId) {
-        _requireDelegatecall();
-        if (priestIsDictator) revert TemplErrors.DictatorshipEnabled();
+        _requireDelegatecallAndNotDictator();
         (uint256 id, Proposal storage p) = _createBaseProposal(_votingPeriod, _title, _description);
         p.action = Action.SetMetadata;
         p.newTemplName = _newName;
@@ -140,8 +136,7 @@ contract TemplGovernanceModule is TemplBase {
         string calldata _title,
         string calldata _description
     ) external nonReentrant returns (uint256 proposalId) {
-        _requireDelegatecall();
-        if (priestIsDictator) revert TemplErrors.DictatorshipEnabled();
+        _requireDelegatecallAndNotDictator();
         if (_newQuorumBps > BPS_DENOMINATOR) revert TemplErrors.InvalidPercentage();
         (uint256 id, Proposal storage p) = _createBaseProposal(_votingPeriod, _title, _description);
         p.action = Action.SetQuorumBps;
@@ -161,8 +156,7 @@ contract TemplGovernanceModule is TemplBase {
         string calldata _title,
         string calldata _description
     ) external nonReentrant returns (uint256 proposalId) {
-        _requireDelegatecall();
-        if (priestIsDictator) revert TemplErrors.DictatorshipEnabled();
+        _requireDelegatecallAndNotDictator();
         if (_newInstantQuorumBps == 0 || _newInstantQuorumBps > BPS_DENOMINATOR) revert TemplErrors.InvalidPercentage();
         (uint256 id, Proposal storage p) = _createBaseProposal(_votingPeriod, _title, _description);
         p.action = Action.SetInstantQuorumBps;
@@ -182,8 +176,7 @@ contract TemplGovernanceModule is TemplBase {
         string calldata _title,
         string calldata _description
     ) external nonReentrant returns (uint256 proposalId) {
-        _requireDelegatecall();
-        if (priestIsDictator) revert TemplErrors.DictatorshipEnabled();
+        _requireDelegatecallAndNotDictator();
         (uint256 id, Proposal storage p) = _createBaseProposal(_votingPeriod, _title, _description);
         p.action = Action.SetPostQuorumVotingPeriod;
         p.newPostQuorumVotingPeriod = _newPeriodSeconds;
@@ -203,8 +196,7 @@ contract TemplGovernanceModule is TemplBase {
         string calldata _title,
         string calldata _description
     ) external nonReentrant returns (uint256 proposalId) {
-        _requireDelegatecall();
-        if (priestIsDictator) revert TemplErrors.DictatorshipEnabled();
+        _requireDelegatecallAndNotDictator();
         if (_newBurn == address(0)) revert TemplErrors.InvalidRecipient();
         (uint256 id, Proposal storage p) = _createBaseProposal(_votingPeriod, _title, _description);
         p.action = Action.SetBurnAddress;
@@ -224,8 +216,7 @@ contract TemplGovernanceModule is TemplBase {
         string calldata _title,
         string calldata _description
     ) external nonReentrant returns (uint256 proposalId) {
-        _requireDelegatecall();
-        if (priestIsDictator) revert TemplErrors.DictatorshipEnabled();
+        _requireDelegatecallAndNotDictator();
         if (_newFeeBps > BPS_DENOMINATOR) revert TemplErrors.InvalidPercentage();
         (uint256 id, Proposal storage p) = _createBaseProposal(_votingPeriod, _title, _description);
         p.action = Action.SetProposalFee;
@@ -245,8 +236,7 @@ contract TemplGovernanceModule is TemplBase {
         string calldata _title,
         string calldata _description
     ) external nonReentrant returns (uint256 proposalId) {
-        _requireDelegatecall();
-        if (priestIsDictator) revert TemplErrors.DictatorshipEnabled();
+        _requireDelegatecallAndNotDictator();
         if (_newReferralBps > BPS_DENOMINATOR) revert TemplErrors.InvalidPercentage();
         (uint256 id, Proposal storage p) = _createBaseProposal(_votingPeriod, _title, _description);
         p.action = Action.SetReferralShare;
@@ -268,8 +258,7 @@ contract TemplGovernanceModule is TemplBase {
         string calldata _title,
         string calldata _description
     ) external nonReentrant returns (uint256 proposalId) {
-        _requireDelegatecall();
-        if (priestIsDictator) revert TemplErrors.DictatorshipEnabled();
+        _requireDelegatecallAndNotDictator();
         CurveConfig memory curve = _curve;
         _validateCurveConfig(curve);
         if (_baseEntryFee != 0) {
@@ -304,8 +293,7 @@ contract TemplGovernanceModule is TemplBase {
         string calldata _title,
         string calldata _description
     ) external nonReentrant returns (uint256 proposalId) {
-        _requireDelegatecall();
-        if (priestIsDictator) revert TemplErrors.DictatorshipEnabled();
+        _requireDelegatecallAndNotDictator();
         if (_target == address(0)) revert TemplErrors.InvalidRecipient();
         bytes memory callData = abi.encodePacked(_selector, _params);
         (uint256 id, Proposal storage p) = _createBaseProposal(_votingPeriod, _title, _description);
@@ -332,8 +320,7 @@ contract TemplGovernanceModule is TemplBase {
         string calldata _title,
         string calldata _description
     ) external nonReentrant returns (uint256 proposalId) {
-        _requireDelegatecall();
-        if (priestIsDictator) revert TemplErrors.DictatorshipEnabled();
+        _requireDelegatecallAndNotDictator();
         (uint256 id, Proposal storage p) = _createBaseProposal(_votingPeriod, _title, _description);
         p.action = Action.WithdrawTreasury;
         p.token = _token;
@@ -356,8 +343,7 @@ contract TemplGovernanceModule is TemplBase {
         string calldata _title,
         string calldata _description
     ) external nonReentrant returns (uint256 proposalId) {
-        _requireDelegatecall();
-        if (priestIsDictator) revert TemplErrors.DictatorshipEnabled();
+        _requireDelegatecallAndNotDictator();
         (uint256 id, Proposal storage p) = _createBaseProposal(_votingPeriod, _title, _description);
         p.action = Action.DisbandTreasury;
         p.token = _token;
@@ -379,8 +365,7 @@ contract TemplGovernanceModule is TemplBase {
         string calldata _title,
         string calldata _description
     ) external nonReentrant returns (uint256 proposalId) {
-        _requireDelegatecall();
-        if (priestIsDictator) revert TemplErrors.DictatorshipEnabled();
+        _requireDelegatecallAndNotDictator();
         (uint256 id, Proposal storage p) = _createBaseProposal(_votingPeriod, _title, _description);
         p.action = Action.CleanupExternalRewardToken;
         p.token = _token;
@@ -400,9 +385,8 @@ contract TemplGovernanceModule is TemplBase {
         string calldata _title,
         string calldata _description
     ) external nonReentrant returns (uint256 proposalId) {
-        _requireDelegatecall();
+        _requireDelegatecallAndNotDictator();
         if (_newPriest == address(0)) revert TemplErrors.InvalidRecipient();
-        if (priestIsDictator) revert TemplErrors.DictatorshipEnabled();
         (uint256 id, Proposal storage p) = _createBaseProposal(_votingPeriod, _title, _description);
         p.action = Action.ChangePriest;
         p.recipient = _newPriest;
@@ -448,7 +432,8 @@ contract TemplGovernanceModule is TemplBase {
 
         Member storage memberInfo = members[msg.sender];
 
-        if (councilModeEnabled && !councilMembers[msg.sender]) {
+        uint256 councilSnapshotEpoch = proposal.councilSnapshotEpoch;
+        if (councilSnapshotEpoch != 0 && !_isCouncilMemberAtEpoch(msg.sender, councilSnapshotEpoch)) {
             revert TemplErrors.NotCouncil();
         }
 
@@ -491,7 +476,9 @@ contract TemplGovernanceModule is TemplBase {
             ) {
                 proposal.quorumReachedAt = block.timestamp;
                 proposal.quorumSnapshotBlock = block.number;
-                proposal.postQuorumEligibleVoters = _eligibleVoterCount();
+                proposal.postQuorumEligibleVoters = councilSnapshotEpoch == 0
+                    ? _eligibleVoterCount()
+                    : proposal.eligibleVoters;
                 proposal.quorumJoinSequence = joinSequence;
                 proposal.endTime = block.timestamp + postQuorumVotingPeriod;
             }
@@ -848,5 +835,10 @@ contract TemplGovernanceModule is TemplBase {
     /// @dev Prevents direct calls to the module implementation.
     function _requireDelegatecall() internal view {
         if (address(this) == SELF) revert TemplErrors.DelegatecallOnly();
+    }
+
+    function _requireDelegatecallAndNotDictator() internal view {
+        _requireDelegatecall();
+        if (priestIsDictator) revert TemplErrors.DictatorshipEnabled();
     }
 }

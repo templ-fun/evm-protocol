@@ -140,6 +140,8 @@ contract TEMPL is TemplBase {
         priestMember.rewardSnapshot = cumulativeMemberRewards;
         joinSequence = 1;
         priestMember.joinSequence = 1;
+        rewardEventSequence = 1;
+        priestMember.joinRewardEventSequence = 1;
         memberCount = 1;
         _addCouncilMember(_priest, _priest);
         if (_startInCouncilMode) {
@@ -408,6 +410,18 @@ contract TEMPL is TemplBase {
         if (!(_proposalId < proposalCount)) revert TemplErrors.InvalidProposal();
         Proposal storage proposal = proposals[_proposalId];
         return (proposal.preQuorumJoinSequence, proposal.quorumJoinSequence);
+    }
+
+    /// @notice Returns the voting regime snapshot captured for a proposal.
+    /// @param _proposalId Proposal id to inspect.
+    /// @return councilOnly True when the proposal is locked to council-only voting.
+    /// @return councilSnapshotEpoch Council membership epoch captured at proposal creation.
+    function getProposalVotingMode(
+        uint256 _proposalId
+    ) external view returns (bool councilOnly, uint256 councilSnapshotEpoch) {
+        if (!(_proposalId < proposalCount)) revert TemplErrors.InvalidProposal();
+        Proposal storage proposal = proposals[_proposalId];
+        return (proposal.councilSnapshotEpoch != 0, proposal.councilSnapshotEpoch);
     }
 
     /// @notice Returns whether a voter participated in a proposal and their recorded choice.

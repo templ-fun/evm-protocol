@@ -33,6 +33,48 @@ async function enableCouncilMode(templ, proposer, voters) {
 }
 
 describe("Council governance", function () {
+  it("keeps proposal voting mode fixed when council mode toggles", async function () {
+    const { templ, member1, member2, member3 } = await setupTempl({ councilMode: false });
+    const longVotingPeriod = 14 * 24 * 60 * 60;
+
+    await templ
+      .connect(member1)
+      .createProposalSetBurnAddress("0x0000000000000000000000000000000000000101", longVotingPeriod, "burn", "");
+    const memberProposalId = (await templ.proposalCount()) - 1n;
+
+    await templ.connect(member2).createProposalSetCouncilMode(true, WEEK, "Enable council", "");
+    const councilProposalId = (await templ.proposalCount()) - 1n;
+    await templ.connect(member1).vote(councilProposalId, true);
+    await templ.connect(member3).vote(councilProposalId, true);
+    await advanceTime();
+    await templ.executeProposal(councilProposalId);
+    expect(await templ.councilModeEnabled()).to.equal(true);
+
+    await expect(templ.connect(member3).vote(memberProposalId, true)).to.emit(templ, "VoteCast");
+  });
+
+  it("freezes council membership for active proposals", async function () {
+    const { templ, priest, member1, member2 } = await setupTempl({ councilMode: true });
+    const longVotingPeriod = 14 * 24 * 60 * 60;
+
+    await templ
+      .connect(member1)
+      .createProposalSetBurnAddress("0x0000000000000000000000000000000000000202", longVotingPeriod, "burn", "");
+    const memberProposalId = (await templ.proposalCount()) - 1n;
+
+    await templ
+      .connect(member2)
+      .createProposalAddCouncilMember(member2.address, WEEK, "Add member2", "");
+    const councilProposalId = (await templ.proposalCount()) - 1n;
+    await templ.connect(priest).vote(councilProposalId, true);
+    await advanceTime();
+    await templ.executeProposal(councilProposalId);
+    expect(await templ.councilMembers(member2.address)).to.equal(true);
+
+    await expect(templ.connect(member2).vote(memberProposalId, true))
+      .to.be.revertedWithCustomError(templ, "NotCouncil");
+  });
+
   it("restricts voting to council members and supports priest bootstrap", async function () {
     const { templ, priest, member1, member2, member3 } = await setupTempl();
 

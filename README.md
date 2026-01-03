@@ -43,6 +43,7 @@ Deployers configure pricing curves, fee splits, referral rewards, proposal fees,
 ### Council governance
 - Factory-created templs start in council mode by default. The priest is the first council member and can consume a single bootstrap seat to add another member without a governance vote. Afterward, council composition changes only through proposals (or DAO calls while dictatorship is enabled and council mode is off).
 - Council mode restricts voting to the council set but any member can still pay the proposal fee to open a proposal.
+- Proposal voting mode and council roster are snapshotted at creation; later council toggles or roster changes do not affect eligibility for that proposal (see `getProposalVotingMode`).
 - Proposal fees apply equally to council and non-council proposers (no council fee waiver).
 - Council mode and dictatorship are mutually exclusive. Enabling dictatorship requires council mode to be disabled, and attempts to toggle council mode on while dictatorship is active revert.
 - Disable council mode via the `SetCouncilMode` proposal type (or the corresponding DAO call while dictatorship is enabled) to return to member-wide voting.
@@ -254,7 +255,7 @@ flowchart LR
 - Member pool: portion of each join streamed to existing members pro‑rata; optional referral share is paid from this slice.
 - Curves: entry fee evolves by static/linear/exponential segments; see [`TemplCurve`](contracts/TemplCurve.sol).
 - Dictatorship: when enabled, the priest may call `onlyDAO` actions directly with no voting window or timelock. The priest can exercise the full DAO surface, including `batchDAO` for arbitrary external calls executed from the templ address. When dictatorship is disabled, all `onlyDAO` actions execute via governance.
-- Snapshots: eligibility is frozen by join sequence at proposal creation, then again at quorum.
+- Snapshots: eligibility is frozen by join sequence at proposal creation, then again at quorum; proposals also snapshot their voting mode and (if council-only) the council roster.
 - Caps/pauses: optional `maxMembers` (auto‑pauses at cap) plus `joinPaused` toggle.
 - Governance access: proposing and voting require membership; proposers auto‑vote YES only when they are allowed to vote (i.e., not excluded by council mode).
 
@@ -272,7 +273,7 @@ flowchart LR
 - priest: A designated address with optional dictatorship powers when enabled.
 - dictatorship: Mode where the priest may execute DAO‑only actions directly.
 - member pool: Accounting bucket that streams join fees to existing members, claimable pro‑rata.
-- external rewards: ETH/ERC‑20 balances held by the templ and distributed by proposals or claim logic.
+- external rewards: ETH/ERC‑20 balances held by the templ and distributed by proposals or claim logic; reward checkpoints use a monotonic event sequence to disambiguate same-block joins/disbands.
 - entry fee curve: Growth schedule for the next join price (see `CurveConfig` in `TemplCurve`).
 - quorum bps: Percent of eligible members required to reach quorum.
 - pre/post‑quorum window: Voting period before quorum and the anchored window after quorum.
@@ -348,6 +349,8 @@ await factory.safeDeployFor(
   0  // referral share bps
 );
 ```
+
+Other factory entrypoints (`createTempl*`) do not run the vanilla-token probe; use `safeDeployFor` unless you have independently validated the token's transfer semantics.
 
 Verify on Base (optional):
 

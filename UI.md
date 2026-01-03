@@ -197,6 +197,7 @@ if (proposalFee > 0n) {
 - Call: `templ.vote(uint256 proposalId, bool support)`
 - Snapshot rules enforced on-chain:
   - Eligibility locks at creation by join sequence; after quorum, it re‑snapshots. UI can show `getProposalSnapshots(id)` and `getProposalJoinSequences(id)`.
+  - Voting mode is snapshotted per proposal; use `getProposalVotingMode(id)` instead of the current `councilModeEnabled` when deciding who can vote.
 - Helpful reads: `templ.getProposal(id)`, `templ.hasVoted(id, user)`.
 
 6) Execute a Proposal

@@ -77,6 +77,7 @@ contract TemplHarness is TEMPL {
         info.timestamp = timestamp;
         info.joined = joined;
         info.joinSequence = joinSequenceValue;
+        info.joinRewardEventSequence = joinSequenceValue;
     }
 
     /// @dev Exposes the internal snapshot helper for coverage assertions.
@@ -93,11 +94,23 @@ contract TemplHarness is TEMPL {
     }
 
     /// @dev Pushes a checkpoint to drive binary-search branches in tests.
-    function harnessPushCheckpoint(address token, uint64 blockNumber, uint64 timestamp, uint256 cumulative) external {
+    function harnessPushCheckpoint(
+        address token,
+        uint64 blockNumber,
+        uint64 timestamp,
+        uint256 cumulative,
+        uint256 eventSequence
+    ) external {
         ExternalRewardState storage rewards = externalRewards[token];
         rewards.exists = true;
+        rewardEventSequence = eventSequence;
         rewards.checkpoints.push(
-            RewardCheckpoint({blockNumber: blockNumber, timestamp: timestamp, cumulative: cumulative})
+            RewardCheckpoint({
+                blockNumber: blockNumber,
+                timestamp: timestamp,
+                cumulative: cumulative,
+                eventSequence: eventSequence
+            })
         );
     }
 
@@ -110,11 +123,13 @@ contract TemplHarness is TEMPL {
     function harnessUpdateCheckpointSameBlock(address token, uint256 newCumulative) external {
         ExternalRewardState storage rewards = externalRewards[token];
         rewards.exists = true;
+        uint256 seededSequence = ++rewardEventSequence;
         rewards.checkpoints.push(
             RewardCheckpoint({
                 blockNumber: uint64(block.number),
                 timestamp: uint64(block.timestamp),
-                cumulative: rewards.cumulativeRewards
+                cumulative: rewards.cumulativeRewards,
+                eventSequence: seededSequence
             })
         );
         rewards.cumulativeRewards = newCumulative;

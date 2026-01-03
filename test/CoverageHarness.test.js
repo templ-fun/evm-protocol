@@ -138,21 +138,21 @@ describe("TemplHarness coverage helpers", function () {
     expect(raw[2]).to.equal(0);
   });
 
-  it("handles checkpoint timestamps before member join time", async function () {
+  it("handles checkpoints that occur after a member join event", async function () {
     const member = priest.address;
     await harness.harnessSetMember(member, 50, 4_000, true, 5);
     const tokenKey = ethers.Wallet.createRandom().address;
     await harness.harnessResetExternalRewards(tokenKey, 0);
-    await harness.harnessPushCheckpoint(tokenKey, 50, 5_000, 10);
+    await harness.harnessPushCheckpoint(tokenKey, 50, 5_000, 10, 6);
     expect(await harness.harnessExternalBaseline(tokenKey, member)).to.equal(0);
   });
 
-  it("handles checkpoint timestamps at or before member join time", async function () {
+  it("handles checkpoints that occur before a member join event", async function () {
     const member = priest.address;
     await harness.harnessSetMember(member, 50, 6_000, true, 5);
     const tokenKey = ethers.Wallet.createRandom().address;
     await harness.harnessResetExternalRewards(tokenKey, 0);
-    await harness.harnessPushCheckpoint(tokenKey, 50, 5_000, 10);
+    await harness.harnessPushCheckpoint(tokenKey, 50, 5_000, 10, 4);
     expect(await harness.harnessExternalBaseline(tokenKey, member)).to.equal(10);
   });
 
