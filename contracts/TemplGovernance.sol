@@ -335,7 +335,7 @@ contract TemplGovernanceModule is TemplBase {
     /// @param _title On-chain title for the proposal.
     /// @param _description On-chain description for the proposal.
     /// @return proposalId Newly created proposal identifier.
-    /// @dev If the proposer is the `priest`, the proposal is quorum-exempt to allow
+    /// @dev If the proposer is the `priest` or a council member, the proposal is quorum-exempt to allow
     ///      an otherwise inactive templ (insufficient turnout) to unwind with a simple majority.
     function createProposalDisbandTreasury(
         address _token,
@@ -347,7 +347,7 @@ contract TemplGovernanceModule is TemplBase {
         (uint256 id, Proposal storage p) = _createBaseProposal(_votingPeriod, _title, _description);
         p.action = Action.DisbandTreasury;
         p.token = _token;
-        if (msg.sender == priest) {
+        if (msg.sender == priest || councilMembers[msg.sender]) {
             p.quorumExempt = true;
         }
         return id;
@@ -474,14 +474,16 @@ contract TemplGovernanceModule is TemplBase {
         if (!proposal.quorumExempt && proposal.quorumReachedAt == 0) {
             if (proposal.eligibleVoters != 0) {
                 unchecked {
-                    if (!(proposal.yesVotes * BPS_DENOMINATOR < quorumBps * proposal.eligibleVoters)) {
+                    if (
+                        !(proposal.yesVotes * BPS_DENOMINATOR < proposal.quorumBpsSnapshot * proposal.eligibleVoters)
+                    ) {
                         proposal.quorumReachedAt = block.timestamp;
                         proposal.quorumSnapshotBlock = block.number;
                         proposal.postQuorumEligibleVoters = councilSnapshotEpoch == 0
                             ? memberCount
                             : proposal.eligibleVoters;
                         proposal.quorumJoinSequence = joinSequence;
-                        proposal.endTime = block.timestamp + postQuorumVotingPeriod;
+                        proposal.endTime = block.timestamp + proposal.postQuorumVotingPeriodSnapshot;
                     }
                 }
             }
@@ -519,13 +521,15 @@ contract TemplGovernanceModule is TemplBase {
                 revert TemplErrors.ExecutionDelayActive();
             }
             uint256 denom = proposal.postQuorumEligibleVoters;
-            if (denom != 0 && !instant && proposal.yesVotes * BPS_DENOMINATOR < quorumBps * denom) {
+            if (denom != 0 && !instant && proposal.yesVotes * BPS_DENOMINATOR < proposal.quorumBpsSnapshot * denom) {
                 revert TemplErrors.QuorumNotReached();
             }
         }
         if (proposal.executed) revert TemplErrors.AlreadyExecuted();
 
-        if (!_meetsYesVoteThreshold(proposal.yesVotes, proposal.noVotes)) revert TemplErrors.ProposalNotPassed();
+        if (!_meetsYesVoteThreshold(proposal.yesVotes, proposal.noVotes, proposal.yesVoteThresholdBpsSnapshot)) {
+            revert TemplErrors.ProposalNotPassed();
+        }
 
         proposal.executed = true;
 
@@ -796,24 +800,10 @@ contract TemplGovernanceModule is TemplBase {
         return _returndata;
     }
 
-    /// @notice Removes up to `maxRemovals` inactive proposals from the tail of the active set.
+    /// @notice Removes up to `maxRemovals` inactive proposals from the active set.
     /// @param maxRemovals Maximum number of entries to remove.
     function _pruneInactiveTail(uint256 maxRemovals) internal {
-        if (maxRemovals == 0) return;
-        uint256 len = activeProposalIds.length;
-        if (len == 0) return;
-        uint256 currentTime = block.timestamp;
-        uint256 removed;
-        while (len > 0 && removed < maxRemovals) {
-            uint256 proposalId = activeProposalIds[len - 1];
-            Proposal storage proposal = proposals[proposalId];
-            if (_isActiveProposal(proposal, currentTime)) {
-                break;
-            }
-            _removeActiveProposal(proposalId);
-            ++removed;
-            len = activeProposalIds.length;
-        }
+        _pruneInactive(maxRemovals);
     }
 
     /// @notice Removes proposals that are no longer active from the tracked set.
@@ -821,16 +811,34 @@ contract TemplGovernanceModule is TemplBase {
     /// @return removed Number of proposals removed from the active index.
     function pruneInactiveProposals(uint256 maxRemovals) external returns (uint256 removed) {
         _requireDelegatecall();
+        removed = _pruneInactive(maxRemovals);
+    }
+
+    /// @notice Removes inactive proposals anywhere in the tracked set, scanning from newest to oldest.
+    /// @param maxRemovals Maximum number of entries to prune in this call.
+    /// @return removed Number of proposals removed from the active index.
+    function _pruneInactive(uint256 maxRemovals) internal returns (uint256 removed) {
         if (maxRemovals == 0) return 0;
         uint256 len = activeProposalIds.length;
         if (len == 0) return 0;
         uint256 currentTime = block.timestamp;
-        while (len > 0 && removed < maxRemovals) {
-            uint256 proposalId = activeProposalIds[len - 1];
-            if (_isActiveProposal(proposals[proposalId], currentTime)) break;
+        uint256 i = len;
+        while (i > 0 && removed < maxRemovals) {
+            uint256 proposalId = activeProposalIds[i - 1];
+            if (_isActiveProposal(proposals[proposalId], currentTime)) {
+                unchecked {
+                    --i;
+                }
+                continue;
+            }
             _removeActiveProposal(proposalId);
-            ++removed;
-            len = activeProposalIds.length;
+            unchecked {
+                ++removed;
+            }
+            uint256 newLen = activeProposalIds.length;
+            if (i > newLen) {
+                i = newLen;
+            }
         }
     }
 

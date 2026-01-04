@@ -46,4 +46,19 @@ describe("Max Members Pause Handling", function () {
     expect(await templ.joinPaused()).to.equal(false);
     expect(await templ.maxMembers()).to.equal(MAX_MEMBERS);
   });
+
+  it("auto-unpauses when the cap is raised above the current member count", async function () {
+    const newMax = MAX_MEMBERS + 1n;
+    await templ.connect(m1).createProposalSetMaxMembers(Number(newMax), VOTING_PERIOD);
+    await templ.connect(priest).vote(0, true);
+
+    const delay = Number(await templ.postQuorumVotingPeriod());
+    await ethers.provider.send("evm_increaseTime", [delay + 1]);
+    await ethers.provider.send("evm_mine", []);
+
+    await templ.executeProposal(0);
+
+    expect(await templ.maxMembers()).to.equal(newMax);
+    expect(await templ.joinPaused()).to.equal(false);
+  });
 });

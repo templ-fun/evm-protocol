@@ -165,12 +165,6 @@ contract TemplTreasuryModule is TemplBase {
         _removeCouncilMember(member, msg.sender);
     }
 
-    /// @notice Priest-only helper that consumes the single bootstrap council seat.
-    /// @param member Wallet to grant the bootstrap council seat to.
-    function bootstrapCouncilMember(address member) external onlyDelegatecall {
-        _bootstrapCouncilMember(member, msg.sender);
-    }
-
     /// @notice Governance action that updates the quorum threshold in basis points.
     /// @param newQuorumBps New quorum threshold (0-10_000 bps).
     function setQuorumBpsDAO(uint256 newQuorumBps) external onlyDAO onlyDelegatecall {

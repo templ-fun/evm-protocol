@@ -1,6 +1,8 @@
 const { expect } = require('chai');
 const { ethers } = require('hardhat');
+const { deployTempl } = require('./utils/deploy');
 const { deployTemplModules } = require('./utils/modules');
+const { mintToUsers, joinMembers } = require('./utils/mintAndPurchase');
 const { attachTemplInterface } = require('./utils/templ');
 
 // Regression test: once quorum is reached, execution must wait until the
@@ -87,5 +89,45 @@ describe('Anchored execution delay after quorum', function () {
 
     // Now global delay is large. Executing proposal A should still succeed based on its stored endTime.
     await expect(templ.executeProposal(proposalId)).to.not.be.reverted;
+  });
+
+  it('anchors post-quorum delay at creation when the delay is reduced before quorum', async function () {
+    const ENTRY_FEE = ethers.parseUnits('100', 18);
+    const LONG_DELAY = 7 * 24 * 60 * 60;
+    const SHORT_DELAY = 60 * 60;
+    const LONG_VOTING_PERIOD = 20 * 24 * 60 * 60;
+
+    const { templ, token, accounts } = await deployTempl({
+      entryFee: ENTRY_FEE,
+      executionDelay: LONG_DELAY,
+    });
+    const [, , member1, member2, member3] = accounts;
+
+    await mintToUsers(token, [member1, member2, member3], ENTRY_FEE * 5n);
+    await joinMembers(templ, token, [member1, member2, member3]);
+
+    await templ
+      .connect(member1)
+      .createProposalSetBurnAddress('0x00000000000000000000000000000000000000c1', LONG_VOTING_PERIOD, 'burn', '');
+    const proposalA = (await templ.proposalCount()) - 1n;
+
+    await templ
+      .connect(member2)
+      .createProposalSetPostQuorumVotingPeriod(SHORT_DELAY, 7 * 24 * 60 * 60, 'delay', '');
+    const proposalB = (await templ.proposalCount()) - 1n;
+    await templ.connect(member3).vote(proposalB, true);
+
+    await ethers.provider.send('evm_increaseTime', [LONG_DELAY + 1]);
+    await ethers.provider.send('evm_mine', []);
+    await templ.executeProposal(proposalB);
+    expect(await templ.postQuorumVotingPeriod()).to.equal(BigInt(SHORT_DELAY));
+
+    await templ.connect(member2).vote(proposalA, true);
+    await templ.connect(member3).vote(proposalA, true);
+
+    await ethers.provider.send('evm_increaseTime', [SHORT_DELAY + 1]);
+    await ethers.provider.send('evm_mine', []);
+
+    await expect(templ.executeProposal(proposalA)).to.be.revertedWithCustomError(templ, 'ExecutionDelayActive');
   });
 });

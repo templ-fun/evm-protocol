@@ -41,6 +41,35 @@ describe("Instant quorum execution", function () {
     await expect(templ.connect(member2).executeProposal(delayedProposalId)).to.be.revertedWithCustomError(templ, "ExecutionDelayActive");
   });
 
+  it("keeps the instant quorum threshold fixed for existing proposals", async function () {
+    const { templ, token, accounts } = await deployTempl({
+      entryFee: ENTRY_FEE,
+      proposalFeeBps: 0,
+      instantQuorumBps: 6_600,
+      councilMode: false,
+    });
+    const [, , member1, member2, member3] = accounts;
+    await mintToUsers(token, [member1, member2, member3], TOKEN_SUPPLY);
+    await joinMembers(templ, token, [member1, member2, member3]);
+
+    await templ.connect(member1).createProposalSetBurnAddress("0x00000000000000000000000000000000000000AE", WEEK, "snap", "");
+    const proposalId = (await templ.proposalCount()) - 1n;
+
+    await templ.connect(member2).createProposalSetInstantQuorumBps(10_000, WEEK, "raise", "");
+    const configId = (await templ.proposalCount()) - 1n;
+    await templ.connect(member3).vote(configId, true);
+
+    const delay = Number(await templ.postQuorumVotingPeriod());
+    await ethers.provider.send("evm_increaseTime", [delay + 1]);
+    await ethers.provider.send("evm_mine", []);
+    await templ.executeProposal(configId);
+    expect(await templ.instantQuorumBps()).to.equal(10_000n);
+
+    await templ.connect(member2).vote(proposalId, true);
+    await templ.connect(member3).vote(proposalId, true);
+    await expect(templ.executeProposal(proposalId)).to.not.be.reverted;
+  });
+
   it("executes council proposals immediately once instant quorum is met", async function () {
     const { templ, token, accounts } = await deployTempl({
       entryFee: ENTRY_FEE,
@@ -52,7 +81,10 @@ describe("Instant quorum execution", function () {
     await mintToUsers(token, [member1], TOKEN_SUPPLY);
     await joinMembers(templ, token, [member1]);
 
-    await templ.connect(priest).bootstrapCouncilMember(member1.address);
+    await templ.connect(member1).createProposalAddCouncilMember(member1.address, WEEK, "Add council", "");
+    const addId = (await templ.proposalCount()) - 1n;
+    await templ.connect(priest).vote(addId, true);
+    await expect(templ.executeProposal(addId)).to.not.be.reverted;
 
     const councilBurn = ethers.getAddress("0x00000000000000000000000000000000000000ac");
     await templ.connect(member1).createProposalSetBurnAddress(councilBurn, WEEK, "council burn", "");

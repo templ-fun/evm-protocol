@@ -59,7 +59,6 @@ describe("TEMPL.getRegisteredSelectors()", function () {
       "setCouncilModeDAO",
       "addCouncilMemberDAO",
       "removeCouncilMemberDAO",
-      "bootstrapCouncilMember",
       "setInstantQuorumBpsDAO",
       "sweepExternalRewardRemainderDAO",
       "sweepMemberPoolRemainderDAO",

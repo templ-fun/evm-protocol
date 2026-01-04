@@ -101,8 +101,6 @@ library TemplErrors {
     error CouncilModeActive();
     /// @notice Thrown when attempting a council-only action while council governance is inactive.
     error CouncilModeInactive();
-    /// @notice Thrown when the priest bootstrap seat has already been consumed.
-    error CouncilBootstrapConsumed();
     /// @notice Thrown when the external reward registry has reached its capacity.
     error ExternalRewardLimitReached();
     /// @notice Thrown when attempting to clear an external reward token that still holds value.

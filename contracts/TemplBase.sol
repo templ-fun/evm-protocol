@@ -72,6 +72,8 @@ abstract contract TemplBase is ReentrancyGuard {
     uint256 public memberPoolBalance;
     /// @notice Whether new member joins are currently paused.
     bool public joinPaused;
+    /// @notice Whether joins are paused because the membership cap was reached.
+    bool public joinPausedByLimit;
     /// @notice Maximum allowed members when greater than zero (0 = uncapped).
     uint256 public maxMembers;
     /// @notice Minimum participation threshold (bps of eligible voters) required to reach quorum.
@@ -96,8 +98,6 @@ abstract contract TemplBase is ReentrancyGuard {
     uint256 public instantQuorumBps;
     /// @notice When true, only council members may vote on proposals.
     bool public councilModeEnabled;
-    /// @notice True once the priest-consumed bootstrap council seat has been used.
-    bool public councilBootstrapConsumed;
     /// @notice Tracks whether an address currently sits on the council.
     mapping(address => bool) public councilMembers;
     /// @notice Number of active council members.
@@ -273,6 +273,14 @@ abstract contract TemplBase is ReentrancyGuard {
         uint256 instantQuorumReachedAt;
         /// @notice Council membership epoch snapshot captured at proposal creation (0 = member-wide voting).
         uint256 councilSnapshotEpoch;
+        /// @notice Quorum threshold snapshot (bps) captured at proposal creation.
+        uint256 quorumBpsSnapshot;
+        /// @notice YES vote threshold snapshot (bps) captured at proposal creation.
+        uint256 yesVoteThresholdBpsSnapshot;
+        /// @notice Post-quorum voting period snapshot (seconds) captured at proposal creation.
+        uint256 postQuorumVotingPeriodSnapshot;
+        /// @notice Instant quorum threshold snapshot (bps) captured at proposal creation.
+        uint256 instantQuorumBpsSnapshot;
     }
 
     /// @notice Total proposals ever created.
@@ -510,10 +518,13 @@ abstract contract TemplBase is ReentrancyGuard {
     uint256 public rewardEventSequence;
     /// @notice Monotonic epoch that advances when council membership changes.
     uint256 public councilEpoch;
-    /// @notice Council membership epoch when a wallet was last added.
-    mapping(address => uint256) internal councilJoinEpoch;
-    /// @notice Council membership epoch when a wallet was last removed.
-    mapping(address => uint256) internal councilLeaveEpoch;
+    /// @notice Snapshot of council membership state at a given epoch.
+    struct CouncilCheckpoint {
+        uint256 epoch;
+        bool isMember;
+    }
+    /// @notice Council membership checkpoints keyed by wallet.
+    mapping(address => CouncilCheckpoint[]) internal councilCheckpoints;
     /// @dev Restricts a function so only wallets that successfully joined may call it.
     modifier onlyMember() {
         if (!members[msg.sender].joined) revert TemplErrors.NotMember();
@@ -870,19 +881,36 @@ abstract contract TemplBase is ReentrancyGuard {
     /// @param snapshotEpoch Council membership epoch captured by a proposal.
     /// @return isMember True when the account was on the council at the snapshot epoch.
     function _isCouncilMemberAtEpoch(address account, uint256 snapshotEpoch) internal view returns (bool isMember) {
-        uint256 joinedAt = councilJoinEpoch[account];
-        if (joinedAt == 0 || joinedAt > snapshotEpoch) {
+        CouncilCheckpoint[] storage checkpoints = councilCheckpoints[account];
+        uint256 len = checkpoints.length;
+        if (len == 0) {
             return false;
         }
-        uint256 leftAt = councilLeaveEpoch[account];
-        return leftAt == 0 || leftAt > snapshotEpoch;
+        if (snapshotEpoch < checkpoints[0].epoch) {
+            return false;
+        }
+        uint256 low = 0;
+        uint256 high = len;
+        while (low < high) {
+            uint256 mid = (low + high) / 2;
+            if (checkpoints[mid].epoch > snapshotEpoch) {
+                high = mid;
+            } else {
+                low = mid + 1;
+            }
+        }
+        return checkpoints[low - 1].isMember;
     }
 
     /// @notice Returns true when `yesVotes` satisfies the configured YES threshold relative to total votes.
     /// @param yesVotes Count of YES ballots.
     /// @param noVotes Count of NO ballots.
     /// @return meets True when the YES ratio clears the configured threshold.
-    function _meetsYesVoteThreshold(uint256 yesVotes, uint256 noVotes) internal view returns (bool meets) {
+    function _meetsYesVoteThreshold(
+        uint256 yesVotes,
+        uint256 noVotes,
+        uint256 thresholdBps
+    ) internal pure returns (bool meets) {
         uint256 totalVotes;
         unchecked {
             totalVotes = yesVotes + noVotes;
@@ -894,7 +922,7 @@ abstract contract TemplBase is ReentrancyGuard {
         uint256 rhs;
         unchecked {
             lhs = yesVotes * BPS_DENOMINATOR;
-            rhs = yesVoteThresholdBps * totalVotes;
+            rhs = thresholdBps * totalVotes;
         }
         if (lhs == rhs) {
             return true;
@@ -912,7 +940,7 @@ abstract contract TemplBase is ReentrancyGuard {
         if (proposal.instantQuorumMet) {
             return;
         }
-        uint256 threshold = instantQuorumBps;
+        uint256 threshold = proposal.instantQuorumBpsSnapshot;
         if (threshold == 0) {
             return;
         }
@@ -996,6 +1024,10 @@ abstract contract TemplBase is ReentrancyGuard {
         proposal.executed = false;
         uint256 councilSnapshotEpoch = councilModeEnabled ? councilEpoch : 0;
         proposal.councilSnapshotEpoch = councilSnapshotEpoch;
+        proposal.quorumBpsSnapshot = quorumBps;
+        proposal.yesVoteThresholdBpsSnapshot = yesVoteThresholdBps;
+        proposal.postQuorumVotingPeriodSnapshot = postQuorumVotingPeriod;
+        proposal.instantQuorumBpsSnapshot = instantQuorumBps;
         bool proposerCanVote = councilSnapshotEpoch == 0 || _isCouncilMemberAtEpoch(msg.sender, councilSnapshotEpoch);
         if (proposerCanVote) {
             proposal.hasVoted[msg.sender] = true;
@@ -1009,14 +1041,15 @@ abstract contract TemplBase is ReentrancyGuard {
         proposal.quorumReachedAt = 0;
         proposal.quorumExempt = false;
         if (
-            proposal.eligibleVoters != 0 && !(proposal.yesVotes * BPS_DENOMINATOR < quorumBps * proposal.eligibleVoters)
+            proposal.eligibleVoters != 0 &&
+            !(proposal.yesVotes * BPS_DENOMINATOR < proposal.quorumBpsSnapshot * proposal.eligibleVoters)
         ) {
             proposal.quorumReachedAt = block.timestamp;
             proposal.quorumSnapshotBlock = block.number;
             proposal.postQuorumEligibleVoters = proposal.eligibleVoters;
             proposal.quorumJoinSequence = proposal.preQuorumJoinSequence;
             unchecked {
-                proposal.endTime = block.timestamp + postQuorumVotingPeriod;
+                proposal.endTime = block.timestamp + proposal.postQuorumVotingPeriodSnapshot;
             }
         }
         _maybeTriggerInstantQuorum(proposal);
@@ -1032,7 +1065,11 @@ abstract contract TemplBase is ReentrancyGuard {
     function _proposalPassed(Proposal storage proposal) internal view returns (bool passed) {
         if (proposal.quorumExempt) {
             return (!(block.timestamp < proposal.endTime) &&
-                _meetsYesVoteThreshold(proposal.yesVotes, proposal.noVotes));
+                _meetsYesVoteThreshold(
+                    proposal.yesVotes,
+                    proposal.noVotes,
+                    proposal.yesVoteThresholdBpsSnapshot
+                ));
         }
         bool instant = proposal.instantQuorumMet;
         if (proposal.quorumReachedAt == 0 && !instant) {
@@ -1041,7 +1078,7 @@ abstract contract TemplBase is ReentrancyGuard {
         uint256 denom = proposal.postQuorumEligibleVoters;
         if (denom != 0 && !instant) {
             unchecked {
-                if (proposal.yesVotes * BPS_DENOMINATOR < quorumBps * denom) {
+                if (proposal.yesVotes * BPS_DENOMINATOR < proposal.quorumBpsSnapshot * denom) {
                     return false;
                 }
             }
@@ -1049,13 +1086,13 @@ abstract contract TemplBase is ReentrancyGuard {
         if (!instant) {
             uint256 quorumEnd;
             unchecked {
-                quorumEnd = proposal.quorumReachedAt + postQuorumVotingPeriod;
+                quorumEnd = proposal.quorumReachedAt + proposal.postQuorumVotingPeriodSnapshot;
             }
             if (block.timestamp < quorumEnd) {
                 return false;
             }
         }
-        return _meetsYesVoteThreshold(proposal.yesVotes, proposal.noVotes);
+        return _meetsYesVoteThreshold(proposal.yesVotes, proposal.noVotes, proposal.yesVoteThresholdBpsSnapshot);
     }
 
     /// @notice Reports whether any curve segment introduces dynamic pricing.
@@ -1409,6 +1446,13 @@ abstract contract TemplBase is ReentrancyGuard {
         maxMembers = newMaxMembers;
         emit MaxMembersUpdated(newMaxMembers);
         _refreshEntryFeeFromState();
+        if (joinPausedByLimit && (newMaxMembers == 0 || newMaxMembers > currentMembers)) {
+            joinPausedByLimit = false;
+            if (joinPaused) {
+                joinPaused = false;
+                emit JoinPauseUpdated(false);
+            }
+        }
         _autoPauseIfLimitReached();
     }
 
@@ -1545,8 +1589,7 @@ abstract contract TemplBase is ReentrancyGuard {
         ++councilMemberCount;
         uint256 nextEpoch = councilEpoch + 1;
         councilEpoch = nextEpoch;
-        councilJoinEpoch[account] = nextEpoch;
-        councilLeaveEpoch[account] = 0;
+        _writeCouncilCheckpoint(account, true);
         emit CouncilMemberAdded(account, addedBy);
     }
 
@@ -1560,22 +1603,22 @@ abstract contract TemplBase is ReentrancyGuard {
         --councilMemberCount;
         uint256 nextEpoch = councilEpoch + 1;
         councilEpoch = nextEpoch;
-        councilLeaveEpoch[account] = nextEpoch;
+        _writeCouncilCheckpoint(account, false);
         emit CouncilMemberRemoved(account, removedBy);
     }
 
-    /// @notice Allows the priest to add a single bootstrap council member outside of governance.
-    /// @dev This is a single-use seat available only to the priest. Requires `councilModeEnabled == true`
-    ///      to prevent the bootstrap from being consumed before council governance is active. After one use,
-    ///      `councilBootstrapConsumed` is set permanently and further bootstrap attempts revert.
-    /// @param account Wallet receiving the bootstrap council seat.
-    /// @param caller Original msg.sender forwarded for event context.
-    function _bootstrapCouncilMember(address account, address caller) internal {
-        if (!councilModeEnabled) revert TemplErrors.CouncilModeInactive();
-        if (councilBootstrapConsumed) revert TemplErrors.CouncilBootstrapConsumed();
-        if (caller != priest) revert TemplErrors.PriestOnly();
-        councilBootstrapConsumed = true;
-        _addCouncilMember(account, caller);
+    /// @notice Records a council membership checkpoint for `account` at the current epoch.
+    /// @param account Wallet whose membership state changed.
+    /// @param isMember True when the account is a council member.
+    function _writeCouncilCheckpoint(address account, bool isMember) internal {
+        CouncilCheckpoint[] storage checkpoints = councilCheckpoints[account];
+        uint256 len = checkpoints.length;
+        uint256 epoch = councilEpoch;
+        if (len != 0 && checkpoints[len - 1].epoch == epoch) {
+            checkpoints[len - 1].isMember = isMember;
+        } else {
+            checkpoints.push(CouncilCheckpoint({epoch: epoch, isMember: isMember}));
+        }
     }
 
     /// @notice Executes a treasury withdrawal and emits the corresponding event.
@@ -1649,6 +1692,7 @@ abstract contract TemplBase is ReentrancyGuard {
     /// @param _paused Desired pause state.
     function _setJoinPaused(bool _paused) internal {
         joinPaused = _paused;
+        joinPausedByLimit = false;
         emit JoinPauseUpdated(_paused);
     }
 
@@ -1776,6 +1820,7 @@ abstract contract TemplBase is ReentrancyGuard {
         uint256 limit = maxMembers;
         if (limit > 0 && memberCount == limit && !joinPaused) {
             joinPaused = true;
+            joinPausedByLimit = true;
             emit JoinPauseUpdated(true);
         }
     }
@@ -1800,7 +1845,12 @@ abstract contract TemplBase is ReentrancyGuard {
         if (amount == 0) {
             return;
         }
+        uint256 beforeBalance = IERC20(token).balanceOf(to);
         IERC20(token).safeTransferFrom(from, to, amount);
+        uint256 afterBalance = IERC20(token).balanceOf(to);
+        if (afterBalance < beforeBalance || afterBalance - beforeBalance != amount) {
+            revert TemplErrors.NonVanillaToken();
+        }
     }
 
     /// @notice Registers `token` so external rewards can be enumerated in views.

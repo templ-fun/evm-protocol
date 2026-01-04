@@ -106,18 +106,52 @@ describe("Council governance", function () {
       .to.be.revertedWithCustomError(templ, "NotCouncil");
   });
 
-  it("restricts voting to council members and supports priest bootstrap", async function () {
+  it("preserves council snapshot eligibility across remove and re-add", async function () {
+    const { templ, priest, member1, member2 } = await setupTempl({ councilMode: true });
+    const longVotingPeriod = 14 * 24 * 60 * 60;
+    const twoDays = 2 * 24 * 60 * 60;
+
+    await templ.connect(member2).createProposalAddCouncilMember(member1.address, WEEK, "Add member1", "");
+    let proposalId = (await templ.proposalCount()) - 1n;
+    await templ.connect(priest).vote(proposalId, true);
+    await advanceTime(twoDays);
+    await templ.executeProposal(proposalId);
+    expect(await templ.councilMembers(member1.address)).to.equal(true);
+
+    const longBurn = "0x0000000000000000000000000000000000000203";
+    await templ.connect(member2).createProposalSetBurnAddress(longBurn, longVotingPeriod, "long burn", "");
+    const longProposalId = (await templ.proposalCount()) - 1n;
+
+    await templ.connect(member1).createProposalRemoveCouncilMember(member1.address, WEEK, "remove member1", "");
+    proposalId = (await templ.proposalCount()) - 1n;
+    await templ.connect(priest).vote(proposalId, true);
+    await advanceTime(twoDays);
+    await templ.executeProposal(proposalId);
+    expect(await templ.councilMembers(member1.address)).to.equal(false);
+
+    await templ.connect(priest).createProposalAddCouncilMember(member1.address, WEEK, "re-add member1", "");
+    proposalId = (await templ.proposalCount()) - 1n;
+    await templ.connect(priest).vote(proposalId, true);
+    await advanceTime(twoDays);
+    await templ.executeProposal(proposalId);
+    expect(await templ.councilMembers(member1.address)).to.equal(true);
+
+    await expect(templ.connect(member1).vote(longProposalId, true)).to.emit(templ, "VoteCast");
+  });
+
+  it("restricts voting to council members and supports governance onboarding", async function () {
     const { templ, priest, member1, member2, member3 } = await setupTempl();
 
     await enableCouncilMode(templ, member1, [member2, member3]);
     expect(await templ.councilModeEnabled()).to.equal(true);
     expect(await templ.councilMemberCount()).to.equal(1n);
 
-    await expect(templ.connect(priest).bootstrapCouncilMember(member1.address))
-      .to.emit(templ, "CouncilMemberAdded")
-      .withArgs(member1.address, priest.address);
-    await expect(templ.connect(priest).bootstrapCouncilMember(member2.address))
-      .to.be.revertedWithCustomError(templ, "CouncilBootstrapConsumed");
+    await templ.connect(member1).createProposalAddCouncilMember(member1.address, WEEK, "Add council", "");
+    const addId = (await templ.proposalCount()) - 1n;
+    await templ.connect(priest).vote(addId, true);
+    await advanceTime();
+    await templ.executeProposal(addId);
+    expect(await templ.councilMembers(member1.address)).to.equal(true);
 
     const newBurn = "0x0000000000000000000000000000000000000011";
     await templ.connect(member2).createProposalSetBurnAddress(newBurn, WEEK, "update burn", "");
@@ -133,15 +167,27 @@ describe("Council governance", function () {
     expect(await templ.burnAddress()).to.equal(newBurn);
   });
 
+  it("rejects priest bootstrap council additions after deploy", async function () {
+    const { templ, priest, member1 } = await setupTempl({ councilMode: true });
+    const iface = new ethers.Interface(["function bootstrapCouncilMember(address)"]);
+    const data = iface.encodeFunctionData("bootstrapCouncilMember", [member1.address]);
+    await expect(priest.sendTransaction({ to: await templ.getAddress(), data }))
+      .to.be.revertedWithCustomError(templ, "InvalidCallData");
+  });
+
   it("allows governance to add and remove council members", async function () {
     const { templ, priest, member1, member2, member3 } = await setupTempl();
 
     await enableCouncilMode(templ, member1, [member2, member3]);
-    await templ.connect(priest).bootstrapCouncilMember(member1.address);
+    await templ.connect(member1).createProposalAddCouncilMember(member1.address, WEEK, "Add member1", "");
+    let proposalId = (await templ.proposalCount()) - 1n;
+    await templ.connect(priest).vote(proposalId, true);
+    await advanceTime();
+    await templ.executeProposal(proposalId);
     expect(await templ.councilMemberCount()).to.equal(2n);
 
     await templ.connect(member1).createProposalAddCouncilMember(member2.address, WEEK, "Add member2", "");
-    let proposalId = (await templ.proposalCount()) - 1n;
+    proposalId = (await templ.proposalCount()) - 1n;
     await templ.connect(priest).vote(proposalId, true);
     await advanceTime();
     await templ.executeProposal(proposalId);
@@ -224,7 +270,11 @@ describe("Council governance", function () {
     await token.connect(priest).approve(templAddress, ethers.MaxUint256);
 
     await enableCouncilMode(templ, member1, [member2]);
-    await templ.connect(priest).bootstrapCouncilMember(member1.address);
+    await templ.connect(member1).createProposalAddCouncilMember(member1.address, WEEK, "Add member1", "");
+    const addId = (await templ.proposalCount()) - 1n;
+    await templ.connect(priest).vote(addId, true);
+    await advanceTime();
+    await templ.executeProposal(addId);
 
     const fee = (await templ.entryFee()) * (await templ.proposalCreationFeeBps()) / 10_000n;
 

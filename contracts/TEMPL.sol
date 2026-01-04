@@ -205,7 +205,7 @@ contract TEMPL is TemplBase {
         membership[20] = TemplMembershipModule.totalJoins.selector;
         membership[21] = TemplMembershipModule.getExternalRewardTokensPaginated.selector;
 
-        treasury = new bytes4[](26);
+        treasury = new bytes4[](25);
         treasury[0] = TemplTreasuryModule.withdrawTreasuryDAO.selector;
         treasury[1] = TemplTreasuryModule.updateConfigDAO.selector;
         treasury[2] = TemplTreasuryModule.setJoinPausedDAO.selector;
@@ -228,10 +228,9 @@ contract TEMPL is TemplBase {
         treasury[19] = TemplTreasuryModule.setCouncilModeDAO.selector;
         treasury[20] = TemplTreasuryModule.addCouncilMemberDAO.selector;
         treasury[21] = TemplTreasuryModule.removeCouncilMemberDAO.selector;
-        treasury[22] = TemplTreasuryModule.bootstrapCouncilMember.selector;
-        treasury[23] = TemplTreasuryModule.setInstantQuorumBpsDAO.selector;
-        treasury[24] = TemplTreasuryModule.sweepExternalRewardRemainderDAO.selector;
-        treasury[25] = TemplTreasuryModule.sweepMemberPoolRemainderDAO.selector;
+        treasury[22] = TemplTreasuryModule.setInstantQuorumBpsDAO.selector;
+        treasury[23] = TemplTreasuryModule.sweepExternalRewardRemainderDAO.selector;
+        treasury[24] = TemplTreasuryModule.sweepMemberPoolRemainderDAO.selector;
 
         governance = new bytes4[](21);
         governance[0] = TemplGovernanceModule.createProposalSetJoinPaused.selector;
@@ -554,7 +553,7 @@ contract TEMPL is TemplBase {
     /// @notice Registers treasury function selectors to dispatch to `module`.
     /// @param module Module address that implements treasury functions.
     function _registerTreasurySelectors(address module) internal {
-        bytes4[] memory selectors = new bytes4[](26);
+        bytes4[] memory selectors = new bytes4[](25);
         selectors[0] = TemplTreasuryModule.withdrawTreasuryDAO.selector;
         selectors[1] = TemplTreasuryModule.updateConfigDAO.selector;
         selectors[2] = TemplTreasuryModule.setJoinPausedDAO.selector;
@@ -577,10 +576,9 @@ contract TEMPL is TemplBase {
         selectors[19] = TemplTreasuryModule.setCouncilModeDAO.selector;
         selectors[20] = TemplTreasuryModule.addCouncilMemberDAO.selector;
         selectors[21] = TemplTreasuryModule.removeCouncilMemberDAO.selector;
-        selectors[22] = TemplTreasuryModule.bootstrapCouncilMember.selector;
-        selectors[23] = TemplTreasuryModule.setInstantQuorumBpsDAO.selector;
-        selectors[24] = TemplTreasuryModule.sweepExternalRewardRemainderDAO.selector;
-        selectors[25] = TemplTreasuryModule.sweepMemberPoolRemainderDAO.selector;
+        selectors[22] = TemplTreasuryModule.setInstantQuorumBpsDAO.selector;
+        selectors[23] = TemplTreasuryModule.sweepExternalRewardRemainderDAO.selector;
+        selectors[24] = TemplTreasuryModule.sweepMemberPoolRemainderDAO.selector;
         _registerModule(module, selectors);
     }
 
