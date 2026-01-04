@@ -36,13 +36,14 @@ Donations: address and custody
 - Membership note: Direct donations (including the access token) do not grant membership. UIs should route joining through `join*` flows, which pull the access token and update on-chain membership state.
 
 Allowance checklist (TL;DR)
-- join / joinWithReferral / joinFor / joinForWithReferral → approve access token to `templ.target` (payer = `msg.sender`).
+- join / joinWithReferral / joinFor / joinForWithReferral / joinWithMaxEntryFee / joinWithReferralMaxEntryFee / joinForWithMaxEntryFee / joinForWithReferralMaxEntryFee → approve access token to `templ.target` (payer = `msg.sender`).
 - createProposal* (if fee > 0) → approve access token to `templ.target` for `proposalFee`.
 - claimMemberRewards / claimExternalReward → no approvals.
 - batchDAO / external calls (proposals or dictatorship) → no user approvals; if tokens need templ approvals, include them inside the batch.
 
 Join slippage handling (race‑proof UX)
 - On submit, re‑read `entryFee` from `getConfig()` and check current allowance. If `allowance < entryFee`, prompt to top‑up approval. With the recommended 2× buffer, this should be rare.
+- For on-chain slippage caps, use `joinWithMaxEntryFee` / `joinWithReferralMaxEntryFee` / `joinForWithMaxEntryFee` / `joinForWithReferralMaxEntryFee`.
 - Show a concise note explaining that the approval buffer both guarantees the join and pre‑funds the first proposal fee.
 - Runtime entry fees are normalized to ≥10 and divisible by 10; decaying curves floor at 10, so display the on-chain `entryFee` verbatim.
 
@@ -277,7 +278,7 @@ Gotchas and validation checklist
 - Title/description caps: title ≤256 bytes, description ≤2048 bytes. Truncate or warn before submit.
 - Entry fee update constraints: new fee must be ≥10 and divisible by 10 (raw token units). Validate before proposing.
 - Curve config bounds: at most 8 total segments (primary + additional). Validate before proposing curve changes.
-- Batch external calls with ETH: when batching via `templ.batchDAO`, set `target = templ.getAddress()` and ensure the templ already holds sufficient ETH to cover the inner `values` (top-level `value` can be 0). Any inner revert bubbles and reverts the whole batch.
+- Batch external calls with ETH: when batching via `templ.batchDAO`, set `target = templ.getAddress()` and ensure the templ already holds sufficient ETH to cover the inner `values` (top-level `value` can be 0). Calls execute from the templ address, so any approve/transferFrom affects the templ's allowance/balance; any inner revert bubbles and reverts the whole batch.
 - Pagination limits: `getActiveProposalsPaginated` requires `1 ≤ limit ≤ 100`. `getExternalRewardTokensPaginated` has no on‑chain limit; pick a reasonable UI page size (e.g., 50–100) and respect `hasMore`.
 - Donations and enumeration: donated ERC‑20s are withdrawable immediately but only appear in `getExternalRewardTokens()` after the first disband for that token (or after a DAO `reconcileExternalRewardTokenDAO` call).
 - External reward cleanup: show “Cleanup token” only when `getExternalRewardState(token).poolBalance == 0` AND `remainder == 0`. Remainders are flushed as membership changes or on subsequent disbands.
@@ -287,64 +288,7 @@ Gotchas and validation checklist
 - ETH recipients: treasury ETH withdrawals call `recipient.call{value: amount}("")`. If the recipient is a non‑payable contract or reverts in `receive()`, the withdrawal reverts. Prefer EOA or payable targets.
 - Action payload helper: call `TEMPL.getProposalActionData(id)` to fetch `(Action action, bytes payload)`. See README “Proposal Views” for payload shapes.
 
-Example: Approve + Deploy Vesting (from templ via batchDAO)
-- Goal: create a proposal that atomically approves a vesting/streaming factory, then calls its `deploy_vesting_contract` entrypoint, with both calls originating from the templ address.
-- Target factory: `0xcf61782465Ff973638143d6492B51A85986aB347` with selector `0x0551ebac` and params `(address token, address recipient, uint256 amount, uint256 vesting_duration)`.
-- Pattern: build two inner calls and execute them via `TEMPL.batchDAO(address[],uint256[],bytes[])` called through `createProposalCallExternal` targeting the TEMPL router.
-
-Ethers v6 encoding snippet (UI side):
-```js
-// Inputs the UI collects
-const token = "0xAccessToken";              // templ access token
-const factory = "0xcf61782465Ff973638143d6492B51A85986aB347"; // vesting/stream factory
-const recipient = "0xRecipient";
-const amount = ethers.parseUnits("1000", 18);
-const vestingDuration = 60n * 60n * 24n * 365n; // 1 year
-
-// 1) Build approve(token -> factory, amount)
-const erc20 = await ethers.getContractAt("IERC20", token);
-const approveSel = erc20.interface.getFunction("approve").selector;
-const approveArgs = ethers.AbiCoder.defaultAbiCoder().encode(["address","uint256"],[factory, amount]);
-const approveCalldata = ethers.concat([approveSel, approveArgs]);
-
-// 2) Build deploy_vesting_contract(token, recipient, amount, vesting_duration)
-const deploySel = "0x0551ebac"; // function selector
-const deployArgs = ethers.AbiCoder.defaultAbiCoder().encode(
-  ["address","address","uint256","uint256"],
-  [token, recipient, amount, vestingDuration]
-);
-const deployCalldata = ethers.concat([deploySel, deployArgs]);
-
-// 3) Wrap in templ.batchDAO
-const targets = [token, factory];
-const values = [0, 0];
-const calldatas = [approveCalldata, deployCalldata];
-
-const Treasury = await ethers.getContractFactory("TemplTreasuryModule");
-const batchSel = Treasury.interface.getFunction("batchDAO").selector;
-const batchParams = ethers.AbiCoder.defaultAbiCoder().encode(
-  ["address[]","uint256[]","bytes[]"],
-  [targets, values, calldatas]
-);
-
-// 4) Create the proposal: templ -> templ.batchDAO
-await templ.createProposalCallExternal(
-  await templ.getAddress(),
-  0,
-  batchSel,
-  batchParams,
-  0,
-  "Approve + Deploy Vesting",
-  "Approve access token then deploy a vesting/stream contract"
-);
-```
-
-Important
-- Calls execute from the templ address. Any `approve` and downstream `transferFrom` affect the templ’s allowance and balance, preserving custody in the templ.
-- Keep `value=0` unless the target expects ETH.
- - No user approvals are needed for the batch itself; if downstream calls require the templ to approve tokens, include that `approve` as an inner call before the dependent call.
-
-5) Donate (ETH or ERC‑20)
+8) Donate (ETH or ERC‑20)
 - Summary: Donations require no templ call. The templ accepts direct transfers of ETH or any ERC‑20; governance can later withdraw these funds to recipients or disband them into member‑claimable external rewards.
 - ETH donation: present the templ address and let donors send ETH directly to `templ.target` (the contract address). This increases the templ’s ETH holdings immediately.
 - ERC‑20 donation: instruct donors to call the token’s `transfer(templ.target, amount)` from their wallet. No allowance is needed for a simple `transfer`.

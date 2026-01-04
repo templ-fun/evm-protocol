@@ -24,7 +24,6 @@ Priest bootstrap
 
 ## Templ Factories
 
-- Base: [`0xc47c3088a0be67a5c29c3649be6e7ca8e8aeb5e3`](https://basescan.org/address/0xc47c3088a0be67a5c29c3649be6e7ca8e8aeb5e3)
 - The factory delegates TEMPL construction to a dedicated `TemplDeployer` helper, keeping the factory bytecode well under the 24,576 byte EIP-170 limit.
 - Deterministic multichain deployment: `node scripts/deploy-factory-multichain.mjs` deploys the modules, `TemplDeployer`, and `TemplFactory` to mainnet/Base/Optimism/Arbitrum using the same constructor args so the factory address matches across chains. Defaults to the shared treasury multisig `0x420f7D96FcEFe9D4708312F454c677ceB61D8420` and `PROTOCOL_BPS=1000`; override via env. Requires a deployer with the same starting nonce on every chain (fresh key recommended) plus `RPC_MAINNET_URL`, `RPC_BASE_URL`, `RPC_OPTIMISM_URL`, `RPC_ARBITRUM_URL`, and `PRIVATE_KEY`. Outputs to `scripts/out/factory-addresses.json` and prints verification commands per chain.
 
@@ -505,59 +504,6 @@ Notes
 - If any inner call reverts, the entire batch reverts; no partial effects.
 - Proposing and voting require membership; ensure the caller has joined.
 
-### Batched External Calls (approve → deploy vesting)
-This example shows how to batch an ERC‑20 `approve` with a downstream call to a vesting/stream factory, executing both from the templ via `batchDAO`.
-
-```js
-// npx hardhat console --network localhost
-const templ = await ethers.getContractAt("TEMPL", "0xYourTempl");
-const token = await ethers.getContractAt("IERC20", (await templ.getConfig())[0]);
-
-// 1) Build inner calls
-const factory = await ethers.getContractAt("IERC165", "0xcf61782465Ff973638143d6492B51A85986aB347");
-const amount = ethers.parseUnits("1000", 18);
-const recipient = "0xRecipient";
-const vestingDuration = 60n * 60n * 24n * 365n; // 1 year
-
-// approve(token -> factory, amount)
-const approveSel = token.interface.getFunction("approve").selector;
-const approveArgs = ethers.AbiCoder.defaultAbiCoder().encode(["address","uint256"],[await factory.getAddress(), amount]);
-const approveData = ethers.concat([approveSel, approveArgs]);
-
-// deploy_vesting_contract(token, recipient, amount, vesting_duration)
-const deploySel = "0x0551ebac"; // function selector
-const deployArgs = ethers.AbiCoder.defaultAbiCoder().encode([
-  "address","address","uint256","uint256"
-],[await token.getAddress(), recipient, amount, vestingDuration]);
-const deployData = ethers.concat([deploySel, deployArgs]);
-
-// 2) Wrap both in templ.batchDAO
-const targets = [await token.getAddress(), await factory.getAddress()];
-const values = [0, 0];
-const calldatas = [approveData, deployData];
-
-const Treasury = await ethers.getContractFactory("TemplTreasuryModule");
-const batchSel = Treasury.interface.getFunction("batchDAO").selector;
-const batchParams = ethers.AbiCoder.defaultAbiCoder().encode([
-  "address[]","uint256[]","bytes[]"
-],[targets, values, calldatas]);
-
-// 3) Create the external-call proposal
-const pid = await templ.createProposalCallExternal(
-  await templ.getAddress(),
-  0,
-  batchSel,
-  batchParams,
-  36 * 60 * 60,
-  "Approve + Deploy Vesting",
-  "Approve access token then call deploy_vesting_contract"
-);
-```
-
-Notes
-- Calls execute from the templ address. Approvals and transfers affect the templ’s allowance/balance. This is the canonical way to interact with other protocols while keeping custody in the templ.
-- Keep `value=0` unless the target expects ETH.
- 
 ### NFTs and Arbitrary Assets
 - Custody: A templ can hold ERC‑721 NFTs. They are governed treasury assets (not streamed as member rewards). Governance can transfer them using `createProposalCallExternal` or `batchDAO`, e.g., calling `safeTransferFrom(address(this), to, tokenId)` on the NFT contract from the templ address.
 - Receiving ERC‑721: The templ does not implement `IERC721Receiver`. Sending with `safeTransferFrom` to the templ will revert. Use `transferFrom` to the templ, or have governance “pull” the NFT by calling `transferFrom(owner, templ, tokenId)` after the owner grants approval to the templ.

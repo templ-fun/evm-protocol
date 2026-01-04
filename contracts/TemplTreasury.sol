@@ -122,7 +122,10 @@ contract TemplTreasuryModule is TemplBase {
     /// @notice Governance action that sends an external reward remainder to a recipient.
     /// @param token External reward token whose remainder should be swept (address(0) for ETH).
     /// @param recipient Wallet receiving the swept amount.
-    function sweepExternalRewardRemainderDAO(address token, address recipient) external onlyDAO nonReentrant onlyDelegatecall {
+    function sweepExternalRewardRemainderDAO(
+        address token,
+        address recipient
+    ) external onlyDAO nonReentrant onlyDelegatecall {
         _sweepExternalRewardRemainder(token, recipient);
     }
 
