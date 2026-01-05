@@ -508,7 +508,6 @@ abstract contract TemplBase is ReentrancyGuard {
         _;
     }
 
-
     /// @notice Sends the member pool remainder (access token) to `recipient`.
     /// @param recipient Wallet receiving the leftover member pool amount.
     function _sweepMemberPoolRemainder(address recipient) internal {
@@ -1565,9 +1564,7 @@ abstract contract TemplBase is ReentrancyGuard {
             return;
         }
 
-        uint256 tokenBalance = token == address(0)
-            ? address(this).balance
-            : IERC20(token).balanceOf(address(this));
+        uint256 tokenBalance = token == address(0) ? address(this).balance : IERC20(token).balanceOf(address(this));
         if (tokenBalance == 0) revert TemplErrors.NoTreasuryFunds();
         if (token == address(0)) {
             (bool success, ) = payable(protocolFeeRecipient).call{value: tokenBalance}("");
@@ -1668,7 +1665,6 @@ abstract contract TemplBase is ReentrancyGuard {
             revert TemplErrors.NonVanillaToken();
         }
     }
-
 
     /// @notice Scales `amount` by `multiplier` (bps), saturating at `MAX_ENTRY_FEE`.
     /// @param amount Base value to scale.

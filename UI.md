@@ -28,8 +28,8 @@ Allowances and approvals
 
 Donations: address and custody
 - Donation address: Always use the templ (router) address (`templ.target`) for donations. There is no separate treasury address on-chain; “treasury” is an internal accounting bucket within the templ contract.
-- ETH donations: Send ETH directly to `templ.target` (receive() accepts ETH). Later governance can withdraw or disband it.
-- ERC‑20 donations: Transfer tokens to `templ.target` (no prior approval needed by the recipient). Later governance can withdraw or disband them.
+- ETH donations: Send ETH directly to `templ.target` (receive() accepts ETH). Governance can withdraw it; disbanding sweeps the full balance to the protocol fee recipient.
+- ERC‑20 donations: Transfer tokens to `templ.target` (no prior approval needed by the recipient). Governance can withdraw them; disbanding non‑access tokens sweeps the full balance to the protocol fee recipient.
 - NFTs (ERC‑721): The templ can custody NFTs, but it does not implement `IERC721Receiver`. `safeTransferFrom(..., templ.target, ...)` will revert. Use `transferFrom` to the templ, or have governance “pull” via `transferFrom(owner, templ.target, tokenId)` after the owner grants approval. Move NFTs later via external‑call proposals (e.g., `createProposalCallExternal` calling the NFT’s `safeTransferFrom`).
 - Membership note: Direct donations (including the access token) do not grant membership. UIs should route joining through `join*` flows, which pull the access token and update on-chain membership state.
 
@@ -224,7 +224,7 @@ Complete proposal creators (scan in code for params)
 - `createProposalSetEntryFeeCurve`
 - `createProposalCallExternal`
 - `createProposalWithdrawTreasury`
-- `createProposalDisbandTreasury` (when proposed by the priest or a council member, the proposal is quorum-exempt but still must meet the YES vote threshold after voting ends)
+- `createProposalDisbandTreasury` (when proposed by the priest, the proposal is quorum-exempt but still must meet the YES vote threshold after voting ends)
 - `createProposalChangePriest`
 - `createProposalSetDictatorship`
 - `createProposalSetQuorumBps`

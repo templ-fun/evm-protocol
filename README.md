@@ -597,7 +597,7 @@ Governance is powerful by design: it can upgrade modules and perform arbitrary e
 
 `batchDAO` is intended only for batching external contract calls (like a multisig) and is not meant for calling back into the templ itself.
 
-The access token is assumed to be "vanilla ERC20" (no fee-on-transfer, rebasing, hooks). The factory provides "safe deploy" checks, but deployment outside the factory can violate this assumption.
+The access token is assumed to be vanilla ERC‑20 (no fee‑on‑transfer, rebasing, or hooks). Join/proposal‑fee transfers enforce exact balance deltas, so non‑vanilla tokens will revert; deployers must choose compatible tokens.
 
 Council Mode is intended to be a stable governance configuration, but the protocol supports transitioning between governance modes.
 

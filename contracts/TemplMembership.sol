@@ -194,7 +194,6 @@ contract TemplMembershipModule is TemplBase {
         return accrued > snapshot ? accrued - snapshot : 0;
     }
 
-
     /// @notice Claims the caller's accrued share of the member rewards pool.
     function claimMemberRewards() external onlyMember nonReentrant onlyDelegatecall {
         uint256 claimableAmount = getClaimableMemberRewards(msg.sender);
@@ -210,7 +209,6 @@ contract TemplMembershipModule is TemplBase {
 
         emit MemberRewardsClaimed(msg.sender, claimableAmount, block.timestamp);
     }
-
 
     /// @notice Reports whether a wallet currently counts as a member.
     /// @param user Wallet to inspect.
@@ -318,5 +316,4 @@ contract TemplMembershipModule is TemplBase {
         }
         return 1;
     }
-
 }

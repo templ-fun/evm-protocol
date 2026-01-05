@@ -84,7 +84,6 @@ contract TemplHarness is TEMPL {
         return _joinedAfterSnapshot(members[member], snapshotJoinSequence);
     }
 
-
     /// @dev Exposes the active proposal removal helper to hit guard branches in tests.
     function harnessRemoveActiveProposal(uint256 proposalId) external {
         _removeActiveProposal(proposalId);

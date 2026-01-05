@@ -22,8 +22,8 @@ describe("getProposal passed status coverage", function () {
     expect(proposal.passed).to.equal(true);
   });
 
-  it("treats council-proposed disbands as quorum-exempt", async function () {
-    const { templ, token, accounts, priest } = await deployTempl({ entryFee: ENTRY_FEE });
+  it("requires quorum for council member disbands when council mode is disabled", async function () {
+    const { templ, token, accounts } = await deployTempl({ entryFee: ENTRY_FEE, councilMode: false });
     const [, , member1, member2, member3] = accounts;
     const accessToken = await templ.accessToken();
 
@@ -40,12 +40,14 @@ describe("getProposal passed status coverage", function () {
 
     await templ.connect(member1).createProposalDisbandTreasury(accessToken, VOTING_PERIOD);
     proposalId = (await templ.proposalCount()) - 1n;
+    const disbandProposal = await templ.proposals(proposalId);
+    expect(disbandProposal.quorumExempt).to.equal(false);
 
     await ethers.provider.send("evm_increaseTime", [VOTING_PERIOD + 1]);
     await ethers.provider.send("evm_mine", []);
 
     const proposal = await templ.getProposal(proposalId);
-    expect(proposal.passed).to.equal(true);
+    expect(proposal.passed).to.equal(false);
     const snapshots = await templ.getProposalSnapshots(proposalId);
     expect(snapshots[5]).to.equal(0n);
   });

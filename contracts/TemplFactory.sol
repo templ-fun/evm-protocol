@@ -257,7 +257,6 @@ contract TemplFactory {
         return _deploy(cfg);
     }
 
-
     /// @notice Deploys a templ using a custom configuration struct.
     /// @param config Struct containing fee splits, governance settings, and defaults.
     /// @return templAddress Address of the deployed templ.
@@ -397,5 +396,4 @@ contract TemplFactory {
             revert TemplErrors.FactoryAccessRestricted();
         }
     }
-
 }
