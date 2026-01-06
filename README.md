@@ -15,7 +15,7 @@ Quick links: [At a Glance](#protocol-at-a-glance) · [Architecture](#architectur
 - The YES vote threshold (bps of votes cast) is configurable per templ (default 5,100 bps, i.e. 51%) and can be changed via governance alongside quorum/post‑quorum windows.
 - Instant quorum (bps of eligible voters, default 10,000 bps) lets proposals bypass the post‑quorum execution delay when a higher approval ratio—never lower than the normal quorum threshold—is satisfied.
 - Pricing curves define how the entry fee evolves with membership growth (static, linear, exponential segments; see `CurveConfig` in `TemplCurve`).
-- Everything is modular: `TEMPL` is a router that delegatecalls membership, treasury, and governance modules over a shared storage layout, keeping concerns clean.
+- Everything is modular: `TEMPL` is a router that delegatecalls membership, treasury, governance, and council modules over a shared storage layout, keeping concerns clean.
 - Deploy many templs via `TemplFactory`; run permissionless or with a gated deployer.
 
 Priest enrollment
@@ -163,16 +163,18 @@ Governance: map a batch of selectors
 
 ```js
 // Build an array of selectors implemented by your module
-const Router = await ethers.getContractFactory("TEMPL");
+const Membership = await ethers.getContractFactory("TemplMembershipModule");
 const selectors = [
-  Router.interface.getFunction("getActiveProposals").selector,
-  Router.interface.getFunction("getActiveProposalsPaginated").selector,
+  Membership.interface.getFunction("getMemberCount").selector,
+  Membership.interface.getFunction("getVoteWeight").selector,
 ];
 const params = ethers.AbiCoder.defaultAbiCoder().encode([
   "address","bytes4[]"
 ], [await newModule.getAddress(), selectors]);
 // Propose via createProposalCallExternal targeting templ.setRoutingModuleDAO as above
 ```
+
+Note: Only fallback‑routed selectors (module functions) can be upgraded. Selectors implemented directly on `TEMPL` (for example, `getActiveProposals` or `getProposal*`) bypass the fallback and cannot be remapped.
 
 Add a brand‑new module
 - You are not limited to the three shipped modules. Any new selectors you map will be routed by the fallback and execute via `delegatecall` with the templ’s storage.
@@ -221,15 +223,16 @@ flowchart LR
 
 - `TEMPL` routes calls to modules via delegatecall and exposes selector→module lookup.
 - Membership: joins, fee‑split accounting, member reward accrual and claims, eligibility snapshots.
-- Treasury: governance manages pause/cap/config/curve, change the priest, adjust referral/proposal fees, quorum/post‑quorum windows, burn address, withdraw/disband assets, and run atomic multi‑call batches via `batchDAO`.
+- Treasury: governance manages pause/cap/config/curve, change the priest, adjust referral/proposal fees, quorum + pre/post‑quorum windows, YES/instant thresholds, council mode/roster, burn address, member‑pool remainder sweeps, withdraw/disband assets, and run atomic multi‑call batches via `batchDAO`.
 - Governance: create/vote/execute/cancel proposals covering all treasury setters (including quorum/burn/curve metadata), safe external calls (single or batched), and opportunistic tail‑pruning of inactive proposals on execution to keep the active index compact.
+- Council: council‑specific proposal creators for YES threshold, council mode, and council membership changes.
 - Shared storage: all persistent state lives in [`TemplBase`](contracts/TemplBase.sol).
 
 ## Solidity Patterns
 - Delegatecall router: `TEMPL` fallback maps `selector → module` and uses `delegatecall` to execute in shared storage (contracts/TEMPL.sol).
-- Delegatecall‑only modules: Each module stores an immutable `SELF` and reverts when called directly, enforcing router‑only entry (contracts/TemplMembership.sol, contracts/TemplTreasury.sol, contracts/TemplGovernance.sol).
+- Delegatecall‑only modules: Each module stores an immutable `SELF` and reverts when called directly, enforcing router‑only entry (contracts/TemplMembership.sol, contracts/TemplTreasury.sol, contracts/TemplGovernance.sol, contracts/TemplCouncil.sol).
 - Only‑DAO guard: `onlyDAO` in `TemplBase` gates actions to the router itself (contracts/TemplBase.sol).
-- Reentrancy guards: User‑facing mutators like joins, claims, proposal creation/execution, and withdrawals use `nonReentrant` (contracts/TemplMembership.sol, contracts/TemplGovernance.sol, contracts/TemplTreasury.sol).
+- Reentrancy guards: User‑facing mutators like joins, claims, proposal creation/execution, and withdrawals use `nonReentrant` (contracts/TemplMembership.sol, contracts/TemplGovernance.sol, contracts/TemplTreasury.sol, contracts/TemplCouncil.sol).
 - Snapshotting by join sequence: Proposals capture `preQuorumJoinSequence`; at quorum, a second snapshot anchors eligibility (`quorumJoinSequence`) (contracts/TemplBase.sol, contracts/TemplGovernance.sol).
 - Bounded enumeration: active proposals support paginated reads with a 1..100 `limit` (contracts/TemplBase.sol, contracts/TEMPL.sol).
 - Safe token ops: Uses OpenZeppelin `SafeERC20` for ERC‑20 transfers and explicit ETH forwarding with revert bubbling (contracts/TemplBase.sol, contracts/TemplGovernance.sol).
@@ -253,7 +256,7 @@ flowchart LR
 - Membership note: Donations (including in the access token) do not grant membership. Membership requires calling `join*` and paying the entry fee through the contract, which updates accounting and emits the `MemberJoined` event.
 
 ## Glossary
-- templ: One deployed instance wired by `TEMPL` with membership, treasury, and governance modules.
+- templ: One deployed instance wired by `TEMPL` with membership, treasury, governance, and council modules.
 - access token: The ERC‑20 used for joins, fees, and accounting. Must be vanilla (no fees/rebases/hooks).
 - priest: The designated address set at deployment (governance can update it); auto‑enrolled and the initial council member.
 - member pool: Accounting bucket that streams join fees to existing members, claimable pro‑rata.
@@ -323,7 +326,9 @@ npm run verify:templ -- --network base
 npx hardhat verify --contract contracts/TemplMembership.sol:TemplMembershipModule --network base 0xMembership
 npx hardhat verify --contract contracts/TemplTreasury.sol:TemplTreasuryModule --network base 0xTreasury
 npx hardhat verify --contract contracts/TemplGovernance.sol:TemplGovernanceModule --network base 0xGovernance
-npx hardhat verify --contract contracts/TemplFactory.sol:TemplFactory --network base 0xFactory 0xFactoryDeployer 0xProtocolRecipient 1000 0xMembership 0xTreasury 0xGovernance
+npx hardhat verify --contract contracts/TemplCouncil.sol:TemplCouncilModule --network base 0xCouncil
+npx hardhat verify --contract contracts/TemplDeployer.sol:TemplDeployer --network base 0xTemplDeployer
+npx hardhat verify --contract contracts/TemplFactory.sol:TemplFactory --network base 0xFactory 0xFactoryDeployer 0xProtocolRecipient 1000 0xMembership 0xTreasury 0xGovernance 0xCouncil 0xTemplDeployer
 ```
 
 ### Production Deployment Checklist

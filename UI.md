@@ -231,9 +231,19 @@ Complete proposal creators (scan in code for params)
 - `createProposalAddCouncilMember`
 - `createProposalRemoveCouncilMember`
 
+Council proposal guards
+- `createProposalAddCouncilMember`: the target must already be a member.
+- `createProposalRemoveCouncilMember`: proposer must be a council member; removals that would leave the council empty revert.
+
+DAO-only actions via `createProposalCallExternal` (target = templ)
+- `setPreQuorumVotingPeriodDAO(uint256 newPeriod)`
+- `sweepMemberPoolRemainderDAO(address recipient)`
+- `batchDAO(address[] targets, uint256[] values, bytes[] calldatas)`
+- `setRoutingModuleDAO(address module, bytes4[] selectors)`
+
 Security notes for UIs
 - Default to a bounded buffer, not unlimited. Approve `~2× entryFee` for joins (adjustable) and avoid unlimited approvals.
-- External call proposals are as powerful as timelocked admin calls; surface clear warnings. If batching is needed, use an executor contract like `contracts/tools/BatchExecutor.sol` and target it via `createProposalCallExternal`.
+- External call proposals are as powerful as timelocked admin calls; surface clear warnings. For batching, prefer `batchDAO` (via `createProposalCallExternal`) or an executor contract like `contracts/tools/BatchExecutor.sol`.
 - Only call the router. Modules revert on direct calls to prevent bypassing safety checks.
 - Governance-only upgrades: there is no protocol-level upgrade authority. Routing and external-call abilities are controlled by each templ’s governance. Reflect this in copy to avoid confusing users about admin powers.
 
@@ -252,6 +262,7 @@ Where to look in code
 - Membership APIs: `contracts/TemplMembership.sol`
 - Governance APIs: `contracts/TemplGovernance.sol`
 - Treasury APIs: `contracts/TemplTreasury.sol`
+- Council APIs: `contracts/TemplCouncil.sol`
 
 Gotchas and validation checklist
 - One active proposal per proposer: `templ.hasActiveProposal(user)` blocks new proposals until the previous one is executed/expired. Disable create UI when true.
