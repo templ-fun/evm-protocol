@@ -295,4 +295,27 @@ describe("Council governance", function () {
     expect(await templ.treasuryBalance()).to.equal(treasuryAfter);
     expect(councilBalanceBefore - (await token.balanceOf(member1.address))).to.equal(0n);
   });
+
+  it("rejects invalid council proposal inputs", async function () {
+    const { templ, priest, member1 } = await setupTempl();
+    const outsider = (await ethers.getSigners())[7];
+
+    await expect(
+      templ.connect(member1).createProposalSetYesVoteThreshold(99, WEEK, "too low", "")
+    ).to.be.revertedWithCustomError(templ, "InvalidPercentage");
+    await expect(
+      templ.connect(member1).createProposalSetYesVoteThreshold(10_001, WEEK, "too high", "")
+    ).to.be.revertedWithCustomError(templ, "InvalidPercentage");
+
+    await expect(
+      templ.connect(member1).createProposalAddCouncilMember(ethers.ZeroAddress, WEEK, "zero", "")
+    ).to.be.revertedWithCustomError(templ, "InvalidRecipient");
+    await expect(
+      templ.connect(member1).createProposalAddCouncilMember(outsider.address, WEEK, "not member", "")
+    ).to.be.revertedWithCustomError(templ, "NotMember");
+
+    await expect(
+      templ.connect(priest).createProposalRemoveCouncilMember(member1.address, WEEK, "not council", "")
+    ).to.be.revertedWithCustomError(templ, "CouncilMemberMissing");
+  });
 });
