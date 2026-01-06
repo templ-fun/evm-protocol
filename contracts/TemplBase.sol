@@ -287,6 +287,7 @@ abstract contract TemplBase is ReentrancyGuard {
 
     /// @notice Returns the active proposal id for a proposer (0 when none active).
     /// @param proposer Wallet address to inspect.
+    /// @return proposalId Active proposal id or 0 when none active.
     function activeProposalId(address proposer) public view returns (uint256 proposalId) {
         uint256 stored = _activeProposalIdPlusOne[proposer];
         return stored == 0 ? 0 : stored - 1;
@@ -294,6 +295,7 @@ abstract contract TemplBase is ReentrancyGuard {
 
     /// @notice Returns whether a proposer currently has an active proposal.
     /// @param proposer Wallet address to inspect.
+    /// @return active True when the proposer has an active proposal.
     function hasActiveProposal(address proposer) public view returns (bool active) {
         return _activeProposalIdPlusOne[proposer] != 0;
     }

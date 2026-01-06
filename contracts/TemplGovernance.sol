@@ -634,5 +634,4 @@ contract TemplGovernanceModule is TemplModuleBase {
             }
         }
     }
-
 }

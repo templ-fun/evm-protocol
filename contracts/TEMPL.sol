@@ -473,7 +473,7 @@ contract TEMPL is TemplBase {
             }
             ++activeSeen;
         }
-        if (activeSeen <= offset) {
+        if (activeSeen < offset || activeSeen == offset) {
             return (new uint256[](0), false);
         }
         hasMore = activeSeen > offset + count;

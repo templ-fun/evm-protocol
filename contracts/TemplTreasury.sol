@@ -9,7 +9,6 @@ import {CurveConfig} from "./TemplCurve.sol";
 /// @notice Adds treasury controls and fee configuration.
 /// @author templ.fun
 contract TemplTreasuryModule is TemplModuleBase {
-
     /// @notice Governance action that transfers available treasury or external funds to a recipient.
     /// @param token Token to withdraw (`address(0)` for ETH, access token, or arbitrary ERC-20).
     /// @param recipient Destination wallet for the withdrawal.

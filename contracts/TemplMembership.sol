@@ -9,7 +9,6 @@ import {TemplErrors} from "./TemplErrors.sol";
 /// @notice Handles joins, reward accounting, and member-facing views.
 /// @author templ.fun
 contract TemplMembershipModule is TemplModuleBase {
-
     /// @notice Emitted when a valid referral is credited during a join.
     /// @param referral The referrer wallet that receives the payout.
     /// @param newMember The wallet that just joined.

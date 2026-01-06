@@ -8,7 +8,6 @@ import {TemplErrors} from "./TemplErrors.sol";
 /// @notice Hosts council-specific proposal creation flows to keep the primary governance module lean.
 /// @author templ.fun
 contract TemplCouncilModule is TemplModuleBase {
-
     /// @notice Opens a proposal to update the YES vote threshold (bps of votes cast).
     /// @param _newThresholdBps Target YES threshold expressed in basis points.
     /// @param _votingPeriod Optional custom voting duration (seconds).
