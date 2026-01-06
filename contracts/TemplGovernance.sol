@@ -782,5 +782,4 @@ contract TemplGovernanceModule is TemplBase {
     function _requireDelegatecall() internal view {
         if (address(this) == SELF) revert TemplErrors.DelegatecallOnly();
     }
-
 }
