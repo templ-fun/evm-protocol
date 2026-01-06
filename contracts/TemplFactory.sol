@@ -148,6 +148,14 @@ contract TemplFactory {
         ) {
             revert TemplErrors.InvalidCallData();
         }
+        if (
+            _membershipModule.code.length == 0 ||
+            _treasuryModule.code.length == 0 ||
+            _governanceModule.code.length == 0 ||
+            _councilModule.code.length == 0
+        ) {
+            revert TemplErrors.InvalidCallData();
+        }
         if (_templDeployer == address(0)) revert TemplErrors.InvalidRecipient();
         PROTOCOL_FEE_RECIPIENT = _protocolFeeRecipient;
         PROTOCOL_BPS = _protocolBps;

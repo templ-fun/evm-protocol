@@ -33,6 +33,18 @@ describe("ChangePriest governance action", function () {
     expect(await templ.priest()).to.equal(newPriest.address);
   });
 
+  it("reverts when proposing a non-member as priest", async function () {
+    const { templ, token, accounts } = await deployTempl({ entryFee: ENTRY_FEE });
+    const [, , member, outsider] = accounts;
+
+    await mintToUsers(token, [member], ENTRY_FEE * 2n);
+    await joinMembers(templ, token, [member]);
+
+    await expect(
+      templ.connect(member).createProposalChangePriest(outsider.address, 7 * 24 * 60 * 60)
+    ).to.be.revertedWithCustomError(templ, "NotMember");
+  });
+
   it("reverts when changePriestDAO is called externally", async function () {
     const { templ, accounts } = await deployTempl({ entryFee: ENTRY_FEE });
     const [, , member] = accounts;

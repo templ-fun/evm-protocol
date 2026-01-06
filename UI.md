@@ -223,7 +223,7 @@ Complete proposal creators (scan in code for params)
 - `createProposalCallExternal`
 - `createProposalWithdrawTreasury`
 - `createProposalDisbandTreasury` (when proposed by the priest or a council member while council mode is enabled, the proposal is quorum-exempt but still must meet the YES vote threshold after voting ends)
-- `createProposalChangePriest`
+- `createProposalChangePriest` (new priest must already be a member)
 - `createProposalSetQuorumBps`
 - `createProposalSetInstantQuorumBps`
 - `createProposalSetPostQuorumVotingPeriod`
@@ -246,6 +246,7 @@ DAO-only actions via `createProposalCallExternal` (target = templ)
 Security notes for UIs
 - Default to a bounded buffer, not unlimited. Approve `~2× entryFee` for joins (adjustable) and avoid unlimited approvals.
 - External call proposals are as powerful as timelocked admin calls; surface clear warnings. For batching, prefer `batchDAO` (via `createProposalCallExternal`) or an executor contract like `contracts/tools/BatchExecutor.sol`.
+- `CallExternal` and `batchDAO` can bypass access-token accounting; avoid targeting the templ or its modules and keep batch targets explicit and external.
 - Only call the router. Modules revert on direct calls to prevent bypassing safety checks.
 - Governance-only upgrades: there is no protocol-level upgrade authority. Routing and external-call abilities are controlled by each templ’s governance. Reflect this in copy to avoid confusing users about admin powers.
 

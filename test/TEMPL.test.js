@@ -160,6 +160,40 @@ describe("TEMPL Contract with DAO Governance", function () {
             ).to.be.revertedWithCustomError(TEMPL, "InvalidRecipient");
         });
 
+        it("Should revert when a module address has no code", async function () {
+            const { treasuryModule, governanceModule, councilModule } = await deployTemplModules();
+            const TEMPL = await ethers.getContractFactory("TEMPL");
+            await expect(
+                TEMPL.deploy(
+                    priest.address,
+                    priest.address,
+                    await token.getAddress(),
+                    ENTRY_FEE,
+                    BURN_BPS,
+                    TREASURY_BPS,
+                    MEMBER_BPS,
+                    PROTOCOL_BPS,
+                    QUORUM_BPS,
+                    7 * 24 * 60 * 60,
+                    "0x000000000000000000000000000000000000dEaD",
+                    0,
+                    METADATA.name,
+                    METADATA.description,
+                    METADATA.logo,
+                    0,
+                    0,
+                    5_100,
+                     10_000,
+                    false,
+                    owner.address,
+                    treasuryModule,
+                    governanceModule,
+                    councilModule,
+                    STATIC_CURVE
+                )
+            ).to.be.revertedWithCustomError(TEMPL, "InvalidCallData");
+        });
+
         it("Should revert when protocol fee recipient is zero", async function () {
             const { membershipModule, treasuryModule, governanceModule, councilModule } = await deployTemplModules();
             const TEMPL = await ethers.getContractFactory("TEMPL");

@@ -517,7 +517,7 @@ Curves (see [`TemplCurve`](contracts/TemplCurve.sol)) support static, linear, an
 - `TemplFactory.transferDeployer(newAddr)` hands off deployer rights when permissionless is disabled.
 
 ## Constraints
-- Entry fee: must be ≥10 and divisible by 10.
+- Entry fee target: must be ≥10 and divisible by 10 (base anchors may be non-divisible and are normalized on join).
 - Entry fee (runtime): curve recomputes normalize to ≥10 and divisible by 10 (decaying curves floor at 10). Base anchors may be non-divisible.
 - Fee split: burn + treasury + member pool + protocol must sum to 10_000 bps.
 - Pre‑quorum voting window: bounded to [36 hours, 30 days].
@@ -560,7 +560,7 @@ Curves (see [`TemplCurve`](contracts/TemplCurve.sol)) support static, linear, an
 - CallExternal → `abi.encode(address target, uint256 value, bytes calldata)`
 - WithdrawTreasury → `abi.encode(address token, address recipient, uint256 amount)`
 - DisbandTreasury → `abi.encode(address token)`
-- ChangePriest → `abi.encode(address newPriest)`
+- ChangePriest → `abi.encode(address newPriest)` (new priest must be an active member)
 - SetQuorumBps → `abi.encode(uint256 newQuorumBps)`
 - SetInstantQuorumBps → `abi.encode(uint256 newInstantQuorumBps)`
 - SetPostQuorumVotingPeriod → `abi.encode(uint256 newPostQuorumVotingPeriod)`
@@ -581,6 +581,7 @@ See tests by topic in [test/](test/).
 ## Security
 - Access token is assumed to be vanilla ERC‑20 (no fee‑on‑transfer, no rebasing, no hooks). Accounting assumes exact transfer amounts and does not enforce compatibility on-chain.
 - External‑call proposals can execute arbitrary logic; treat with the same caution as timelocked admin calls.
+- `CallExternal` and `batchDAO` can move the access token without updating internal accounting; avoid targeting the templ or its modules and prefer the dedicated DAO actions for treasury moves.
 - Reentrancy is guarded; modules are only reachable via the `TEMPL` router (direct module calls revert).
 - No external audit yet. Treat as experimental and keep treasury exposure conservative until audited.
 
@@ -590,6 +591,8 @@ Governance is powerful by design: it can upgrade modules and perform arbitrary e
 `batchDAO` is intended only for batching external contract calls (like a multisig) and is not meant for calling back into the templ itself.
 
 The access token is assumed to be vanilla ERC‑20 (no fee‑on‑transfer, rebasing, or hooks). Non‑vanilla tokens can break accounting or liveness; deployers must choose compatible tokens.
+
+Entry fee base anchors may be non-divisible; the entry fee charged for joins is normalized down to the nearest multiple of 10, and this small discount is an accepted tradeoff.
 
 Council Mode is intended to be a stable governance configuration, but the protocol supports transitioning between governance modes.
 

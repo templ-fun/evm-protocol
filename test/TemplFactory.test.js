@@ -77,6 +77,26 @@ describe("TemplFactory", function () {
     );
   });
 
+  it("reverts when a module address has no code", async function () {
+    const [deployer, protocolRecipient, eoa] = await ethers.getSigners();
+    const Factory = await ethers.getContractFactory("TemplFactory");
+    await expect(
+      Factory.deploy(
+        deployer.address,
+        protocolRecipient.address,
+        pct(10),
+        eoa.address,
+        modules.treasuryModule,
+        modules.governanceModule,
+        modules.councilModule,
+        templDeployer
+      )
+    ).to.be.revertedWithCustomError(
+      Factory,
+      "InvalidCallData"
+    );
+  });
+
     it("deploys templ contracts with fixed protocol config", async function () {
     const [, priest, protocolRecipient, member] = await ethers.getSigners();
     const token = await deployToken();

@@ -356,7 +356,7 @@ contract TemplGovernanceModule is TemplBase {
     }
 
     /// @notice Opens a proposal to appoint a new priest.
-    /// @dev Reverts when `_newPriest` is the zero address.
+    /// @dev Reverts when `_newPriest` is the zero address or is not an active member.
     /// @param _newPriest Address proposed as the new priest.
     /// @param _votingPeriod Optional custom voting duration (seconds).
     /// @param _title On-chain title for the proposal.
@@ -370,6 +370,7 @@ contract TemplGovernanceModule is TemplBase {
     ) external nonReentrant returns (uint256 proposalId) {
         _requireDelegatecall();
         if (_newPriest == address(0)) revert TemplErrors.InvalidRecipient();
+        if (!members[_newPriest].joined) revert TemplErrors.NotMember();
         (uint256 id, Proposal storage p) = _createBaseProposal(_votingPeriod, _title, _description);
         p.action = Action.ChangePriest;
         p.recipient = _newPriest;

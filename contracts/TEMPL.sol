@@ -116,6 +116,14 @@ contract TEMPL is TemplBase {
         ) {
             revert TemplErrors.InvalidCallData();
         }
+        if (
+            _membershipModule.code.length == 0 ||
+            _treasuryModule.code.length == 0 ||
+            _governanceModule.code.length == 0 ||
+            _councilModule.code.length == 0
+        ) {
+            revert TemplErrors.InvalidCallData();
+        }
         MEMBERSHIP_MODULE = _membershipModule;
         TREASURY_MODULE = _treasuryModule;
         GOVERNANCE_MODULE = _governanceModule;
