@@ -58,6 +58,21 @@ describe("Load: joins + concurrent proposals/votes/execution @load", function ()
     return batches;
   };
 
+  const waitForReceipts = async (provider, txs) => {
+    const hashes = txs.map((tx) => tx.hash);
+    const maxMines = Math.max(3, hashes.length + 2);
+    for (let i = 0; i < maxMines; i += 1) {
+      const receipts = await Promise.all(
+        hashes.map((hash) => provider.getTransactionReceipt(hash))
+      );
+      if (receipts.every(Boolean)) {
+        return receipts;
+      }
+      await provider.send("evm_mine");
+    }
+    throw new Error("Timed out waiting for batch receipts");
+  };
+
   const mineBatches = async (tasks, batchSize) => {
     if (tasks.length === 0) {
       return;
@@ -69,7 +84,7 @@ describe("Load: joins + concurrent proposals/votes/execution @load", function ()
       for (const batch of batches) {
         const txs = await Promise.all(batch.map((task) => task.send()));
         await provider.send("evm_mine");
-        await Promise.all(txs.map((tx) => tx.wait()));
+        await waitForReceipts(provider, txs);
       }
     } finally {
       await provider.send("evm_setAutomine", [true]);
