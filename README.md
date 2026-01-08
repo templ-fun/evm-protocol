@@ -10,8 +10,8 @@ Quick links: [At a Glance](#protocol-at-a-glance) · [Architecture](#architectur
 - Create a templ tied to a vanilla ERC‑20 access token (assumed, not enforced); members join by paying an entry fee in that token. The fee is split into burn, treasury, member‑pool, and protocol slices.
 - Existing members accrue pro‑rata rewards from the member‑pool slice and can claim at any time. Templs can also hold ETH or other ERC‑20s as unaccounted treasury assets.
 - Donations (ETH or ERC‑20) sent directly to the templ address are held by the templ and governed: governance can withdraw these funds to recipients. Disbanding the access token moves treasury into the member pool; disbanding other tokens sweeps the full balance to the protocol fee recipient. ERC‑721 NFTs can also be custodied by a templ and later moved via governance (see NFT notes below).
-- Governance is member‑only: propose, vote, and execute actions to change parameters, move treasury, update curves/metadata, or call arbitrary external contracts.
-- Council mode (default for `createTempl` / `createTemplFor` deployments) narrows voting power to a curated council while still letting any member open proposals. Council composition changes via governance. Council members are fee‑exempt while council mode is active.
+- Governance is member‑gated for proposing and voting; execution is permissionless once a proposal passes. Actions can change parameters, move treasury, update curves/metadata, or call arbitrary external contracts.
+- Council mode (default for `createTempl` / `createTemplFor` deployments) narrows voting power to a curated council while still letting any member open most proposals (council‑member removals require a council proposer). Council composition changes via governance. Council members are fee‑exempt while council mode is active.
 - The YES vote threshold (bps of votes cast) is configurable per templ (default 5,100 bps, i.e. 51%) and can be changed via governance alongside quorum/post‑quorum windows.
 - Instant quorum (bps of eligible voters, default 10,000 bps) lets proposals bypass the post‑quorum execution delay when a higher approval ratio—never lower than the normal quorum threshold—is satisfied.
 - Pricing curves define how the entry fee evolves with membership growth (static, linear, exponential segments; see `CurveConfig` in `TemplCurve`).
@@ -40,7 +40,7 @@ Deployers configure pricing curves, fee splits, referral rewards, proposal fees,
 
 ### Council governance
 - Factory-created templs start in council mode by default. The priest is the first council member; additional council members are added through proposals.
-- Council mode restricts voting to the council set but any member can still open proposals.
+- Council mode restricts voting to the council set but any member can still open most proposals (council‑member removals require a council proposer).
 - Proposal voting mode and council roster are snapshotted at creation; later council toggles or roster changes do not affect eligibility for that proposal (see `getProposalVotingMode`).
 - Proposal fees apply to non-council proposers; council members are fee‑exempt while council mode is active.
 - With default instant quorum, a one‑member council can pass proposals immediately after voting, so the priest can add the next council member without delay.
@@ -112,7 +112,7 @@ What is fixed vs dynamic
 Permissions and safety
 - Only by governance (no protocol admin): `setRoutingModuleDAO(address,bytes4[])` is `onlyDAO` and only reachable during execution of a passed governance proposal targeting the router; direct calls from EOAs (including protocol devs) revert.
 - Direct module calls revert: Modules enforce delegatecall‑only access; always call the `TEMPL` router.
-- Arbitrary calls are powerful: `createProposalCallExternal` and `batchDAO` execute from the templ address and can move funds or rewire routing. Only governance can execute them. Frontends must surface strong warnings and quorum requirements protect abuse.
+- Arbitrary calls are powerful: `createProposalCallExternal` and `batchDAO` execute from the templ address and can move funds or rewire routing. Only passed proposals can trigger them; execution is permissionless once conditions are met. Frontends must surface strong warnings and quorum requirements protect abuse.
 - Evented: `setRoutingModuleDAO` emits `RoutingUpdated(module, selectors)` on success.
 
 Add or replace modules
@@ -271,7 +271,7 @@ flowchart LR
 1) Deploy modules + factory or use an existing factory (`TemplFactory`).
 2) Create a templ providing the access token, base entry fee, fee split, curve, governance params, and metadata (`createTemplWithConfig`).
 3) Members join by paying the current entry fee in the access token (optionally with a referrer); fees split to burn/treasury/member‑pool/protocol. The next entry fee advances by the curve.
-4) Members propose, vote, cancel (before other votes), and execute: configuration changes, metadata updates, treasury withdrawals/disband, and arbitrary external calls.
+4) Members propose, vote, cancel (before other votes); any address can execute once conditions are met: configuration changes, metadata updates, treasury withdrawals/disband, and arbitrary external calls.
 5) Members claim accumulated member‑pool rewards.
 6) Templs can evolve via governance—adjusting caps, curves, fees, and parameters—or be wound down by disbanding the treasury.
 

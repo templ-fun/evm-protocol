@@ -269,8 +269,8 @@ Where to look in code
 - Council APIs: `contracts/TemplCouncil.sol`
 
 Gotchas and validation checklist
-- One active proposal per proposer: `templ.hasActiveProposal(user)` blocks new proposals until the previous one is executed/expired. Disable create UI when true.
-- Voting window anchors at quorum: when quorum is reached, `endTime` resets to `block.timestamp + postQuorumVotingPeriod`, unless instant quorum triggers and `endTime` is set to `block.timestamp`. Always show the latest `endTime` from `getProposal(id)` and check `instantQuorumMet`; do not precompute.
+- One active proposal per proposer: `templ.hasActiveProposal(user)` can be stale after expiry; if true, read `templ.activeProposalId(user)` and `templ.getProposal(id)` and only block creation when `executed == false` and `endTime` is still in the future.
+- Voting window anchors at quorum: when quorum is reached, `endTime` resets to `block.timestamp + postQuorumVotingPeriod`, unless instant quorum triggers and `endTime` is set to `block.timestamp`. Always show the latest `endTime` from `getProposal(id)` and check `instantQuorumMet` via `templ.proposals(id)`; do not precompute.
 - Pre‑quorum voting period bounds: enforce `[36h, 30d]`. Passing `0` applies the templ default.
 - Title/description caps: title ≤256 bytes, description ≤2048 bytes. Truncate or warn before submit.
 - Entry fee update constraints: new fee must be ≥10 and divisible by 10 (raw token units). Validate before proposing.
