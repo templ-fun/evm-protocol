@@ -143,14 +143,14 @@ Post‑deploy handoff
 
 1) Join (default)
 - Step A: read `const [token, entryFee] = (await templ.getConfig());`
-- Step B: `IERC20(token).approve(templ, entryFee)`
+- Step B: `IERC20(token).approve(templ.target, entryFee)`
 - Step C: `templ.join()`
-- Errors to surface as UX: paused (`joinPaused`), cap reached, insufficient balance, invalid fee.
+- Errors to surface as UX: paused (`joinPaused`), cap reached, already joined, insufficient balance/allowance, `EntryFeeTooHigh` for max‑entry‑fee joins.
 
 2) Join With Referral
 - Same as join, but call `templ.joinWithReferral(referrer)`.
 - Explicit allowance: the payer (`msg.sender`) must approve the access token to `templ.target` for at least `entryFee` (recommended `2 × entryFee`).
-- The referrer must already be a member and cannot equal the recipient; referral rewards are paid immediately from the member-pool slice and emitted via `ReferralRewardPaid(referral, newMember, amount)`.
+- A valid referrer is a member and not the recipient; otherwise the referral payout is 0. Referral rewards are paid immediately from the member‑pool slice and emitted via `ReferralRewardPaid(referral, newMember, amount)`.
 - Variant `templ.joinFor(recipient)`: payer is the caller; approve `entryFee` from the caller to `templ.target` before calling.
 - Variant `templ.joinForWithReferral(recipient, referrer)`: payer is the caller; approve `entryFee` from the caller to `templ.target` before calling.
 

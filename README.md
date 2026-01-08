@@ -488,16 +488,16 @@ sequenceDiagram
   User->>Token: approve(T, entryFee)
   User->>T: join or joinWithReferral
   T->>M: delegatecall join(...)
-  M->>Token: transferFrom(User, Burn, burnAmount)
-  M->>Token: transferFrom(User, T, treasuryAmount + memberPoolAmount)
-  M->>Token: transferFrom(User, Prot, protocolAmount)
+  M->>Token: transferFrom(User, T, entryFee)
+  M->>Token: transfer(Burn, burnAmount)
+  M->>Token: transfer(Prot, protocolAmount)
   M->>Treas: credit treasury (accounting)
-  M->>Pool: credit member pool (accounting)
+  M->>Pool: credit member pool (accounting, net of referral)
   alt with referral
-    M->>Ref: pay referral share (from member pool)
+    M->>Token: transfer(Ref, referralAmount)
   end
   M->>M: update next entryFee via curve
-  M-->>User: emit Joined(...)
+  M-->>User: emit MemberJoined(...)
 ```
 
 Curves (see [`TemplCurve`](contracts/TemplCurve.sol)) support static, linear, and exponential segments. A final segment with `length=0` creates an infinite tail.
