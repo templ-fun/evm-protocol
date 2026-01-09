@@ -41,4 +41,35 @@ describe("Sweep member pool remainder proposal", function () {
       .withArgs(recipient.address, remainder);
     expect(await token.balanceOf(recipient.address)).to.equal(recipientBefore + remainder);
   });
+
+  it("reverts when no remainder exists", async function () {
+    const entryFee = 1000n;
+    const { templ, token, accounts } = await deployTempl({
+      entryFee,
+      executionDelay: EXEC_DELAY,
+    });
+    const [, , member1, member2, recipient] = accounts;
+
+    await mintToUsers(token, [member1, member2], entryFee * 10n);
+    await joinMembers(templ, token, [member1, member2]);
+
+    expect(await templ.memberRewardRemainder()).to.equal(0n);
+
+    await templ
+      .connect(member1)
+      .createProposalSweepMemberPoolRemainder(
+        recipient.address,
+        VOTING_PERIOD,
+        "Sweep remainder",
+        "No remainder"
+      );
+
+    const proposalId = (await templ.proposalCount()) - 1n;
+    const delay = Number(await templ.postQuorumVotingPeriod());
+    await ethers.provider.send("evm_increaseTime", [delay + 1]);
+    await ethers.provider.send("evm_mine", []);
+
+    await expect(templ.executeProposal(proposalId))
+      .to.be.revertedWithCustomError(templ, "NoRewardsToClaim");
+  });
 });

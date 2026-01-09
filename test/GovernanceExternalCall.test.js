@@ -6,6 +6,7 @@ const { mintToUsers, joinMembers } = require("./utils/mintAndPurchase");
 describe("Governance external call proposals", function () {
   const ENTRY_FEE = ethers.parseUnits("100", 18);
   const VOTING_PERIOD = 7 * 24 * 60 * 60;
+  const MAX_EXTERNAL_CALLDATA_BYTES = 4096;
 
   let templ;
   let token;
@@ -173,5 +174,25 @@ describe("Governance external call proposals", function () {
           ""
         )
     ).to.be.revertedWithCustomError(templ, "InvalidCallData");
+  });
+
+  it("accepts max-sized external call params", async function () {
+    const selector = target.interface.getFunction("setNumber").selector;
+    const value = 123n;
+    const encoded = abiCoder.encode(["uint256"], [value]);
+    const paddingBytes = MAX_EXTERNAL_CALLDATA_BYTES - 4 - 32;
+    const params = `0x${encoded.slice(2)}${"11".repeat(paddingBytes)}`;
+    const proposalId = await executeCallProposal({
+      selector,
+      params,
+      title: "Max calldata",
+      description: ""
+    });
+
+    const proposal = await templ.proposals(proposalId);
+    expect(ethers.getBytes(proposal.externalCallData).length).to.equal(MAX_EXTERNAL_CALLDATA_BYTES);
+
+    await templ.executeProposal(Number(proposalId));
+    expect(await target.storedValue()).to.equal(value);
   });
 });

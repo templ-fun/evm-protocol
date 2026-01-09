@@ -97,6 +97,42 @@ describe("TemplFactory", function () {
     );
   });
 
+  it("reverts when deployer returns the zero address", async function () {
+    const [deployer, protocolRecipient] = await ethers.getSigners();
+    const token = await deployToken();
+
+    const NullDeployer = await ethers.getContractFactory(
+      "contracts/mocks/NullDeployer.sol:NullDeployer"
+    );
+    const nullDeployer = await NullDeployer.deploy();
+    await nullDeployer.waitForDeployment();
+
+    const Factory = await ethers.getContractFactory("TemplFactory");
+    const factory = await Factory.deploy(
+      deployer.address,
+      protocolRecipient.address,
+      pct(10),
+      modules.membershipModule,
+      modules.treasuryModule,
+      modules.governanceModule,
+      modules.councilModule,
+      await nullDeployer.getAddress()
+    );
+    await factory.waitForDeployment();
+
+    await expect(
+      factory
+        .connect(deployer)
+        .createTempl(
+          await token.getAddress(),
+          ENTRY_FEE,
+          DEFAULT_METADATA.name,
+          DEFAULT_METADATA.description,
+          DEFAULT_METADATA.logoLink
+        )
+    ).to.be.revertedWithCustomError(factory, "DeploymentFailed");
+  });
+
     it("deploys templ contracts with fixed protocol config", async function () {
     const [, priest, protocolRecipient, member] = await ethers.getSigners();
     const token = await deployToken();
