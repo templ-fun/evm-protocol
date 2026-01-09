@@ -5,6 +5,7 @@ const { mintToUsers, joinMembers } = require("./utils/mintAndPurchase");
 const { encodeSetJoinPausedDAO, encodeWithdrawTreasuryDAO, encodeUpdateConfigDAO } = require("./utils/callDataBuilders");
 const { deployTemplModules } = require("./utils/modules");
 const { attachTemplInterface } = require("./utils/templ");
+const { expectProposalBasics } = require("./utils/assertions");
 
 describe("TEMPL Contract with DAO Governance", function () {
     let templ;
@@ -486,8 +487,13 @@ describe("TEMPL Contract with DAO Governance", function () {
 
             expect(await templ.proposalCount()).to.equal(1);
             
-            const proposal = await templ.getProposal(0);
-            expect(proposal.proposer).to.equal(user1.address);
+            await expectProposalBasics({
+                templ,
+                id: 0,
+                proposer: user1.address,
+                title,
+                description
+            });
         });
 
         it("Should prevent non-members from creating proposals", async function () {
@@ -510,6 +516,17 @@ describe("TEMPL Contract with DAO Governance", function () {
                     "Test withdrawal"
                 )
             ).to.emit(templ, "ProposalCreated");
+            const id = (await templ.proposalCount()) - 1n;
+            const proposal = await expectProposalBasics({
+                templ,
+                id,
+                proposer: user1.address,
+                title: "Withdraw treasury",
+                description: "Test withdrawal"
+            });
+            expect(proposal.token).to.equal(token.target);
+            expect(proposal.recipient).to.equal(treasury.address);
+            expect(proposal.amount).to.equal(ethers.parseUnits("1", 18));
         });
 
         
@@ -539,6 +556,13 @@ describe("TEMPL Contract with DAO Governance", function () {
                 "Pause joins",
                 "Use default voting period"
             );
+            await expectProposalBasics({
+                templ,
+                id: 0,
+                proposer: user1.address,
+                title: "Pause joins",
+                description: "Use default voting period"
+            });
             const proposal = await templ.proposals(0);
             const defaultPeriod = await templ.preQuorumVotingPeriod();
             expect(proposal.endTime - proposal.createdAt).to.equal(defaultPeriod);
@@ -966,6 +990,14 @@ describe("TEMPL Contract with DAO Governance", function () {
                     7 * 24 * 60 * 60
                 )
             ).to.emit(templ, "ProposalCreated");
+            const id = (await templ.proposalCount()) - 1n;
+            await expectProposalBasics({
+                templ,
+                id,
+                proposer: user2.address,
+                title: "New",
+                description: "New proposal"
+            });
         });
 
         it("Should allow vote when paused", async function () {
@@ -1019,6 +1051,20 @@ describe("TEMPL Contract with DAO Governance", function () {
                 cd2,
                 10 * 24 * 60 * 60
             );
+            await expectProposalBasics({
+                templ,
+                id: 0,
+                proposer: user1.address,
+                title: "Active 1",
+                description: "First active"
+            });
+            await expectProposalBasics({
+                templ,
+                id: 1,
+                proposer: user2.address,
+                title: "Active 2",
+                description: "Second active"
+            });
 
             const activeProposals = await templ.getActiveProposals();
             expect(activeProposals.length).to.equal(2);
@@ -1042,6 +1088,20 @@ describe("TEMPL Contract with DAO Governance", function () {
                 cd4,
                 14 * 24 * 60 * 60 // 14 days
             );
+            await expectProposalBasics({
+                templ,
+                id: 0,
+                proposer: user1.address,
+                title: "Short",
+                description: "Expires soon"
+            });
+            await expectProposalBasics({
+                templ,
+                id: 1,
+                proposer: user2.address,
+                title: "Long",
+                description: "Active longer"
+            });
 
             // Fast forward 8 days (first proposal expires, second still active)
             await ethers.provider.send("evm_increaseTime", [8 * 24 * 60 * 60]);
@@ -1069,6 +1129,20 @@ describe("TEMPL Contract with DAO Governance", function () {
                 cd5,
                 14 * 24 * 60 * 60
             );
+            await expectProposalBasics({
+                templ,
+                id: 0,
+                proposer: user1.address,
+                title: "Execute Me",
+                description: "Will be executed"
+            });
+            await expectProposalBasics({
+                templ,
+                id: 1,
+                proposer: user2.address,
+                title: "Still Active",
+                description: "Not executed"
+            });
 
             // Need to wait a bit for voting timestamps
             await ethers.provider.send("evm_increaseTime", [10]);

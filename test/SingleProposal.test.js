@@ -3,6 +3,7 @@ const { ethers } = require("hardhat");
 const { deployTempl } = require("./utils/deploy");
 const { mintToUsers, joinMembers } = require("./utils/mintAndPurchase");
 const { encodeWithdrawTreasuryDAO, encodeSetJoinPausedDAO } = require("./utils/callDataBuilders");
+const { expectProposalBasics } = require("./utils/assertions");
 
 describe("Single Active Proposal Restriction", function () {
     let templ;
@@ -24,20 +25,31 @@ describe("Single Active Proposal Restriction", function () {
 
     describe("Single Proposal Per Account", function () {
         it("Should allow a member to create their first proposal", async function () {
+            const amount = ethers.parseUnits("10", 18);
             const callData = encodeWithdrawTreasuryDAO(
                 token.target,
                 member1.address,
-                ethers.parseUnits("10", 18)
+                amount
             );
 
             await expect(templ.connect(member1).createProposalWithdrawTreasury(
                 token.target,
                 member1.address,
-                ethers.parseUnits("10", 18),
+                amount,
                 7 * 24 * 60 * 60,
                 ...META
             )).to.emit(templ, "ProposalCreated");
 
+            const proposal = await expectProposalBasics({
+                templ,
+                id: 0,
+                proposer: member1.address,
+                title: META[0],
+                description: META[1]
+            });
+            expect(proposal.token).to.equal(token.target);
+            expect(proposal.recipient).to.equal(member1.address);
+            expect(proposal.amount).to.equal(amount);
             expect(await templ.hasActiveProposal(member1.address)).to.be.true;
             expect(await templ.activeProposalId(member1.address)).to.equal(0);
         });
