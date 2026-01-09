@@ -224,7 +224,7 @@ contract TEMPL is TemplBase {
         treasury[19] = TemplTreasuryModule.setInstantQuorumBpsDAO.selector;
         treasury[20] = TemplTreasuryModule.sweepMemberPoolRemainderDAO.selector;
 
-        governance = new bytes4[](19);
+        governance = new bytes4[](20);
         governance[0] = TemplGovernanceModule.createProposalSetJoinPaused.selector;
         governance[1] = TemplGovernanceModule.createProposalUpdateConfig.selector;
         governance[2] = TemplGovernanceModule.createProposalSetMaxMembers.selector;
@@ -235,15 +235,16 @@ contract TEMPL is TemplBase {
         governance[7] = TemplGovernanceModule.createProposalCallExternal.selector;
         governance[8] = TemplGovernanceModule.createProposalWithdrawTreasury.selector;
         governance[9] = TemplGovernanceModule.createProposalDisbandTreasury.selector;
-        governance[10] = TemplGovernanceModule.createProposalChangePriest.selector;
-        governance[11] = TemplGovernanceModule.vote.selector;
-        governance[12] = TemplGovernanceModule.cancelProposal.selector;
-        governance[13] = TemplGovernanceModule.executeProposal.selector;
-        governance[14] = TemplGovernanceModule.pruneInactiveProposals.selector;
-        governance[15] = TemplGovernanceModule.createProposalSetQuorumBps.selector;
-        governance[16] = TemplGovernanceModule.createProposalSetPostQuorumVotingPeriod.selector;
-        governance[17] = TemplGovernanceModule.createProposalSetBurnAddress.selector;
-        governance[18] = TemplGovernanceModule.createProposalSetInstantQuorumBps.selector;
+        governance[10] = TemplGovernanceModule.createProposalSweepMemberPoolRemainder.selector;
+        governance[11] = TemplGovernanceModule.createProposalChangePriest.selector;
+        governance[12] = TemplGovernanceModule.vote.selector;
+        governance[13] = TemplGovernanceModule.cancelProposal.selector;
+        governance[14] = TemplGovernanceModule.executeProposal.selector;
+        governance[15] = TemplGovernanceModule.pruneInactiveProposals.selector;
+        governance[16] = TemplGovernanceModule.createProposalSetQuorumBps.selector;
+        governance[17] = TemplGovernanceModule.createProposalSetPostQuorumVotingPeriod.selector;
+        governance[18] = TemplGovernanceModule.createProposalSetBurnAddress.selector;
+        governance[19] = TemplGovernanceModule.createProposalSetInstantQuorumBps.selector;
         council = new bytes4[](4);
         council[0] = TemplCouncilModule.createProposalSetYesVoteThreshold.selector;
         council[1] = TemplCouncilModule.createProposalSetCouncilMode.selector;
@@ -288,6 +289,8 @@ contract TEMPL is TemplBase {
             payload = abi.encode(p.token, p.recipient, p.amount);
         } else if (action == Action.DisbandTreasury) {
             payload = abi.encode(p.token);
+        } else if (action == Action.SweepMemberPoolRemainder) {
+            payload = abi.encode(p.recipient);
         } else if (action == Action.ChangePriest) {
             payload = abi.encode(p.recipient);
         } else if (action == Action.SetQuorumBps) {
@@ -558,7 +561,7 @@ contract TEMPL is TemplBase {
     /// @notice Registers governance function selectors to dispatch to `module`.
     /// @param module Module address that implements governance functions.
     function _registerGovernanceSelectors(address module) internal {
-        bytes4[] memory selectors = new bytes4[](19);
+        bytes4[] memory selectors = new bytes4[](20);
         selectors[0] = TemplGovernanceModule.createProposalSetJoinPaused.selector;
         selectors[1] = TemplGovernanceModule.createProposalUpdateConfig.selector;
         selectors[2] = TemplGovernanceModule.createProposalSetMaxMembers.selector;
@@ -569,15 +572,16 @@ contract TEMPL is TemplBase {
         selectors[7] = TemplGovernanceModule.createProposalCallExternal.selector;
         selectors[8] = TemplGovernanceModule.createProposalWithdrawTreasury.selector;
         selectors[9] = TemplGovernanceModule.createProposalDisbandTreasury.selector;
-        selectors[10] = TemplGovernanceModule.createProposalChangePriest.selector;
-        selectors[11] = TemplGovernanceModule.vote.selector;
-        selectors[12] = TemplGovernanceModule.cancelProposal.selector;
-        selectors[13] = TemplGovernanceModule.executeProposal.selector;
-        selectors[14] = TemplGovernanceModule.pruneInactiveProposals.selector;
-        selectors[15] = TemplGovernanceModule.createProposalSetQuorumBps.selector;
-        selectors[16] = TemplGovernanceModule.createProposalSetPostQuorumVotingPeriod.selector;
-        selectors[17] = TemplGovernanceModule.createProposalSetBurnAddress.selector;
-        selectors[18] = TemplGovernanceModule.createProposalSetInstantQuorumBps.selector;
+        selectors[10] = TemplGovernanceModule.createProposalSweepMemberPoolRemainder.selector;
+        selectors[11] = TemplGovernanceModule.createProposalChangePriest.selector;
+        selectors[12] = TemplGovernanceModule.vote.selector;
+        selectors[13] = TemplGovernanceModule.cancelProposal.selector;
+        selectors[14] = TemplGovernanceModule.executeProposal.selector;
+        selectors[15] = TemplGovernanceModule.pruneInactiveProposals.selector;
+        selectors[16] = TemplGovernanceModule.createProposalSetQuorumBps.selector;
+        selectors[17] = TemplGovernanceModule.createProposalSetPostQuorumVotingPeriod.selector;
+        selectors[18] = TemplGovernanceModule.createProposalSetBurnAddress.selector;
+        selectors[19] = TemplGovernanceModule.createProposalSetInstantQuorumBps.selector;
         _registerModule(module, selectors);
     }
 

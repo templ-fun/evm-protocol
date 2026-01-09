@@ -169,6 +169,7 @@ Post‑deploy handoff
   - Pause/resume joins: `templ.createProposalSetJoinPaused(bool paused, uint256 votingPeriod, string title, string description)`
   - Update entry fee / split: `templ.createProposalUpdateConfig(uint256 newFee, uint256 newBurnBps, uint256 newTreasuryBps, uint256 newMemberPoolBps, bool updateSplit, uint256 votingPeriod, string title, string description)`
   - Withdraw treasury/external funds: `templ.createProposalWithdrawTreasury(address tokenOrZero, address recipient, uint256 amount, uint256 votingPeriod, string title, string description)`
+  - Sweep member pool remainder: `templ.createProposalSweepMemberPoolRemainder(address recipient, uint256 votingPeriod, string title, string description)`
   - Arbitrary external call: `templ.createProposalCallExternal(address target, uint256 value, bytes4 selector, bytes params, uint256 votingPeriod, string title, string description)`
 - Building CallExternal params (ethers v6 style):
   - Selector: `target.interface.getFunction("fn").selector`
@@ -225,6 +226,7 @@ Complete proposal creators (scan in code for params)
 - `createProposalCallExternal`
 - `createProposalWithdrawTreasury`
 - `createProposalDisbandTreasury` (when proposed by the priest or a council member while council mode is enabled, the proposal is quorum-exempt but still must meet the YES vote threshold after voting ends)
+- `createProposalSweepMemberPoolRemainder`
 - `createProposalChangePriest` (new priest must already be a member)
 - `createProposalSetQuorumBps`
 - `createProposalSetInstantQuorumBps`
@@ -241,9 +243,9 @@ Council proposal guards
 
 DAO-only actions via `createProposalCallExternal` (target = templ)
 - `setPreQuorumVotingPeriodDAO(uint256 newPeriod)`
-- `sweepMemberPoolRemainderDAO(address recipient)`
 - `batchDAO(address[] targets, uint256[] values, bytes[] calldatas)`
 - `setRoutingModuleDAO(address module, bytes4[] selectors)`
+- Member pool remainder sweeps are available via `createProposalSweepMemberPoolRemainder` (avoid `CallExternal`).
 
 Security notes for UIs
 - Default to a bounded buffer, not unlimited. Approve `~2× entryFee` for joins (adjustable) and avoid unlimited approvals.

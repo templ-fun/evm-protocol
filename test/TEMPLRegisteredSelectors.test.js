@@ -66,6 +66,7 @@ describe("TEMPL.getRegisteredSelectors()", function () {
       "createProposalCallExternal",
       "createProposalWithdrawTreasury",
       "createProposalDisbandTreasury",
+      "createProposalSweepMemberPoolRemainder",
       "createProposalChangePriest",
       "vote",
       "cancelProposal",

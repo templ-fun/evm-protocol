@@ -155,7 +155,8 @@ abstract contract TemplBase is ReentrancyGuard {
         SetCouncilMode,
         AddCouncilMember,
         RemoveCouncilMember,
-        Undefined
+        Undefined,
+        SweepMemberPoolRemainder
     }
 
     /// @notice Governance proposal payload and lifecycle state.

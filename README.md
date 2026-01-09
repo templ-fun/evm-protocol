@@ -224,7 +224,7 @@ flowchart LR
 - `TEMPL` routes calls to modules via delegatecall and exposes selector→module lookup.
 - Membership: joins, fee‑split accounting, member reward accrual and claims, eligibility snapshots.
 - Treasury: governance manages pause/cap/config/curve, change the priest, adjust referral/proposal fees, quorum + pre/post‑quorum windows, YES/instant thresholds, council mode/roster, burn address, member‑pool remainder sweeps, withdraw/disband assets, and run atomic multi‑call batches via `batchDAO`.
-- Governance: create/vote/execute/cancel proposals covering all treasury setters (including quorum/burn/curve metadata), safe external calls (single or batched), and opportunistic tail‑pruning of inactive proposals on execution to keep the active index compact.
+- Governance: create/vote/execute/cancel proposals covering all treasury setters (including quorum/burn/curve metadata), safe external calls (single or batched), and opportunistic tail‑pruning of inactive proposals on execution with bounded scans to keep the active index compact.
 - Council: council‑specific proposal creators for YES threshold, council mode, and council membership changes.
 - Shared storage: all persistent state lives in [`TemplBase`](contracts/TemplBase.sol).
 
@@ -561,6 +561,7 @@ Curves (see [`TemplCurve`](contracts/TemplCurve.sol)) support static, linear, an
 - CallExternal → `abi.encode(address target, uint256 value, bytes calldata)`
 - WithdrawTreasury → `abi.encode(address token, address recipient, uint256 amount)`
 - DisbandTreasury → `abi.encode(address token)`
+- SweepMemberPoolRemainder → `abi.encode(address recipient)`
 - ChangePriest → `abi.encode(address newPriest)` (new priest must be an active member)
 - SetQuorumBps → `abi.encode(uint256 newQuorumBps)`
 - SetInstantQuorumBps → `abi.encode(uint256 newInstantQuorumBps)`

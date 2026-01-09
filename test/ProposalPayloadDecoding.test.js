@@ -167,6 +167,14 @@ describe("Proposal payload decode coverage (getProposalActionData)", function ()
     expect(addr).to.equal(tokenAddr);
   });
 
+  it("decodes SweepMemberPoolRemainder", async function () {
+    await templ.connect(m2).createProposalSweepMemberPoolRemainder(m3.address, VOTING_PERIOD, "Sweep", "");
+    const id = (await templ.proposalCount()) - 1n;
+    const [, payload] = await templ.getProposalActionData(id);
+    const [recipient] = ethers.AbiCoder.defaultAbiCoder().decode(["address"], payload);
+    expect(recipient).to.equal(m3.address);
+  });
+
   it("decodes ChangePriest", async function () {
     await templ.connect(m1).createProposalChangePriest(m2.address, VOTING_PERIOD, "Priest", "");
     const id = (await templ.proposalCount()) - 1n;

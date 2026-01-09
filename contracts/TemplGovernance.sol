@@ -11,6 +11,9 @@ contract TemplGovernanceModule is TemplModuleBase {
     /// @notice Bound on how many inactive proposals to prune from the tail after each execution.
     /// @dev Keeps the active proposals index tidy without risking excessive gas on heavy executions.
     uint256 internal constant EXECUTION_TAIL_PRUNE = 5;
+    /// @notice Bound on how many proposals to scan from the tail during auto-pruning.
+    /// @dev Caps iteration work even when removals are scarce.
+    uint256 internal constant EXECUTION_TAIL_SCAN_LIMIT = 25;
 
     /// @notice Opens a proposal to pause or resume new member joins.
     /// @param _paused Desired join pause state.
@@ -349,6 +352,26 @@ contract TemplGovernanceModule is TemplModuleBase {
         return id;
     }
 
+    /// @notice Opens a proposal to sweep the member pool remainder to a recipient.
+    /// @param _recipient Wallet that will receive the remainder.
+    /// @param _votingPeriod Optional custom voting duration (seconds).
+    /// @param _title On-chain title for the proposal.
+    /// @param _description On-chain description for the proposal.
+    /// @return proposalId Newly created proposal identifier.
+    function createProposalSweepMemberPoolRemainder(
+        address _recipient,
+        uint256 _votingPeriod,
+        string calldata _title,
+        string calldata _description
+    ) external nonReentrant returns (uint256 proposalId) {
+        _requireDelegatecall();
+        if (_recipient == address(0)) revert TemplErrors.InvalidRecipient();
+        (uint256 id, Proposal storage p) = _createBaseProposal(_votingPeriod, _title, _description);
+        p.action = Action.SweepMemberPoolRemainder;
+        p.recipient = _recipient;
+        return id;
+    }
+
     /// @notice Opens a proposal to appoint a new priest.
     /// @dev Reverts when `_newPriest` is the zero address or is not an active member.
     /// @param _newPriest Address proposed as the new priest.
@@ -538,6 +561,8 @@ contract TemplGovernanceModule is TemplModuleBase {
             _withdrawTreasury(proposal.token, proposal.recipient, proposal.amount, _proposalId);
         } else if (proposal.action == Action.DisbandTreasury) {
             _disbandTreasury(proposal.token, _proposalId);
+        } else if (proposal.action == Action.SweepMemberPoolRemainder) {
+            _sweepMemberPoolRemainder(proposal.recipient);
         } else if (proposal.action == Action.ChangePriest) {
             _changePriest(proposal.recipient);
         } else if (proposal.action == Action.SetJoinPaused) {
@@ -597,7 +622,7 @@ contract TemplGovernanceModule is TemplModuleBase {
     /// @notice Removes up to `maxRemovals` inactive proposals from the active set.
     /// @param maxRemovals Maximum number of entries to remove.
     function _pruneInactiveTail(uint256 maxRemovals) internal {
-        _pruneInactive(maxRemovals);
+        _pruneInactive(maxRemovals, EXECUTION_TAIL_SCAN_LIMIT);
     }
 
     /// @notice Removes proposals that are no longer active from the tracked set.
@@ -605,20 +630,26 @@ contract TemplGovernanceModule is TemplModuleBase {
     /// @return removed Number of proposals removed from the active index.
     function pruneInactiveProposals(uint256 maxRemovals) external returns (uint256 removed) {
         _requireDelegatecall();
-        removed = _pruneInactive(maxRemovals);
+        removed = _pruneInactive(maxRemovals, 0);
     }
 
     /// @notice Removes inactive proposals anywhere in the tracked set, scanning from newest to oldest.
     /// @param maxRemovals Maximum number of entries to prune in this call.
+    /// @param maxScans Maximum number of entries to scan (0 for unbounded).
     /// @return removed Number of proposals removed from the active index.
-    function _pruneInactive(uint256 maxRemovals) internal returns (uint256 removed) {
+    function _pruneInactive(uint256 maxRemovals, uint256 maxScans) internal returns (uint256 removed) {
         if (maxRemovals == 0) return 0;
         uint256 len = activeProposalIds.length;
         if (len == 0) return 0;
         uint256 currentTime = block.timestamp;
         uint256 i = len;
-        while (i > 0 && removed < maxRemovals) {
+        uint256 scanned = 0;
+        uint256 scanLimit = maxScans == 0 ? type(uint256).max : maxScans;
+        while (i > 0 && removed < maxRemovals && scanned < scanLimit) {
             uint256 proposalId = activeProposalIds[i - 1];
+            unchecked {
+                ++scanned;
+            }
             if (_isActiveProposal(proposals[proposalId], currentTime)) {
                 unchecked {
                     --i;
