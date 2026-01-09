@@ -78,6 +78,21 @@ describe("Governance external call proposals", function () {
       .withArgs(42);
   });
 
+  it("reverts when call value exceeds the templ ETH balance", async function () {
+    const selector = target.interface.getFunction("setNumberPayable").selector;
+    const params = abiCoder.encode(["uint256"], [555n]);
+    const proposalId = await executeCallProposal({
+      selector,
+      params,
+      value: ethers.parseEther("1"),
+      title: "Overdraw",
+      description: "Exceeds balance"
+    });
+
+    await expect(templ.executeProposal(Number(proposalId))).to.be.reverted;
+    expect(await target.storedValue()).to.equal(0n);
+  });
+
   it("forwards call value to external targets", async function () {
     const selector = target.interface.getFunction("setNumberPayable").selector;
     const params = abiCoder.encode(["uint256"], [777n]);
@@ -97,6 +112,48 @@ describe("Governance external call proposals", function () {
     const endingBalance = await ethers.provider.getBalance(await target.getAddress());
     expect(endingBalance).to.equal(callValue);
     expect(await target.storedValue()).to.equal(777n);
+  });
+
+  it("does not adjust access-token accounting when CallExternal moves tokens", async function () {
+    const recipient = accounts[5];
+    const templAddress = await templ.getAddress();
+    const tokenAddress = await token.getAddress();
+
+    const poolBefore = await templ.memberPoolBalance();
+    const treasuryBefore = await templ.treasuryBalance();
+    const balanceBefore = await token.balanceOf(templAddress);
+    const available = balanceBefore - poolBefore;
+    const transferAmount = available / 2n;
+
+    const selector = token.interface.getFunction("transfer").selector;
+    const params = abiCoder.encode(["address", "uint256"], [recipient.address, transferAmount]);
+
+    const tx = await templ
+      .connect(memberA)
+      .createProposalCallExternal(
+        tokenAddress,
+        0,
+        selector,
+        params,
+        VOTING_PERIOD,
+        "Drain access token",
+        "External transfer"
+      );
+    await tx.wait();
+    const proposalId = (await templ.proposalCount()) - 1n;
+    await templ.connect(memberB).vote(Number(proposalId), true);
+    await ethers.provider.send("evm_increaseTime", [VOTING_PERIOD + 1]);
+    await ethers.provider.send("evm_mine", []);
+
+    await templ.executeProposal(Number(proposalId));
+
+    const balanceAfter = await token.balanceOf(templAddress);
+    expect(balanceAfter).to.equal(balanceBefore - transferAmount);
+    expect(await templ.memberPoolBalance()).to.equal(poolBefore);
+    expect(await templ.treasuryBalance()).to.equal(treasuryBefore);
+
+    const info = await templ.getTreasuryInfo();
+    expect(info.treasury).to.equal(balanceAfter - poolBefore);
   });
 
   it("rejects oversized external call calldata", async function () {

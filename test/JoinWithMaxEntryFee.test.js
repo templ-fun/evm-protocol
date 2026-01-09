@@ -1,7 +1,7 @@
 const { expect } = require("chai");
 const { anyValue } = require("@nomicfoundation/hardhat-chai-matchers/withArgs");
 const { ethers } = require("hardhat");
-const { deployTempl } = require("./utils/deploy");
+const { deployTempl, EXPONENTIAL_CURVE } = require("./utils/deploy");
 const { mintToUsers } = require("./utils/mintAndPurchase");
 
 describe("Join max-entry-fee variants", function () {
@@ -27,6 +27,29 @@ describe("Join max-entry-fee variants", function () {
         templ.connect(payer)[testCase.name](...testCase.args)
       ).to.be.revertedWithCustomError(templ, "EntryFeeTooHigh");
     }
+  });
+
+  it("reverts when the entry fee increases beyond the stored max", async function () {
+    const { templ, token, accounts } = await deployTempl({
+      entryFee: ENTRY_FEE,
+      curve: EXPONENTIAL_CURVE,
+    });
+    const [, , payer, other] = accounts;
+
+    await mintToUsers(token, [payer, other], ENTRY_FEE * 10n);
+    const templAddress = await templ.getAddress();
+
+    const initialFee = await templ.entryFee();
+    await token.connect(other).approve(templAddress, initialFee);
+    await templ.connect(other).join();
+
+    const updatedFee = await templ.entryFee();
+    expect(updatedFee).to.be.gt(initialFee);
+
+    await token.connect(payer).approve(templAddress, updatedFee);
+    await expect(
+      templ.connect(payer).joinWithMaxEntryFee(initialFee)
+    ).to.be.revertedWithCustomError(templ, "EntryFeeTooHigh");
   });
 
   it("joins with max entry fee and charges the caller", async function () {

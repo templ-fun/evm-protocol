@@ -556,6 +556,34 @@ describe("TemplFactory", function () {
         expect(await templ.entryFee()).to.equal(expectedNextFee);
     });
 
+    it("reverts createTempl when protocol bps breaks the default split", async function () {
+        const [deployer, protocolRecipient] = await ethers.getSigners();
+        const token = await deployToken("BadDefaults", "BAD");
+        const Factory = await ethers.getContractFactory("TemplFactory");
+        const protocolBps = pct(12); // defaults assume 10%
+        const factory = await Factory.deploy(
+            deployer.address,
+            protocolRecipient.address,
+            protocolBps,
+            modules.membershipModule,
+            modules.treasuryModule,
+            modules.governanceModule,
+            modules.councilModule,
+            templDeployer
+        );
+        await factory.waitForDeployment();
+
+        await expect(
+            factory.createTempl(
+                await token.getAddress(),
+                ENTRY_FEE,
+                DEFAULT_METADATA.name,
+                DEFAULT_METADATA.description,
+                DEFAULT_METADATA.logoLink
+            )
+        ).to.be.revertedWithCustomError(factory, "InvalidPercentageSplit");
+    });
+
     it("allows templ creation for a delegated priest", async function () {
         const [deployer, delegatedPriest, protocolRecipient] = await ethers.getSigners();
         const token = await deployToken("Delegated", "DLG");

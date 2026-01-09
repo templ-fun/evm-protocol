@@ -1187,11 +1187,45 @@ describe("TEMPL Contract with DAO Governance", function () {
             await minTempl.waitForDeployment();
             minTempl = await attachTemplInterface(minTempl);
 
-            await token.connect(user1).approve(await minTempl.getAddress(), 10);
-            await minTempl.connect(user1).join();
+            const fee = 10n;
+            const burnBps = await minTempl.burnBps();
+            const memberPoolBps = await minTempl.memberPoolBps();
+            const protocolBps = await minTempl.protocolBps();
+            const burnAmount = (fee * burnBps) / 10_000n;
+            const memberPoolAmount = (fee * memberPoolBps) / 10_000n;
+            const protocolAmount = (fee * protocolBps) / 10_000n;
+            const treasuryAmount = fee - burnAmount - memberPoolAmount - protocolAmount;
 
-            // Should still split correctly even with rounding
-            expect(await minTempl.treasuryBalance()).to.be.gte(0);
+            const burnAddress = await minTempl.burnAddress();
+            const protocolRecipient = await minTempl.protocolFeeRecipient();
+            const burnBefore = await token.balanceOf(burnAddress);
+            const protocolBefore = await token.balanceOf(protocolRecipient);
+
+            const templAddress = await minTempl.getAddress();
+            await token.connect(user1).approve(templAddress, fee);
+            const tx = await minTempl.connect(user1).join();
+            const receipt = await tx.wait();
+
+            const joinEvent = receipt.logs
+                .map((log) => {
+                    try {
+                        return minTempl.interface.parseLog(log);
+                    } catch (_) {
+                        return null;
+                    }
+                })
+                .find((log) => log && log.name === "MemberJoined");
+
+            expect(joinEvent, "MemberJoined event").to.not.equal(undefined);
+            expect(joinEvent.args.burnedAmount).to.equal(burnAmount);
+            expect(joinEvent.args.treasuryAmount).to.equal(treasuryAmount);
+            expect(joinEvent.args.memberPoolAmount).to.equal(memberPoolAmount);
+            expect(joinEvent.args.protocolAmount).to.equal(protocolAmount);
+
+            expect(await minTempl.treasuryBalance()).to.equal(treasuryAmount);
+            expect(await minTempl.memberPoolBalance()).to.equal(memberPoolAmount);
+            expect(await token.balanceOf(burnAddress)).to.equal(burnBefore + burnAmount);
+            expect(await token.balanceOf(protocolRecipient)).to.equal(protocolBefore + protocolAmount);
         });
 
         it("Should reject entry fee below minimum", async function () {
