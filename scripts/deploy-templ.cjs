@@ -7,11 +7,21 @@ const DEFAULT_BURN_BPS = 3_000;
 const DEFAULT_TREASURY_BPS = 3_000;
 const DEFAULT_MEMBER_POOL_BPS = 3_000;
 const DEFAULT_QUORUM_BPS = 3_300;
+const DEFAULT_CURVE_EXP_RATE_BPS = 10_094;
+const DEFAULT_MAX_MEMBERS = 249;
 const USE_DEFAULT_SENTINEL = -1;
 const CURVE_STYLE_INDEX = {
   static: 0,
   linear: 1,
   exponential: 2
+};
+const DEFAULT_FACTORY_CURVE = {
+  primary: {
+    style: CURVE_STYLE_INDEX.exponential,
+    rateBps: DEFAULT_CURVE_EXP_RATE_BPS,
+    length: DEFAULT_MAX_MEMBERS - 1
+  },
+  additionalSegments: [{ style: CURVE_STYLE_INDEX.static, rateBps: 0, length: 0 }]
 };
 
 function parseFiniteNumber(input, label) {
@@ -98,7 +108,7 @@ function resolveCurveConfigFromEnv() {
   } else if (resolvedStyle === CURVE_STYLE_INDEX.linear) {
     resolvedRate = 500;
   } else {
-    resolvedRate = 11_000;
+    resolvedRate = DEFAULT_CURVE_EXP_RATE_BPS;
   }
 
   if (resolvedStyle === CURVE_STYLE_INDEX.static && resolvedRate !== 0) {
@@ -312,6 +322,7 @@ async function main() {
   const BACKEND_URL = (process.env.BACKEND_URL || process.env.TEMPL_BACKEND_URL || '').trim();
   const TELEGRAM_CHAT_ID = (process.env.TELEGRAM_CHAT_ID || process.env.CHAT_ID || '').trim();
   const curveConfigEnv = resolveCurveConfigFromEnv();
+  const resolvedCurve = curveConfigEnv.curveProvided ? curveConfigEnv.curve : DEFAULT_FACTORY_CURVE;
 
   if (!TOKEN_ADDRESS) {
     throw new Error("TOKEN_ADDRESS not set in environment");
@@ -377,6 +388,7 @@ async function main() {
       );
     }
   }
+  const resolvedExecutionDelaySeconds = POST_QUORUM_VOTING_PERIOD_SECONDS ?? 36 * 60 * 60;
   if (BURN_ADDRESS && !hre.ethers.isAddress(BURN_ADDRESS)) {
     throw new Error('BURN_ADDRESS must be a valid address');
   }
@@ -437,7 +449,7 @@ async function main() {
   const chainIdNumber = Number(network.chainId);
   console.log("Network Chain ID:", network.chainId.toString());
   console.log("Quorum Bps:", resolvedQuorumBps);
-  console.log("Post‑Quorum Voting Period (seconds):", POST_QUORUM_VOTING_PERIOD_SECONDS ?? 36 * 60 * 60);
+  console.log("Post‑Quorum Voting Period (seconds):", resolvedExecutionDelaySeconds);
   console.log("Burn Address:", effectiveBurnAddress);
   console.log("Council Mode:", START_COUNCIL_MODE ? 'enabled' : 'disabled');
   console.log("YES Vote Threshold (bps):", yesVoteThresholdBps);
@@ -701,8 +713,8 @@ async function main() {
     treasuryBps: treasurySplit.resolvedBps,
     memberPoolBps: memberPoolSplit.resolvedBps,
     protocolBps: protocolPercentBps,
-    quorumBps: quorumPercentBps,
-    executionDelaySeconds: POST_QUORUM_VOTING_PERIOD_SECONDS ?? 36 * 60 * 60,
+    quorumBps: resolvedQuorumBps,
+    executionDelaySeconds: resolvedExecutionDelaySeconds,
     burnAddress: effectiveBurnAddress,
     tokenAddress: TOKEN_ADDRESS,
     entryFee: ENTRY_FEE,
@@ -712,7 +724,7 @@ async function main() {
     proposalFeeBps: PROPOSAL_FEE_BPS,
     referralShareBps: REFERRAL_SHARE_BPS,
     curveProvided: curveConfigEnv.curveProvided,
-    curve: curveConfigEnv.curve,
+    curve: resolvedCurve,
     totalBurned: burnedTotal !== undefined ? burnedTotal.toString() : "0",
     deployedAt: new Date().toISOString(),
     deployer: deployer.address,
@@ -751,7 +763,7 @@ async function main() {
       `npx hardhat verify --contract contracts/TemplFactory.sol:TemplFactory --network base ${factoryAddress} ${(process.env.FACTORY_DEPLOYER || deployer.address).trim()} ${PROTOCOL_FEE_RECIPIENT} ${protocolPercentBps} ${membershipModuleAddress} ${treasuryModuleAddress} ${governanceModuleAddress} ${councilModuleAddress} ${templDeployerAddress}`
     );
     console.log(
-      `npx hardhat verify --contract contracts/TEMPL.sol:TEMPL --network base ${contractAddress} ${PRIEST_ADDRESS} ${PROTOCOL_FEE_RECIPIENT} ${TOKEN_ADDRESS} ${ENTRY_FEE} ${burnSplit.resolvedBps} ${treasurySplit.resolvedBps} ${memberPoolSplit.resolvedBps} ${protocolPercentBps} ${quorumPercentBps} ${(POST_QUORUM_VOTING_PERIOD_SECONDS ?? 36 * 60 * 60)} ${(BURN_ADDRESS || hre.ethers.ZeroAddress)} ${MAX_MEMBERS} "${NAME}" "${DESCRIPTION}" "${LOGO_LINK}" ${PROPOSAL_FEE_BPS} ${REFERRAL_SHARE_BPS} ${yesVoteThresholdBps} ${instantQuorumBps} ${START_COUNCIL_MODE} ${membershipModuleAddress} ${treasuryModuleAddress} ${governanceModuleAddress} ${councilModuleAddress} [[[curve argument omitted; use scripts/verify-templ.cjs for templ verification]]]`
+      `npx hardhat verify --contract contracts/TEMPL.sol:TEMPL --network base ${contractAddress} ${PRIEST_ADDRESS} ${PROTOCOL_FEE_RECIPIENT} ${TOKEN_ADDRESS} ${ENTRY_FEE} ${burnSplit.resolvedBps} ${treasurySplit.resolvedBps} ${memberPoolSplit.resolvedBps} ${protocolPercentBps} ${resolvedQuorumBps} ${resolvedExecutionDelaySeconds} ${effectiveBurnAddress} ${MAX_MEMBERS} "${NAME}" "${DESCRIPTION}" "${LOGO_LINK}" ${PROPOSAL_FEE_BPS} ${REFERRAL_SHARE_BPS} ${yesVoteThresholdBps} ${instantQuorumBps} ${START_COUNCIL_MODE} ${membershipModuleAddress} ${treasuryModuleAddress} ${governanceModuleAddress} ${councilModuleAddress} [[[curve argument omitted; use scripts/verify-templ.cjs for templ verification]]]`
     );
     console.log("Tip: prefer npm run verify:factory and npm run verify:templ which auto-discover constructor args.");
   }
