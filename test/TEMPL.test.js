@@ -479,7 +479,9 @@ describe("TEMPL Contract with DAO Governance", function () {
 
             await expect(templ.connect(user1).createProposalSetJoinPaused(
                 false,
-                votingPeriod
+                votingPeriod,
+                title,
+                description
             )).to.emit(templ, "ProposalCreated");
 
             expect(await templ.proposalCount()).to.equal(1);
@@ -491,7 +493,9 @@ describe("TEMPL Contract with DAO Governance", function () {
         it("Should prevent non-members from creating proposals", async function () {
             await expect(templ.connect(user2).createProposalSetJoinPaused(
                 false,
-                7 * 24 * 60 * 60
+                7 * 24 * 60 * 60,
+                "Pause joins",
+                "Require membership"
             )).to.be.revertedWithCustomError(templ, "NotMember");
         });
 
@@ -501,7 +505,9 @@ describe("TEMPL Contract with DAO Governance", function () {
                     token.target,
                     treasury.address,
                     ethers.parseUnits("1", 18),
-                    7 * 24 * 60 * 60
+                    7 * 24 * 60 * 60,
+                    "Withdraw treasury",
+                    "Test withdrawal"
                 )
             ).to.emit(templ, "ProposalCreated");
         });
@@ -511,14 +517,18 @@ describe("TEMPL Contract with DAO Governance", function () {
         it("Should enforce minimum voting period", async function () {
             await expect(templ.connect(user1).createProposalSetJoinPaused(
                 false,
-                35 * 60 * 60
+                35 * 60 * 60,
+                "Pause joins",
+                "Too short"
             )).to.be.revertedWithCustomError(templ, "VotingPeriodTooShort");
         });
 
         it("Should enforce maximum voting period", async function () {
             await expect(templ.connect(user1).createProposalSetJoinPaused(
                 false,
-                31 * 24 * 60 * 60
+                31 * 24 * 60 * 60,
+                "Pause joins",
+                "Too long"
             )).to.be.revertedWithCustomError(templ, "VotingPeriodTooLong");
         });
 
@@ -526,7 +536,8 @@ describe("TEMPL Contract with DAO Governance", function () {
             await templ.connect(user1).createProposalSetJoinPaused(
                 false,
                 0,
-                    ""
+                "Pause joins",
+                "Use default voting period"
             );
             const proposal = await templ.proposals(0);
             const defaultPeriod = await templ.preQuorumVotingPeriod();

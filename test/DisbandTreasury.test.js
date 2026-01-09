@@ -130,7 +130,7 @@ describe("Disband Treasury", function () {
     await templ.connect(priest).createProposalDisbandTreasury(accessToken, VOTING_PERIOD, ...DISBAND_META);
 
     await token.connect(joiner).approve(await templ.getAddress(), ENTRY_FEE);
-    await expect(templ.connect(joiner).join()).to.not.be.reverted;
+    await templ.connect(joiner).join();
     expect(await templ.isMember(joiner.address)).to.equal(true);
   });
 
@@ -146,7 +146,7 @@ describe("Disband Treasury", function () {
     await templ.connect(m2).vote(0, true);
 
     await token.connect(lateJoiner).approve(await templ.getAddress(), ENTRY_FEE);
-    await expect(templ.connect(lateJoiner).join()).to.not.be.reverted;
+    await templ.connect(lateJoiner).join();
     expect(await templ.isMember(lateJoiner.address)).to.equal(true);
   });
 
@@ -199,7 +199,7 @@ describe("Disband Treasury", function () {
       .to.be.revertedWithCustomError(templ, "NoTreasuryFunds");
 
     await token.connect(lateJoiner).approve(await templ.getAddress(), ENTRY_FEE);
-    await expect(templ.connect(lateJoiner).join()).to.not.be.reverted;
+    await templ.connect(lateJoiner).join();
     expect(await templ.isMember(lateJoiner.address)).to.equal(true);
   });
 
@@ -222,7 +222,7 @@ describe("Disband Treasury", function () {
     await templ.executeProposal(0);
 
     await token.connect(lateJoiner).approve(await templ.getAddress(), ENTRY_FEE);
-    await expect(templ.connect(lateJoiner).join()).to.not.be.reverted;
+    await templ.connect(lateJoiner).join();
     expect(await templ.isMember(lateJoiner.address)).to.equal(true);
   });
 
@@ -250,7 +250,7 @@ describe("Disband Treasury", function () {
       .to.be.revertedWithCustomError(templ, "ProposalNotPassed");
 
     await token.connect(lateJoiner).approve(await templ.getAddress(), ENTRY_FEE);
-    await expect(templ.connect(lateJoiner).join()).to.not.be.reverted;
+    await templ.connect(lateJoiner).join();
     expect(await templ.isMember(lateJoiner.address)).to.equal(true);
   });
 

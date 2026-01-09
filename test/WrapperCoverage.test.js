@@ -97,7 +97,7 @@ describe("WrapperCoverage (onlyDAO externals)", function () {
     await other.waitForDeployment();
 
     // Token changes are ignored (immutable access token); call proceeds without revert
-    await expect(templ.daoUpdate(0n, false, 0, 0, 0)).to.not.be.reverted;
+    await templ.daoUpdate(0n, false, 0, 0, 0);
     expect(await templ.accessToken()).to.equal(await token.getAddress());
 
     await expect(

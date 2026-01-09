@@ -764,7 +764,8 @@ describe("TemplFactory", function () {
     const delay = Number(await templ.postQuorumVotingPeriod());
     await ethers.provider.send("evm_increaseTime", [delay + 1]);
     await ethers.provider.send("evm_mine", []);
-    await expect(templ.connect(member).executeProposal(pid)).to.not.be.reverted;
+    await templ.connect(member).executeProposal(pid);
+    expect((await templ.proposals(pid)).executed).to.equal(true);
 
     // Access token remains unchanged
     expect(await templ.accessToken()).to.equal(await tokenA.getAddress());

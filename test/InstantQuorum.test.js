@@ -33,14 +33,14 @@ describe("Instant quorum execution", function () {
     expect(proposalAfter.endTime).to.be.at.most(proposalBefore.endTime);
     expect(proposalAfter.instantQuorumReachedAt).to.be.at.least(proposalAfter.quorumReachedAt);
 
-    await expect(templ.connect(member2).executeProposal(proposalId)).to.not.be.reverted;
+    await templ.connect(member2).executeProposal(proposalId);
     expect(await templ.burnAddress()).to.equal(immediateBurn);
 
     // Update instant quorum to 100% via governance
     await templ.connect(member1).createProposalSetInstantQuorumBps(10_000, WEEK, "raise instant quorum", "");
     const configProposalId = (await templ.proposalCount()) - 1n;
     await templ.connect(member2).vote(configProposalId, true);
-    await expect(templ.connect(member2).executeProposal(configProposalId)).to.not.be.reverted;
+    await templ.connect(member2).executeProposal(configProposalId);
     expect(await templ.instantQuorumBps()).to.equal(10_000n);
 
     // With instant quorum at 100%, proposals must wait for the delay again
@@ -60,7 +60,8 @@ describe("Instant quorum execution", function () {
     await mintToUsers(token, [member1, member2, member3], TOKEN_SUPPLY);
     await joinMembers(templ, token, [member1, member2, member3]);
 
-    await templ.connect(member1).createProposalSetBurnAddress("0x00000000000000000000000000000000000000AE", WEEK, "snap", "");
+    const snapBurn = "0x00000000000000000000000000000000000000AE";
+    await templ.connect(member1).createProposalSetBurnAddress(snapBurn, WEEK, "snap", "");
     const proposalId = (await templ.proposalCount()) - 1n;
 
     await templ.connect(member2).createProposalSetInstantQuorumBps(10_000, WEEK, "raise", "");
@@ -75,7 +76,8 @@ describe("Instant quorum execution", function () {
 
     await templ.connect(member2).vote(proposalId, true);
     await templ.connect(member3).vote(proposalId, true);
-    await expect(templ.executeProposal(proposalId)).to.not.be.reverted;
+    await templ.executeProposal(proposalId);
+    expect(await templ.burnAddress()).to.equal(snapBurn);
   });
 
   it("executes council proposals immediately once instant quorum is met", async function () {
@@ -92,14 +94,15 @@ describe("Instant quorum execution", function () {
     await templ.connect(member1).createProposalAddCouncilMember(member1.address, WEEK, "Add council", "");
     const addId = (await templ.proposalCount()) - 1n;
     await templ.connect(priest).vote(addId, true);
-    await expect(templ.executeProposal(addId)).to.not.be.reverted;
+    await templ.executeProposal(addId);
+    expect(await templ.councilMembers(member1.address)).to.equal(true);
 
     const councilBurn = ethers.getAddress("0x00000000000000000000000000000000000000ac");
     await templ.connect(member1).createProposalSetBurnAddress(councilBurn, WEEK, "council burn", "");
     const proposalId = (await templ.proposalCount()) - 1n;
 
     await templ.connect(priest).vote(proposalId, true);
-    await expect(templ.connect(member1).executeProposal(proposalId)).to.not.be.reverted;
+    await templ.connect(member1).executeProposal(proposalId);
     expect(await templ.burnAddress()).to.equal(councilBurn);
   });
 

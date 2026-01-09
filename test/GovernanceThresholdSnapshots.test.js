@@ -16,9 +16,10 @@ describe("Governance threshold snapshots", function () {
     await joinMembers(templ, token, [member1, member2, member3]);
 
     const originalQuorum = await templ.quorumBps();
+    const burnAddressA = "0x00000000000000000000000000000000000000c2";
     await templ
       .connect(member1)
-      .createProposalSetBurnAddress("0x00000000000000000000000000000000000000c2", LONG_VOTING_PERIOD, "burn", "");
+      .createProposalSetBurnAddress(burnAddressA, LONG_VOTING_PERIOD, "burn", "");
     const proposalId = (await templ.proposalCount()) - 1n;
     const proposalSnapshot = await templ.proposals(proposalId);
     expect(proposalSnapshot.quorumBpsSnapshot).to.equal(originalQuorum);
@@ -41,7 +42,8 @@ describe("Governance threshold snapshots", function () {
 
     await ethers.provider.send("evm_increaseTime", [delay + 1]);
     await ethers.provider.send("evm_mine", []);
-    await expect(templ.executeProposal(proposalId)).to.not.be.reverted;
+    await templ.executeProposal(proposalId);
+    expect(await templ.burnAddress()).to.equal(burnAddressA);
   });
 
   it("keeps YES vote threshold fixed for existing proposals", async function () {
@@ -52,9 +54,10 @@ describe("Governance threshold snapshots", function () {
     await joinMembers(templ, token, [member1, member2, member3]);
 
     const originalYesThreshold = await templ.yesVoteThresholdBps();
+    const burnAddressB = "0x00000000000000000000000000000000000000c3";
     await templ
       .connect(member1)
-      .createProposalSetBurnAddress("0x00000000000000000000000000000000000000c3", LONG_VOTING_PERIOD, "burn", "");
+      .createProposalSetBurnAddress(burnAddressB, LONG_VOTING_PERIOD, "burn", "");
     const proposalId = (await templ.proposalCount()) - 1n;
     const proposalSnapshot = await templ.proposals(proposalId);
     expect(proposalSnapshot.yesVoteThresholdBpsSnapshot).to.equal(originalYesThreshold);
@@ -80,6 +83,7 @@ describe("Governance threshold snapshots", function () {
 
     await ethers.provider.send("evm_increaseTime", [delay + 1]);
     await ethers.provider.send("evm_mine", []);
-    await expect(templ.executeProposal(proposalId)).to.not.be.reverted;
+    await templ.executeProposal(proposalId);
+    expect(await templ.burnAddress()).to.equal(ethers.getAddress(burnAddressB));
   });
 });

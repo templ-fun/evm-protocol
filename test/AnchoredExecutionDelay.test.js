@@ -87,7 +87,8 @@ describe('Anchored execution delay after quorum', function () {
     await templ.executeProposal(proposalB);
 
     // Now global delay is large. Executing proposal A should still succeed based on its stored endTime.
-    await expect(templ.executeProposal(proposalId)).to.not.be.reverted;
+    await templ.executeProposal(proposalId);
+    expect(await templ.joinPaused()).to.equal(true);
   });
 
   it('anchors post-quorum delay at creation when the delay is reduced before quorum', async function () {
