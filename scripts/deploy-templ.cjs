@@ -257,6 +257,7 @@ async function main() {
   const TOKEN_ADDRESS = process.env.TOKEN_ADDRESS;
   const ENTRY_FEE = process.env.ENTRY_FEE;
   const FACTORY_ADDRESS_ENV = process.env.FACTORY_ADDRESS;
+  const factoryDeployerEnv = (process.env.FACTORY_DEPLOYER || deployer.address).trim();
   let membershipModuleAddress = (process.env.MEMBERSHIP_MODULE_ADDRESS || '').trim();
   let treasuryModuleAddress = (process.env.TREASURY_MODULE_ADDRESS || '').trim();
   let governanceModuleAddress = (process.env.GOVERNANCE_MODULE_ADDRESS || '').trim();
@@ -362,6 +363,14 @@ async function main() {
       throw new Error(`Failed to read protocol bps from factory ${FACTORY_ADDRESS_ENV}: ${err?.message || err}`);
     }
   } else {
+    if (!hre.ethers.isAddress(factoryDeployerEnv)) {
+      throw new Error('FACTORY_DEPLOYER must be a valid address (or omit to default to signer)');
+    }
+    if (factoryDeployerEnv.toLowerCase() !== deployer.address.toLowerCase()) {
+      throw new Error(
+        'FACTORY_DEPLOYER must match the deployer signer when deploying a new factory and creating a TEMPL in the same run.'
+      );
+    }
     if (!PROTOCOL_FEE_RECIPIENT) {
       throw new Error("PROTOCOL_FEE_RECIPIENT not set in environment");
     }
@@ -475,6 +484,8 @@ async function main() {
   
   let factoryAddress = FACTORY_ADDRESS_ENV;
   let factoryContract;
+  let factoryDeployerOnChain;
+  let factoryPermissionless;
   if (!factoryAddress) {
     membershipModuleAddress = await deployModuleIfNeeded(
       'Membership',
@@ -504,12 +515,8 @@ async function main() {
 
     console.log("\nDeploying TemplFactory...");
     const Factory = await hre.ethers.getContractFactory("TemplFactory");
-    const FACTORY_DEPLOYER = (process.env.FACTORY_DEPLOYER || deployer.address).trim();
-    if (!hre.ethers.isAddress(FACTORY_DEPLOYER)) {
-      throw new Error('FACTORY_DEPLOYER must be a valid address (or omit to default to signer)');
-    }
     const factory = await Factory.deploy(
-      FACTORY_DEPLOYER,
+      factoryDeployerEnv,
       PROTOCOL_FEE_RECIPIENT,
       protocolPercentBps,
       membershipModuleAddress,
@@ -543,6 +550,14 @@ async function main() {
     if (!templDeployerAddress) {
       templDeployerAddress = await factoryContract.TEMPL_DEPLOYER();
     }
+  }
+
+  factoryDeployerOnChain = await factoryContract.factoryDeployer();
+  factoryPermissionless = await factoryContract.permissionless();
+  if (!factoryPermissionless && factoryDeployerOnChain.toLowerCase() !== deployer.address.toLowerCase()) {
+    throw new Error(
+      `Factory ${factoryAddress} restricts creation to ${factoryDeployerOnChain}. Use that signer or enable permissionless mode before deploying a TEMPL.`
+    );
   }
 
   console.log("\nFactory wiring:");
@@ -764,7 +779,7 @@ async function main() {
       `npx hardhat verify --contract contracts/TemplCouncil.sol:TemplCouncilModule --network base ${councilModuleAddress}`
     );
     console.log(
-      `npx hardhat verify --contract contracts/TemplFactory.sol:TemplFactory --network base ${factoryAddress} ${(process.env.FACTORY_DEPLOYER || deployer.address).trim()} ${PROTOCOL_FEE_RECIPIENT} ${protocolPercentBps} ${membershipModuleAddress} ${treasuryModuleAddress} ${governanceModuleAddress} ${councilModuleAddress} ${templDeployerAddress}`
+      `npx hardhat verify --contract contracts/TemplFactory.sol:TemplFactory --network base ${factoryAddress} ${factoryDeployerOnChain} ${PROTOCOL_FEE_RECIPIENT} ${protocolPercentBps} ${membershipModuleAddress} ${treasuryModuleAddress} ${governanceModuleAddress} ${councilModuleAddress} ${templDeployerAddress}`
     );
     console.log(
       `npx hardhat verify --contract contracts/TEMPL.sol:TEMPL --network base ${contractAddress} ${PRIEST_ADDRESS} ${PROTOCOL_FEE_RECIPIENT} ${TOKEN_ADDRESS} ${ENTRY_FEE} ${burnSplit.resolvedBps} ${treasurySplit.resolvedBps} ${memberPoolSplit.resolvedBps} ${protocolPercentBps} ${resolvedQuorumBps} ${resolvedExecutionDelaySeconds} ${effectiveBurnAddress} ${MAX_MEMBERS} "${NAME}" "${DESCRIPTION}" "${LOGO_LINK}" ${PROPOSAL_FEE_BPS} ${REFERRAL_SHARE_BPS} ${yesVoteThresholdBps} ${instantQuorumBps} ${START_COUNCIL_MODE} ${membershipModuleAddress} ${treasuryModuleAddress} ${governanceModuleAddress} ${councilModuleAddress} [[[curve argument omitted; use scripts/verify-templ.cjs for templ verification]]]`

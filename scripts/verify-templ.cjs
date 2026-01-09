@@ -334,7 +334,7 @@ async function fetchEventSnapshot({ provider, factoryAddress, templAddress, from
 
 function resolveField({ label, contractValue, eventValue, overrideValue, fallbackValue, normalizer, allowEmpty = false }) {
   const raw = firstDefined(
-    [contractValue, eventValue, overrideValue, fallbackValue],
+    [overrideValue, eventValue, contractValue, fallbackValue],
     { allowEmpty }
   );
   if (raw === undefined) {
@@ -629,8 +629,8 @@ async function main() {
     })
   };
 
-  let normalizedCurve = normalizeCurveValue(contractSnapshot.entryFeeCurve);
-  if (!normalizedCurve && eventSnapshot) {
+  let normalizedCurve;
+  if (eventSnapshot) {
     const styles = eventSnapshot.curveStyles || [];
     const rates = eventSnapshot.curveRates || [];
     const lengths = eventSnapshot.curveLengths || [];
@@ -642,6 +642,9 @@ async function main() {
     }));
     const [primary, ...rest] = segments;
     normalizedCurve = { primary, additionalSegments: rest };
+  }
+  if (!normalizedCurve) {
+    normalizedCurve = normalizeCurveValue(contractSnapshot.entryFeeCurve);
   }
   if (!normalizedCurve) {
     throw new Error('Unable to determine curve configuration; provide deployment details or update verify script overrides.');
