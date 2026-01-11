@@ -19,7 +19,9 @@ async function expectProposalExecuted({ templ, id }) {
   const proposal = await templ.getProposal(id);
   expect(proposal.executed).to.equal(true);
   expect(await templ.hasActiveProposal(proposal.proposer)).to.equal(false);
-  expect(await templ.activeProposalId(proposal.proposer)).to.equal(0n);
+  const [hasActive, activeId] = await templ.activeProposalId(proposal.proposer);
+  expect(hasActive).to.equal(false);
+  expect(activeId).to.equal(0n);
   return proposal;
 }
 

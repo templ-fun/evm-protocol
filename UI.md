@@ -274,7 +274,7 @@ Where to look in code
 - Council APIs: `contracts/TemplCouncil.sol`
 
 Gotchas and validation checklist
-- One active proposal per proposer: `templ.hasActiveProposal(user)` can be stale after expiry; if true, read `templ.activeProposalId(user)` and `templ.getProposal(id)` and only block creation when `executed == false` and `endTime` is still in the future.
+- One active proposal per proposer: `templ.hasActiveProposal(user)` (canonical) can be stale after expiry; if true, call `templ.activeProposalId(user)` which returns `(has, id)` and then read `templ.getProposal(id)` and only block creation when `executed == false` and `endTime` is still in the future. Treat `id` as valid only when `has == true`.
 - Voting window anchors at quorum: when quorum is reached, `endTime` resets to `block.timestamp + postQuorumVotingPeriodSnapshot` (captured at creation), unless instant quorum triggers and `endTime` is set to `block.timestamp`. `postQuorumVotingPeriodSnapshot` lives in `templ.proposals(id)`. Always show the latest `endTime` from `getProposal(id)` and check `instantQuorumMet` via `templ.proposals(id)`; do not precompute.
 - Pre‑quorum voting period bounds: enforce `[36h, 30d]`. Passing `0` applies the templ default.
 - Title/description caps: title ≤256 bytes, description ≤2048 bytes. Truncate or warn before submit.

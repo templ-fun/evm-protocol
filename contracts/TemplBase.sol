@@ -286,15 +286,19 @@ abstract contract TemplBase is ReentrancyGuard {
     /// @notice Default pre-quorum voting period applied when proposal creators pass zero.
     uint256 public preQuorumVotingPeriod;
 
-    /// @notice Returns the active proposal id for a proposer (0 when none active).
+    /// @notice Returns the active proposal id for a proposer.
     /// @param proposer Wallet address to inspect.
-    /// @return proposalId Active proposal id or 0 when none active.
-    function activeProposalId(address proposer) public view returns (uint256 proposalId) {
+    /// @return has True when the proposer has an active proposal.
+    /// @return proposalId Active proposal id when `has` is true, otherwise 0.
+    function activeProposalId(address proposer) public view returns (bool has, uint256 proposalId) {
         uint256 stored = _activeProposalIdPlusOne[proposer];
-        return stored == 0 ? 0 : stored - 1;
+        if (stored == 0) {
+            return (false, 0);
+        }
+        return (true, stored - 1);
     }
 
-    /// @notice Returns whether a proposer currently has an active proposal.
+    /// @notice Returns whether a proposer currently has an active proposal (canonical check).
     /// @param proposer Wallet address to inspect.
     /// @return active True when the proposer has an active proposal.
     function hasActiveProposal(address proposer) public view returns (bool active) {

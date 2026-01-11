@@ -93,6 +93,10 @@ describe("Proposal creation fee reentrancy", function () {
     expect(proposal.proposer).to.equal(await attackerContract.getAddress());
     expect(await attackerContract.reentered()).to.equal(false);
     expect(await templ.hasActiveProposal(await attackerContract.getAddress())).to.equal(true);
-    expect(await templ.activeProposalId(await attackerContract.getAddress())).to.equal(0n);
+    const [hasActive, activeId] = await templ.activeProposalId(
+      await attackerContract.getAddress()
+    );
+    expect(hasActive).to.equal(true);
+    expect(activeId).to.equal(0n);
   });
 });

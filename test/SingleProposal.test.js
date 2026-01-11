@@ -51,7 +51,9 @@ describe("Single Active Proposal Restriction", function () {
             expect(proposal.recipient).to.equal(member1.address);
             expect(proposal.amount).to.equal(amount);
             expect(await templ.hasActiveProposal(member1.address)).to.be.true;
-            expect(await templ.activeProposalId(member1.address)).to.equal(0);
+            const [hasActive, activeId] = await templ.activeProposalId(member1.address);
+            expect(hasActive).to.be.true;
+            expect(activeId).to.equal(0n);
         });
 
         it("Should prevent creating a second proposal while one is active", async function () {
@@ -117,10 +119,16 @@ describe("Single Active Proposal Restriction", function () {
             expect(await templ.hasActiveProposal(member1.address)).to.be.true;
             expect(await templ.hasActiveProposal(member2.address)).to.be.true;
             expect(await templ.hasActiveProposal(member3.address)).to.be.true;
-            
-            expect(await templ.activeProposalId(member1.address)).to.equal(0);
-            expect(await templ.activeProposalId(member2.address)).to.equal(1);
-            expect(await templ.activeProposalId(member3.address)).to.equal(2);
+
+            const [member1Has, member1Id] = await templ.activeProposalId(member1.address);
+            const [member2Has, member2Id] = await templ.activeProposalId(member2.address);
+            const [member3Has, member3Id] = await templ.activeProposalId(member3.address);
+            expect(member1Has).to.be.true;
+            expect(member2Has).to.be.true;
+            expect(member3Has).to.be.true;
+            expect(member1Id).to.equal(0n);
+            expect(member2Id).to.equal(1n);
+            expect(member3Id).to.equal(2n);
         });
 
         it("Should allow creating new proposal after previous one is executed", async function () {
@@ -146,7 +154,11 @@ describe("Single Active Proposal Restriction", function () {
 
             // Check that active proposal is cleared
             expect(await templ.hasActiveProposal(member1.address)).to.be.false;
-            expect(await templ.activeProposalId(member1.address)).to.equal(0);
+            const [hasActiveAfterExec, activeIdAfterExec] = await templ.activeProposalId(
+                member1.address
+            );
+            expect(hasActiveAfterExec).to.be.false;
+            expect(activeIdAfterExec).to.equal(0n);
 
             // At this point member1 can create a new proposal
             await expect(templ.connect(member1).createProposalSetJoinPaused(
@@ -156,7 +168,9 @@ describe("Single Active Proposal Restriction", function () {
             )).to.emit(templ, "ProposalCreated");
 
             expect(await templ.hasActiveProposal(member1.address)).to.be.true;
-            expect(await templ.activeProposalId(member1.address)).to.equal(1);
+            const [hasActiveNew, activeIdNew] = await templ.activeProposalId(member1.address);
+            expect(hasActiveNew).to.be.true;
+            expect(activeIdNew).to.equal(1n);
         });
 
         it("Should allow creating new proposal after previous one expires without execution", async function () {
@@ -189,7 +203,11 @@ describe("Single Active Proposal Restriction", function () {
             )).to.emit(templ, "ProposalCreated");
 
             expect(await templ.hasActiveProposal(member1.address)).to.be.true;
-            expect(await templ.activeProposalId(member1.address)).to.equal(1);
+            const [hasActiveAfterExpiry, activeIdAfterExpiry] = await templ.activeProposalId(
+                member1.address
+            );
+            expect(hasActiveAfterExpiry).to.be.true;
+            expect(activeIdAfterExpiry).to.equal(1n);
         });
 
         it("Should allow creating new proposal if previous one failed to pass", async function () {
@@ -226,7 +244,11 @@ describe("Single Active Proposal Restriction", function () {
             )).to.emit(templ, "ProposalCreated");
 
             expect(await templ.hasActiveProposal(member1.address)).to.be.true;
-            expect(await templ.activeProposalId(member1.address)).to.equal(1);
+            const [hasActiveAfterFail, activeIdAfterFail] = await templ.activeProposalId(
+                member1.address
+            );
+            expect(hasActiveAfterFail).to.be.true;
+            expect(activeIdAfterFail).to.equal(1n);
         });
 
         it("Should properly handle failed execution and maintain active status", async function () {
@@ -263,7 +285,11 @@ describe("Single Active Proposal Restriction", function () {
 
             // Check that proposal is still marked as active since execution failed
             expect(await templ.hasActiveProposal(member1.address)).to.be.true;
-            expect(await templ.activeProposalId(member1.address)).to.equal(0);
+            const [hasActiveAfterRevert, activeIdAfterRevert] = await templ.activeProposalId(
+                member1.address
+            );
+            expect(hasActiveAfterRevert).to.be.true;
+            expect(activeIdAfterRevert).to.equal(0n);
 
             // Get proposal to check it's not executed
             const proposal = await templ.getProposal(0);
@@ -285,6 +311,22 @@ describe("Single Active Proposal Restriction", function () {
     });
 
     describe("Edge Cases", function () {
+        it("Should distinguish no active proposal from proposal id 0", async function () {
+            const [hasBefore, idBefore] = await templ.activeProposalId(member1.address);
+            expect(hasBefore).to.be.false;
+            expect(idBefore).to.equal(0n);
+
+            await templ.connect(member1).createProposalSetJoinPaused(
+                true,
+                7 * 24 * 60 * 60,
+                ...META
+            );
+
+            const [hasAfter, idAfter] = await templ.activeProposalId(member1.address);
+            expect(hasAfter).to.be.true;
+            expect(idAfter).to.equal(0n);
+        });
+
         it("Should handle proposal ID 0 correctly", async function () {
             const callData = encodeSetJoinPausedDAO(true);
 
@@ -296,7 +338,11 @@ describe("Single Active Proposal Restriction", function () {
             );
 
             expect(await templ.hasActiveProposal(member1.address)).to.be.true;
-            expect(await templ.activeProposalId(member1.address)).to.equal(0);
+            const [hasActiveInitial, activeIdInitial] = await templ.activeProposalId(
+                member1.address
+            );
+            expect(hasActiveInitial).to.be.true;
+            expect(activeIdInitial).to.equal(0n);
 
             // Execute it
             await templ.connect(member1).vote(0, true);
@@ -309,8 +355,12 @@ describe("Single Active Proposal Restriction", function () {
 
             // Should be cleared
             expect(await templ.hasActiveProposal(member1.address)).to.be.false;
-            // Note: activeProposalId returns 0 when no active proposal, which is why we need hasActiveProposal flag
-            expect(await templ.activeProposalId(member1.address)).to.equal(0);
+            // Note: activeProposalId returns (has, id) so id 0 remains valid for the first proposal.
+            const [hasActiveCleared, activeIdCleared] = await templ.activeProposalId(
+                member1.address
+            );
+            expect(hasActiveCleared).to.be.false;
+            expect(activeIdCleared).to.equal(0n);
         });
 
         it("Should track active proposals correctly across multiple cycles", async function () {
@@ -346,7 +396,9 @@ describe("Single Active Proposal Restriction", function () {
             );
 
             expect(await templ.hasActiveProposal(member1.address)).to.be.true;
-            expect(await templ.activeProposalId(member1.address)).to.equal(2);
+            const [hasActiveCycle, activeIdCycle] = await templ.activeProposalId(member1.address);
+            expect(hasActiveCycle).to.be.true;
+            expect(activeIdCycle).to.equal(2n);
         });
     });
 });
