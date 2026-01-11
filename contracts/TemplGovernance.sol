@@ -453,9 +453,7 @@ contract TemplGovernanceModule is TemplModuleBase {
                     if (!(proposal.yesVotes * BPS_DENOMINATOR < proposal.quorumBpsSnapshot * proposal.eligibleVoters)) {
                         proposal.quorumReachedAt = block.timestamp;
                         proposal.quorumSnapshotBlock = block.number;
-                        proposal.postQuorumEligibleVoters = councilSnapshotEpoch == 0
-                            ? memberCount
-                            : proposal.eligibleVoters;
+                        proposal.postQuorumEligibleVoters = proposal.eligibleVoters;
                         proposal.quorumJoinSequence = joinSequence;
                         proposal.endTime = block.timestamp + proposal.postQuorumVotingPeriodSnapshot;
                     }

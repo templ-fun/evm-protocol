@@ -127,18 +127,17 @@ describe("Voting Eligibility Based on Join Time", function () {
             // Batch the quorum-reaching vote and the late join in the same block
             await token.connect(lateMember).approve(await templ.getAddress(), ENTRY_FEE);
             await ethers.provider.send("evm_setAutomine", [false]);
+            try {
+                const txOverrides = { gasLimit: 1_000_000 };
+                // Submit the join first so it lands before the quorum-reaching vote in the same block.
+                const joinTx = await templ.connect(lateMember).join({ ...txOverrides });
+                const voteTx = await templ.connect(member2).vote(0, true, txOverrides);
 
-            const txOverrides = { gasLimit: 1_000_000 };
-            // Use a lower gas limit override so both txs fit in the manual block mining step.
-            const voteTxPromise = templ.connect(member2).vote(0, true, txOverrides);
-            const joinTxPromise = templ.connect(lateMember).join({ ...txOverrides });
-
-            const [voteTx, joinTx] = await Promise.all([voteTxPromise, joinTxPromise]);
-
-            await ethers.provider.send("evm_mine");
-            await ethers.provider.send("evm_setAutomine", [true]);
-
-            await Promise.all([voteTx.wait(), joinTx.wait()]);
+                await ethers.provider.send("evm_mine");
+                await Promise.all([joinTx.wait(), voteTx.wait()]);
+            } finally {
+                await ethers.provider.send("evm_setAutomine", [true]);
+            }
 
             // Late member joined in the quorum block -> allowed to vote post-quorum
             await expect(templ.connect(lateMember).vote(0, true)).to.emit(templ, "VoteCast");
@@ -185,7 +184,42 @@ describe("Voting Eligibility Based on Join Time", function () {
 
             const snapshots = await templ.getProposalSnapshots(0);
             expect(snapshots.eligibleVotersPreQuorum).to.equal(5n);
-            expect(snapshots.eligibleVotersPostQuorum).to.equal(6n);
+            expect(snapshots.eligibleVotersPostQuorum).to.equal(5n);
+        });
+
+        it("Keeps the quorum denominator fixed even if membership grows before quorum", async function () {
+            await token.connect(member1).approve(await templ.getAddress(), ENTRY_FEE);
+            await templ.connect(member1).join();
+            await token.connect(member2).approve(await templ.getAddress(), ENTRY_FEE);
+            await templ.connect(member2).join();
+            await token.connect(member3).approve(await templ.getAddress(), ENTRY_FEE);
+            await templ.connect(member3).join();
+
+            await templ.connect(member1).createProposalSetJoinPaused(
+                true,
+                7 * 24 * 60 * 60,
+                "Freeze joins",
+                "Quorum denominator snapshot"
+            );
+
+            await mintToUsers(token, [owner], TOKEN_SUPPLY);
+            for (const joiner of [owner, member4, lateMember]) {
+                await token.connect(joiner).approve(await templ.getAddress(), ENTRY_FEE);
+                await templ.connect(joiner).join();
+            }
+
+            await templ.connect(member2).vote(0, true);
+
+            const snapshots = await templ.getProposalSnapshots(0);
+            expect(snapshots.eligibleVotersPreQuorum).to.equal(4n);
+            expect(snapshots.eligibleVotersPostQuorum).to.equal(4n);
+
+            const delay = Number(await templ.postQuorumVotingPeriod());
+            await ethers.provider.send("evm_increaseTime", [delay + 1]);
+            await ethers.provider.send("evm_mine");
+
+            await templ.executeProposal(0);
+            expect(await templ.joinPaused()).to.equal(true);
         });
 
         it("Should prevent gaming the system by adding members after quorum", async function () {

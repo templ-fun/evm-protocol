@@ -12,6 +12,7 @@ describe("EntryFeeCurve", function () {
         Exponential: 2,
     };
     const TOTAL_PERCENT = 10_000n;
+    const DETERMINISTIC_MNEMONIC = "test test test test test test test test test test test junk";
 
     const toBigInt = (value) => BigInt(value);
     const normalizeEntryFee = (amount) => {
@@ -128,6 +129,13 @@ describe("EntryFeeCurve", function () {
         }
         return steps;
     };
+
+    const deterministicAddress = (index) =>
+        ethers.HDNodeWallet.fromPhrase(
+            DETERMINISTIC_MNEMONIC,
+            undefined,
+            `m/44'/60'/0'/0/${index}`
+        ).address;
 
     const priceForPaidJoins = (base, curve, paidJoins) => {
         if (paidJoins === 0n) {
@@ -353,6 +361,49 @@ describe("EntryFeeCurve", function () {
         expect(await templ.entryFee()).to.equal(expectedNextFee);
     });
 
+    it("retargets entry fees for exponential decay without capping the base anchor", async function () {
+        const decayCurve = {
+            primary: { style: CURVE_STYLE.Exponential, rateBps: 9_000, length: 0 },
+            additionalSegments: []
+        };
+        const { templ, token, accounts } = await deployTempl({
+            entryFee: ENTRY_FEE,
+            curve: decayCurve,
+        });
+
+        const [, , voterA, voterB, voterC, nextJoiner] = accounts;
+        await mintToUsers(token, [voterA, voterB, voterC, nextJoiner], ENTRY_FEE * 20n);
+
+        const templAddress = await templ.getAddress();
+        for (const voter of [voterA, voterB, voterC]) {
+            await token.connect(voter).approve(templAddress, ENTRY_FEE);
+            await templ.connect(voter).join();
+        }
+
+        const paidJoins = await templ.totalJoins();
+        const targetEntryFee = ENTRY_FEE / 2n;
+        const recalibratedBase = solveBaseEntryFee(targetEntryFee, decayCurve, paidJoins);
+        expect(recalibratedBase).to.be.gt(targetEntryFee);
+
+        await templ
+            .connect(voterA)
+            .createProposalUpdateConfig(targetEntryFee, 0, 0, 0, false, 0, "Retarget decay", "");
+        const proposalId = (await templ.proposalCount()) - 1n;
+        await templ.connect(voterB).vote(proposalId, true);
+        const delay = Number(await templ.postQuorumVotingPeriod());
+        await ethers.provider.send("evm_increaseTime", [delay + 1]);
+        await ethers.provider.send("evm_mine", []);
+        await templ.executeProposal(proposalId);
+
+        expect(await templ.entryFee()).to.equal(targetEntryFee);
+        expect(await templ.baseEntryFee()).to.equal(recalibratedBase);
+
+        const expectedNextFee = priceForPaidJoins(recalibratedBase, decayCurve, paidJoins + 1n);
+        await token.connect(nextJoiner).approve(templAddress, targetEntryFee);
+        await templ.connect(nextJoiner).join();
+        expect(await templ.entryFee()).to.equal(expectedNextFee);
+    });
+
     it("handles multi-segment curves with saturation", async function () {
         const multiCurve = {
             primary: { style: CURVE_STYLE.Linear, rateBps: 250, length: 2 },
@@ -453,8 +504,8 @@ describe("EntryFeeCurve", function () {
         let previousFee = initialFee;
 
         for (let i = 0; i < joins; i += 1) {
-            const wallet = ethers.Wallet.createRandom();
-            await templ.connect(priest).joinFor(wallet.address);
+            const recipient = deterministicAddress(1_000 + i);
+            await templ.connect(priest).joinFor(recipient);
             const currentFee = await templ.entryFee();
             expect(currentFee).to.be.at.most(previousFee);
             previousFee = currentFee;

@@ -68,6 +68,7 @@ describe("Split accounting stress (treasury info + referral across config change
     // B joins with referral to A
     const sB = split(ENTRY_FEE, cfg1);
     const referralB = (sB.memberAmt * BigInt(referralShareBps)) / BPS;
+    const referralBefore = await token.balanceOf(a.address);
     await token.connect(b).approve(await templ.getAddress(), ENTRY_FEE);
     const txB = await templ.connect(b).joinWithReferral(a.address);
     await expect(txB)
@@ -91,7 +92,8 @@ describe("Split accounting stress (treasury info + referral across config change
     info = await templ.getTreasuryInfo();
     expect(info[0]).to.equal(sA.treasuryAmt + sB.treasuryAmt);
     expect(info[1]).to.equal(sA.memberAmt + (sB.memberAmt - referralB));
-    expect(await token.balanceOf(a.address)).to.be.gte(referralB); // exact match since A had 0 before from pool
+    const referralAfter = await token.balanceOf(a.address);
+    expect(referralAfter - referralBefore).to.equal(referralB);
     expect(info[3]).to.equal(burned0 + sA.burnAmt + sB.burnAmt);
     expect(await token.balanceOf(proto)).to.equal(proto0 + sA.protocolAmt + sB.protocolAmt);
 

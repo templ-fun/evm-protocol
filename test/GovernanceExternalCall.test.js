@@ -92,6 +92,10 @@ describe("Governance external call proposals", function () {
 
     await expect(templ.executeProposal(Number(proposalId))).to.be.reverted;
     expect(await target.storedValue()).to.equal(0n);
+    const proposal = await templ.proposals(proposalId);
+    expect(proposal.executed).to.equal(false);
+    expect(ethers.getBytes(proposal.externalCallData).length).to.be.gt(0);
+    expect(await templ.hasActiveProposal(memberA.address)).to.equal(true);
   });
 
   it("forwards call value to external targets", async function () {

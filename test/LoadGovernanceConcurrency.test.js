@@ -6,6 +6,14 @@ const { mintToUsers, joinMembers } = require("./utils/mintAndPurchase");
 describe("Load: joins + concurrent proposals/votes/execution @load", function () {
   this.timeout(180_000);
 
+  const DETERMINISTIC_MNEMONIC = "test test test test test test test test test test test junk";
+  const deriveWallet = (index) =>
+    ethers.HDNodeWallet.fromPhrase(
+      DETERMINISTIC_MNEMONIC,
+      undefined,
+      `m/44'/60'/0'/0/${index}`
+    ).connect(ethers.provider);
+
   const BPS = 10_000n;
   const MIN_PRE_QUORUM = 36 * 60 * 60;
   const MIN_POST_QUORUM = 60 * 60;
@@ -100,7 +108,7 @@ describe("Load: joins + concurrent proposals/votes/execution @load", function ()
     const extraCount = Math.max(0, TARGET_MEMBERS - members.length);
     const extraWallets = [];
     for (let i = 0; i < extraCount; i += 1) {
-      extraWallets.push(ethers.Wallet.createRandom().connect(ethers.provider));
+      extraWallets.push(deriveWallet(1_000 + i));
     }
     if (extraWallets.length > 0) {
       const funder = accounts[0];

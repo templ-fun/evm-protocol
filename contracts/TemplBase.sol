@@ -806,9 +806,7 @@ abstract contract TemplBase is ReentrancyGuard {
         if (proposal.quorumReachedAt == 0) {
             proposal.quorumReachedAt = block.timestamp;
             proposal.quorumSnapshotBlock = block.number;
-            proposal.postQuorumEligibleVoters = proposal.councilSnapshotEpoch == 0
-                ? memberCount
-                : proposal.eligibleVoters;
+            proposal.postQuorumEligibleVoters = proposal.eligibleVoters;
             proposal.quorumJoinSequence = joinSequence;
         }
         proposal.instantQuorumMet = true;
@@ -1065,7 +1063,7 @@ abstract contract TemplBase is ReentrancyGuard {
         if (primarySteps > 0) {
             amount = _applySegment(amount, curve.primary, primarySteps, false);
         }
-        return amount;
+        return amount > MAX_ENTRY_FEE ? MAX_ENTRY_FEE : amount;
     }
 
     /// @notice Applies a curve segment for up to `remaining` steps and returns the updated amount and remaining steps.
@@ -1600,6 +1598,11 @@ abstract contract TemplBase is ReentrancyGuard {
         uint256 indexPlusOne = activeProposalIndex[proposalId];
         if (indexPlusOne == 0) {
             return;
+        }
+        address proposerAddr = proposals[proposalId].proposer;
+        uint256 activePlusOne = _activeProposalIdPlusOne[proposerAddr];
+        if (activePlusOne == proposalId + 1) {
+            _activeProposalIdPlusOne[proposerAddr] = 0;
         }
         uint256 index = indexPlusOne - 1;
         uint256 lastIndex = activeProposalIds.length - 1;

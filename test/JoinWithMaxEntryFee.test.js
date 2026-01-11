@@ -203,4 +203,27 @@ describe("Join max-entry-fee variants", function () {
     expect(await token.balanceOf(referrer.address)).to.equal(referrerBefore + referralAmount);
     expect(await templ.memberPoolBalance()).to.equal(poolBefore + (memberPoolAmount - referralAmount));
   });
+
+  it("reverts when joinFor max-entry-fee recipients are already members", async function () {
+    const { templ, token, accounts } = await deployTempl({ entryFee: ENTRY_FEE });
+    const [, priest, payer, recipient, referrer] = accounts;
+
+    await mintToUsers(token, [payer, recipient], ENTRY_FEE * 5n);
+    await token.connect(recipient).approve(await templ.getAddress(), ENTRY_FEE);
+    await templ.connect(recipient).join();
+
+    await token.connect(payer).approve(await templ.getAddress(), ENTRY_FEE * 5n);
+
+    await expect(
+      templ.connect(payer).joinForWithMaxEntryFee(recipient.address, ENTRY_FEE)
+    ).to.be.revertedWithCustomError(templ, "MemberAlreadyJoined");
+
+    await expect(
+      templ.connect(payer).joinForWithMaxEntryFee(priest.address, ENTRY_FEE)
+    ).to.be.revertedWithCustomError(templ, "MemberAlreadyJoined");
+
+    await expect(
+      templ.connect(payer).joinForWithReferralMaxEntryFee(recipient.address, referrer.address, ENTRY_FEE)
+    ).to.be.revertedWithCustomError(templ, "MemberAlreadyJoined");
+  });
 });

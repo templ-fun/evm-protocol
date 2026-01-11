@@ -172,6 +172,10 @@ describe("Governance external call batching via executor", function () {
     const targetBalance = await ethers.provider.getBalance(await target.getAddress());
     expect(targetBalance).to.equal(0n);
     expect(totalValue).to.be.gt(value1);
+    const proposal = await templ.proposals(proposalId);
+    expect(proposal.executed).to.equal(false);
+    expect(ethers.getBytes(proposal.externalCallData).length).to.be.gt(0);
+    expect(await templ.hasActiveProposal(m1.address)).to.equal(true);
   });
 
   it("reverts atomically when a later call fails via TEMPL batchDAO", async function () {

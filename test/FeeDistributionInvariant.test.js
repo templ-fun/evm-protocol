@@ -27,6 +27,10 @@ describe("Fee Distribution Invariant", function () {
         let cumulativeMemberPool = 0n;
         let cumulativeProtocol = 0n;
         const templAddress = await templ.getAddress();
+        const burnAddress = await templ.burnAddress();
+        const protocolRecipient = await templ.protocolFeeRecipient();
+        const burnStart = await token.balanceOf(burnAddress);
+        const protocolStart = await token.balanceOf(protocolRecipient);
 
         for (let i = 0; i < members.length; i++) {
             const member = members[i];
@@ -56,6 +60,12 @@ describe("Fee Distribution Invariant", function () {
             const total = cumulativeBurn + cumulativeTreasury + cumulativeMemberPool + cumulativeProtocol;
             expect(total).to.equal(expected);
 
+            const treasuryBalance = await templ.treasuryBalance();
+            const memberPoolBalance = await templ.memberPoolBalance();
+            const accessTokenBalance = await token.balanceOf(templAddress);
+            expect(accessTokenBalance).to.equal(treasuryBalance + memberPoolBalance);
+            expect(await templ.memberRewardRemainder()).to.be.lte(memberPoolBalance);
+
             if (i === 0) {
                 const poolPercent = BigInt(await templ.memberPoolBps());
                 const pioneerReward = (ENTRY_FEE * poolPercent) / BPS_DENOMINATOR;
@@ -64,5 +74,7 @@ describe("Fee Distribution Invariant", function () {
         }
 
         expect(await templ.totalJoins()).to.equal(BigInt(members.length));
+        expect(await token.balanceOf(burnAddress)).to.equal(burnStart + cumulativeBurn);
+        expect(await token.balanceOf(protocolRecipient)).to.equal(protocolStart + cumulativeProtocol);
     });
 });
