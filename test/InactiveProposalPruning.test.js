@@ -30,4 +30,26 @@ describe("Inactive proposal pruning", function () {
     expect(removed).to.equal(1n);
     await templ.pruneInactiveProposals(1);
   });
+
+  it("clears the proposer active flag when pruning expired proposals", async function () {
+    const { templ, token, accounts } = await deployTempl({ entryFee: ENTRY_FEE });
+    const [, , member1, member2, member3] = accounts;
+
+    await mintToUsers(token, [member1, member2, member3], ENTRY_FEE * 5n);
+    await joinMembers(templ, token, [member1, member2, member3]);
+
+    const votingPeriod = 7 * 24 * 60 * 60;
+    await templ
+      .connect(member1)
+      .createProposalSetJoinPaused(false, votingPeriod, "Expire", "Prune clears active flag");
+
+    expect(await templ.hasActiveProposal(member1.address)).to.equal(true);
+
+    await ethers.provider.send("evm_increaseTime", [votingPeriod + 1]);
+    await ethers.provider.send("evm_mine", []);
+
+    await templ.pruneInactiveProposals(5);
+
+    expect(await templ.hasActiveProposal(member1.address)).to.equal(false);
+  });
 });

@@ -143,6 +143,12 @@ contract EchidnaTemplHarness {
         return templ.memberCount() >= lastMemberCount;
     }
 
+    /// @notice Access token balance always backs treasury + member pool accounting.
+    function echidna_access_token_backing() external view returns (bool) {
+        uint256 balance = token.balanceOf(address(templ));
+        return balance >= templ.treasuryBalance() + templ.memberPoolBalance();
+    }
+
     function _syncTrackers() internal {
         uint256 cur = templ.cumulativeMemberRewards();
         if (cur > lastCumulativeMemberRewards) lastCumulativeMemberRewards = cur;

@@ -555,6 +555,7 @@ Curves (see [`TemplCurve`](contracts/TemplCurve.sol)) support static, linear, an
 ## Indexing Notes
 - Track `ProposalCreated` then hydrate with `getProposal` + `getProposalSnapshots`.
 - Use `getActiveProposals()` for lists; `getActiveProposalsPaginated(offset,limit)` for pagination.
+- Active proposal checks: `hasActiveProposal(address)` is the canonical flag; `activeProposalId(address)` returns `(bool has, uint256 id)` so id 0 is valid. Use `id` only when `has == true` and validate liveness with `getProposal` when needed.
 - Treasury views (access token): `getTreasuryInfo()` and/or `TreasuryAction`/`TreasuryDisbanded` deltas; read ETH/other ERC‑20 balances directly.
 - Curves: consume `EntryFeeCurveUpdated` for UI refresh.
 
@@ -657,7 +658,7 @@ CI runs on PRs when contracts, tests, package files, or `hardhat.config.cjs` cha
 - Use a vanilla ERC‑20 for access token (no transfer fees/rebases/hooks); this is assumed and not enforced on-chain.
 - Entry fee must be ≥10 and divisible by 10; runtime curve outputs are floored to the nearest 10 with a minimum of 10, and there’s a `MAX_ENTRY_FEE` guard.
 - Entry fee can move with the curve between submission and mining; use `joinWithMaxEntryFee` variants to cap slippage.
-- Only one active proposal per proposer.
+- Only one active proposal per proposer; use `hasActiveProposal` (canonical) or `activeProposalId` which returns `(has, id)` so proposal id 0 is valid.
 - `TemplFactory` can be set permissionless to let anyone create templs.
 - Direct calls to module addresses revert; always go via `TEMPL`.
 - Default voting window is 36 hours; quorum and post‑quorum delay are configurable.

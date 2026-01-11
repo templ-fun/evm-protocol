@@ -4,6 +4,14 @@ const { deployTempl } = require("./utils/deploy");
 const { mintToUsers, joinMembers } = require("./utils/mintAndPurchase");
 
 describe("Auto tail prune on execute", function () {
+  const DETERMINISTIC_MNEMONIC = "test test test test test test test test test test test junk";
+  const deriveWallet = (index) =>
+    ethers.HDNodeWallet.fromPhrase(
+      DETERMINISTIC_MNEMONIC,
+      undefined,
+      `m/44'/60'/0'/0/${index}`
+    ).connect(ethers.provider);
+
   it("prunes up to k inactive proposals from the tail after execution", async function () {
     // Configure a valid post-quorum delay so quorum-reached proposals end quickly.
     const EXEC_DELAY = 60 * 60; // seconds
@@ -74,7 +82,7 @@ describe("Auto tail prune on execute", function () {
     const members = accounts.slice(2);
     const extraWallets = [];
     while (members.length < ACTIVE_TAIL_COUNT) {
-      const wallet = ethers.Wallet.createRandom().connect(ethers.provider);
+      const wallet = deriveWallet(1_000 + extraWallets.length);
       extraWallets.push(wallet);
       members.push(wallet);
     }

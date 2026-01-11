@@ -22,7 +22,9 @@ describe("Proposal cancellation", function () {
       .withArgs(proposalId, proposer.address);
 
     expect(await templ.hasActiveProposal(proposer.address)).to.equal(false);
-    expect(await templ.activeProposalId(proposer.address)).to.equal(0n);
+    const [hasActive, activeId] = await templ.activeProposalId(proposer.address);
+    expect(hasActive).to.equal(false);
+    expect(activeId).to.equal(0n);
 
     const active = await templ.getActiveProposals();
     expect(active).to.not.include(proposalId);

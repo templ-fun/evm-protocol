@@ -111,4 +111,27 @@ describe("JoinFor variants", function () {
     expect(await templ.isMember(recipient.address)).to.equal(true);
     expect(await token.balanceOf(payer.address)).to.equal(payerBefore - ENTRY_FEE);
   });
+
+  it("reverts when joinFor recipients are already members", async function () {
+    const { templ, token, accounts } = await deployTempl({ entryFee: ENTRY_FEE });
+    const [, priest, payer, recipient, referrer] = accounts;
+
+    await mintToUsers(token, [payer, recipient], ENTRY_FEE * 5n);
+    await token.connect(recipient).approve(await templ.getAddress(), ENTRY_FEE);
+    await templ.connect(recipient).join();
+
+    await token.connect(payer).approve(await templ.getAddress(), ENTRY_FEE * 5n);
+
+    await expect(
+      templ.connect(payer).joinFor(recipient.address)
+    ).to.be.revertedWithCustomError(templ, "MemberAlreadyJoined");
+
+    await expect(
+      templ.connect(payer).joinFor(priest.address)
+    ).to.be.revertedWithCustomError(templ, "MemberAlreadyJoined");
+
+    await expect(
+      templ.connect(payer).joinForWithReferral(recipient.address, referrer.address)
+    ).to.be.revertedWithCustomError(templ, "MemberAlreadyJoined");
+  });
 });

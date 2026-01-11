@@ -256,7 +256,8 @@ describe("Governance coverage gaps", function () {
     await templ
       .connect(member)
       .createProposalSetJoinPaused(false, VOTING_PERIOD, "Pause joins", "Expire active window");
-    const firstId = await templ.activeProposalId(member.address);
+    const [firstHas, firstId] = await templ.activeProposalId(member.address);
+    expect(firstHas).to.equal(true);
     expect(firstId).to.equal(0n);
 
     await ethers.provider.send("evm_increaseTime", [VOTING_PERIOD + DAY]);
@@ -274,7 +275,8 @@ describe("Governance coverage gaps", function () {
         "Update config",
         "New proposal after expiry"
       );
-    const secondId = await templ.activeProposalId(member.address);
+    const [secondHas, secondId] = await templ.activeProposalId(member.address);
+    expect(secondHas).to.equal(true);
     expect(secondId).to.equal(1n);
   });
 
