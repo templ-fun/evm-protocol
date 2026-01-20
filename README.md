@@ -15,7 +15,7 @@ Reading guide:
 
 Quick links:
 - Start: [Protocol Guide](#protocol-guide-read-in-order)
-- Protocol: [Architecture](#architecture) · [How It Works](#how-it-works) · [Glossary](#glossary) · [Lifecycle](#lifecycle) · [Governance-Controlled Upgrades](#governance-controlled-upgrades) · [Templ Factories](#templ-factories)
+- Protocol: [Architecture](#architecture) · [How It Works](#how-it-works) · [Glossary](#glossary) · [Lifecycle](#lifecycle) · [Upgrades](#governance-controlled-upgrades) · [Templ Factories](#templ-factories)
 - Build: [Repo Map](#repo-map) · [Quickstart](#quickstart) · [Deploy](#deploy-locally) · [Scripts & Env Vars](#scripts--env-vars) · [Tests](#tests)
 - Integrate: [Indexing](#indexing-notes) · [Proposal Views](#proposal-views) · [UI Integration](UI.md)
 - Safety: [Safety Model](#safety-model) · [Security](#security) · [Constraints](#constraints) · [Limits](#limits--defaults) · [FAQ](#faq) · [Troubleshooting](#troubleshooting) · [Gotchas](#gotchas)
