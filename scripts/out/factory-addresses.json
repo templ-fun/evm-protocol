@@ -1,82 +1,46 @@
 {
-  "deployer": "0x4306366da93A74a756eCE9E5f5614dc313214c28",
-  "factoryDeployer": "0x4306366da93A74a756eCE9E5f5614dc313214c28",
+  "deployer": "0x9a2e6f42e81892da01516149F5f459Fc9c199f30",
+  "factoryDeployer": "0xB1d693B77232D88a3C9467eD5619FfE79E80BCCc",
   "protocolFeeRecipient": "0x420f7D96FcEFe9D4708312F454c677ceB61D8420",
   "protocolBps": 1000,
   "startNonce": "0",
-  "timestamp": "manual-recovery",
+  "timestamp": "2026-01-20T21:19:09.756Z",
   "chains": {
     "mainnet": {
       "chainId": "1",
       "txs": {
-        "membership": "0x406ad66ec36308e3e7c29f00612fea0855896790e207de9076638118b675d649",
-        "treasury": "0x406ad66ec36308e3e7c29f00612fea0855896790e207de9076638118b675d649",
-        "governance": "0x406ad66ec36308e3e7c29f00612fea0855896790e207de9076638118b675d649",
-        "council": "0x406ad66ec36308e3e7c29f00612fea0855896790e207de9076638118b675d649",
-        "templDeployer": "0x406ad66ec36308e3e7c29f00612fea0855896790e207de9076638118b675d649",
-        "factory": "0x406ad66ec36308e3e7c29f00612fea0855896790e207de9076638118b675d649"
+        "membership": "0xd6ecd57ab9ad14ea9d3873a41b46a1b26fec38c23d742f951bca0d1f175687c8",
+        "treasury": "0xc28e313613a69183e72a252e08abe56c38cda5e833917d1e833f3fb9204c7f72",
+        "governance": "0xb87881ea29e2f5d9fddc4be2166c2401a5acbc27fe359fc9459ec2752675e714",
+        "council": "0x38fb28c6c839bda3e4ab39a39bebf862da8a5eeffe35afbc2843faa5c342d605",
+        "templDeployer": "0x3c7bee8ff71345e266d71ee41d235bd53b4cfb04138e784e5056d8c79e28e031",
+        "factory": "0x79028286891d99cafea62794adcd42d3b58039efd24d3af01e2710a0fe1ef666"
       },
-      "membershipModule": "0x85f40B007DC5271E19c4272A3F7A190D04162a21",
-      "treasuryModule": "0x8B0AC1F0cE138e788A311c4E9b27dB1fA96Bc9FD",
-      "governanceModule": "0x5589b091471ee1372Ff77fa8821f67bd02c14fcd",
-      "councilModule": "0xE950d68711F8eB90B7A615Be6371d662c83214fE",
-      "templDeployer": "0x4F52d335840097E76B71d6E3b4977D5Bd17C8289",
-      "factory": "0xE1352B981E6cc3229b260a268d1F800FB30aa286",
-      "factoryBlock": null
+      "membershipModule": "0xE84cD373cA2d451dc37D3f7b699F1bB42C26f6c0",
+      "treasuryModule": "0x5Bc16C2DF2852baA6767B1C71473B20B33C5BebB",
+      "governanceModule": "0x03eD8E9F64aa49e2c2A0E6E93522D0f78BcE7B26",
+      "councilModule": "0x80062a8F42C3f15e9cd4d1371de65ad378D93f28",
+      "templDeployer": "0x5B5438d0652F3919632F800eF8476c75cf4b9B61",
+      "factory": "0xDC370D07A4828a113804401202Af72c4a15309bD",
+      "factoryBlock": 24278646
     },
     "base": {
       "chainId": "8453",
       "txs": {
-        "membership": "0x9a36050a2043f05755b4be0c5a19a2c87cc6610fb18c24fc9d55b22184431e28",
-        "treasury": "0x9a36050a2043f05755b4be0c5a19a2c87cc6610fb18c24fc9d55b22184431e28",
-        "governance": "0x9a36050a2043f05755b4be0c5a19a2c87cc6610fb18c24fc9d55b22184431e28",
-        "council": "0x9a36050a2043f05755b4be0c5a19a2c87cc6610fb18c24fc9d55b22184431e28",
-        "templDeployer": "0x9a36050a2043f05755b4be0c5a19a2c87cc6610fb18c24fc9d55b22184431e28",
-        "factory": "0x9a36050a2043f05755b4be0c5a19a2c87cc6610fb18c24fc9d55b22184431e28"
+        "membership": "0x79f50c5bf37e1c1db1d43a8911bdcd73009035311897cd02ad09673ed172f5db",
+        "treasury": "0x748f1dea5673454f2b447cb4d27943be8d0a2b8d9fddb957e05da143ea8590e3",
+        "governance": "0x9f10141e2a6247d80e8b1fbd2ecd0d90f22495828ffe12c17bc71148507d964e",
+        "council": "0xd170047737fb6f34da74d5609eb6ecb3d771c605467fd7e9be053e580708be26",
+        "templDeployer": "0x4168d5fb11b790fefaba0b4d9e6a6f2c64f50e2ecaa4c970e838e99e1d62dd72",
+        "factory": "0x747fb9bea38099f7bb2a531dffde8831de884bc8439f858c2a3074be24a41321"
       },
-      "membershipModule": "0x85f40B007DC5271E19c4272A3F7A190D04162a21",
-      "treasuryModule": "0x8B0AC1F0cE138e788A311c4E9b27dB1fA96Bc9FD",
-      "governanceModule": "0x5589b091471ee1372Ff77fa8821f67bd02c14fcd",
-      "councilModule": "0xE950d68711F8eB90B7A615Be6371d662c83214fE",
-      "templDeployer": "0x4F52d335840097E76B71d6E3b4977D5Bd17C8289",
-      "factory": "0xE1352B981E6cc3229b260a268d1F800FB30aa286",
-      "factoryBlock": null
-    },
-    "optimism": {
-      "chainId": "10",
-      "txs": {
-        "membership": "0x7c0f10ffb08916f06a8b029c19ebb8e6ab2a08d7647472737f67173d2ca687d4",
-        "treasury": "0x7c0f10ffb08916f06a8b029c19ebb8e6ab2a08d7647472737f67173d2ca687d4",
-        "governance": "0x7c0f10ffb08916f06a8b029c19ebb8e6ab2a08d7647472737f67173d2ca687d4",
-        "council": "0x7c0f10ffb08916f06a8b029c19ebb8e6ab2a08d7647472737f67173d2ca687d4",
-        "templDeployer": "0x7c0f10ffb08916f06a8b029c19ebb8e6ab2a08d7647472737f67173d2ca687d4",
-        "factory": "0x7c0f10ffb08916f06a8b029c19ebb8e6ab2a08d7647472737f67173d2ca687d4"
-      },
-      "membershipModule": "0x85f40B007DC5271E19c4272A3F7A190D04162a21",
-      "treasuryModule": "0x8B0AC1F0cE138e788A311c4E9b27dB1fA96Bc9FD",
-      "governanceModule": "0x5589b091471ee1372Ff77fa8821f67bd02c14fcd",
-      "councilModule": "0xE950d68711F8eB90B7A615Be6371d662c83214fE",
-      "templDeployer": "0x4F52d335840097E76B71d6E3b4977D5Bd17C8289",
-      "factory": "0xE1352B981E6cc3229b260a268d1F800FB30aa286",
-      "factoryBlock": null
-    },
-    "arbitrum": {
-      "chainId": "42161",
-      "txs": {
-        "membership": "0x14721b10b280d06def3927bba591d20ae099e7db6a4cd9de14c777fd6a66cdb2",
-        "treasury": "0x14721b10b280d06def3927bba591d20ae099e7db6a4cd9de14c777fd6a66cdb2",
-        "governance": "0x14721b10b280d06def3927bba591d20ae099e7db6a4cd9de14c777fd6a66cdb2",
-        "council": "0x14721b10b280d06def3927bba591d20ae099e7db6a4cd9de14c777fd6a66cdb2",
-        "templDeployer": "0x14721b10b280d06def3927bba591d20ae099e7db6a4cd9de14c777fd6a66cdb2",
-        "factory": "0x14721b10b280d06def3927bba591d20ae099e7db6a4cd9de14c777fd6a66cdb2"
-      },
-      "membershipModule": "0x85f40B007DC5271E19c4272A3F7A190D04162a21",
-      "treasuryModule": "0x8B0AC1F0cE138e788A311c4E9b27dB1fA96Bc9FD",
-      "governanceModule": "0x5589b091471ee1372Ff77fa8821f67bd02c14fcd",
-      "councilModule": "0xE950d68711F8eB90B7A615Be6371d662c83214fE",
-      "templDeployer": "0x4F52d335840097E76B71d6E3b4977D5Bd17C8289",
-      "factory": "0xE1352B981E6cc3229b260a268d1F800FB30aa286",
-      "factoryBlock": null
+      "membershipModule": "0xE84cD373cA2d451dc37D3f7b699F1bB42C26f6c0",
+      "treasuryModule": "0x5Bc16C2DF2852baA6767B1C71473B20B33C5BebB",
+      "governanceModule": "0x03eD8E9F64aa49e2c2A0E6E93522D0f78BcE7B26",
+      "councilModule": "0x80062a8F42C3f15e9cd4d1371de65ad378D93f28",
+      "templDeployer": "0x5B5438d0652F3919632F800eF8476c75cf4b9B61",
+      "factory": "0xDC370D07A4828a113804401202Af72c4a15309bD",
+      "factoryBlock": 41077420
     }
   }
 }
