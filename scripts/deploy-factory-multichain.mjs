@@ -16,8 +16,8 @@ const TREASURY_DEFAULT = "0x420f7D96FcEFe9D4708312F454c677ceB61D8420";
 const TARGET_CHAINS = [
   { name: "mainnet", chainId: 1n, rpcEnv: "RPC_MAINNET_URL" },
   { name: "base", chainId: 8453n, rpcEnv: "RPC_BASE_URL" },
-  { name: "optimism", chainId: 10n, rpcEnv: "RPC_OPTIMISM_URL" },
-  { name: "arbitrum", chainId: 42161n, rpcEnv: "RPC_ARBITRUM_URL" }
+  // { name: "optimism", chainId: 10n, rpcEnv: "RPC_OPTIMISM_URL" },
+  // { name: "arbitrum", chainId: 42161n, rpcEnv: "RPC_ARBITRUM_URL" }
 ];
 
 function loadArtifact(file, name) {
@@ -247,8 +247,24 @@ async function main() {
 
   console.log("\nVerification commands:");
   for (const [name, data] of Object.entries(results.chains)) {
+    console.log(`\n${name}:`);
     console.log(
-      `${name}: npx hardhat verify --network ${name} ${data.factory} ${factoryDeployer} ${protocolFeeRecipient} ${protocolBps} ${data.membershipModule} ${data.treasuryModule} ${data.governanceModule} ${data.councilModule} ${data.templDeployer}`
+      `  npx hardhat verify --network ${name} --contract contracts/TemplMembership.sol:TemplMembershipModule ${data.membershipModule}`
+    );
+    console.log(
+      `  npx hardhat verify --network ${name} --contract contracts/TemplTreasury.sol:TemplTreasuryModule ${data.treasuryModule}`
+    );
+    console.log(
+      `  npx hardhat verify --network ${name} --contract contracts/TemplGovernance.sol:TemplGovernanceModule ${data.governanceModule}`
+    );
+    console.log(
+      `  npx hardhat verify --network ${name} --contract contracts/TemplCouncil.sol:TemplCouncilModule ${data.councilModule}`
+    );
+    console.log(
+      `  npx hardhat verify --network ${name} --contract contracts/TemplDeployer.sol:TemplDeployer ${data.templDeployer}`
+    );
+    console.log(
+      `  npx hardhat verify --network ${name} --contract contracts/TemplFactory.sol:TemplFactory ${data.factory} ${factoryDeployer} ${protocolFeeRecipient} ${protocolBps} ${data.membershipModule} ${data.treasuryModule} ${data.governanceModule} ${data.councilModule} ${data.templDeployer}`
     );
   }
 }
