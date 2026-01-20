@@ -49,6 +49,10 @@ function parseBoolean(value) {
   return /^(?:1|true|yes)$/i.test(trimmed);
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function normalizeNetworkName(value) {
   return typeof value === "string" ? value.trim() : "";
 }
@@ -285,21 +289,46 @@ function buildCurveArgument(curve) {
   return [primaryTuple, extraTuples];
 }
 
-async function verifyContract({ label, address, contract, constructorArguments }) {
-  try {
-    await hre.run("verify:verify", {
-      address,
-      contract,
-      constructorArguments
-    });
-    console.log(`Verified ${label} at ${address}`);
-  } catch (err) {
-    const message = err?.message || String(err);
-    if (/already verified/i.test(message)) {
-      console.log(`${label} ${address} is already verified.`);
+function shouldRetryVerify(message) {
+  return /does not have bytecode|recently deployed|awaiting confirmation|not yet indexed/i.test(message);
+}
+
+function resolveVerifySettings() {
+  const retryRaw = process.env.VERIFY_RETRIES;
+  const delayRaw = process.env.VERIFY_RETRY_DELAY_MS;
+  const retries = Number.isFinite(Number(retryRaw)) ? Math.max(0, Math.trunc(Number(retryRaw))) : 6;
+  const delayMs = Number.isFinite(Number(delayRaw)) ? Math.max(0, Math.trunc(Number(delayRaw))) : 20000;
+  return { retries, delayMs };
+}
+
+function shouldVerifyModules() {
+  return parseBoolean(process.env.VERIFY_MODULES || process.env.VERIFY_ALL);
+}
+
+async function verifyContract({ label, address, contract, constructorArguments, retries = 0, delayMs = 15000 }) {
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    try {
+      await hre.run("verify:verify", {
+        address,
+        contract,
+        constructorArguments
+      });
+      console.log(`Verified ${label} at ${address}`);
       return;
+    } catch (err) {
+      const message = err?.message || String(err);
+      if (/already verified/i.test(message)) {
+        console.log(`${label} ${address} is already verified.`);
+        return;
+      }
+      if (attempt < retries && shouldRetryVerify(message)) {
+        const waitSeconds = Math.round(delayMs / 1000);
+        console.warn(`[verify] ${label} not ready; retrying in ${waitSeconds}s...`);
+        await sleep(delayMs);
+        continue;
+      }
+      throw err;
     }
-    throw err;
   }
 }
 
@@ -309,34 +338,51 @@ async function verifyTemplDeployment({
   membershipModuleAddress,
   treasuryModuleAddress,
   governanceModuleAddress,
-  councilModuleAddress
+  councilModuleAddress,
+  verifyModules,
+  retries,
+  delayMs
 }) {
   console.log("\nAuto-verifying contracts...");
-  await verifyContract({
-    label: "Membership module",
-    address: membershipModuleAddress,
-    contract: "contracts/TemplMembership.sol:TemplMembershipModule"
-  });
-  await verifyContract({
-    label: "Treasury module",
-    address: treasuryModuleAddress,
-    contract: "contracts/TemplTreasury.sol:TemplTreasuryModule"
-  });
-  await verifyContract({
-    label: "Governance module",
-    address: governanceModuleAddress,
-    contract: "contracts/TemplGovernance.sol:TemplGovernanceModule"
-  });
-  await verifyContract({
-    label: "Council module",
-    address: councilModuleAddress,
-    contract: "contracts/TemplCouncil.sol:TemplCouncilModule"
-  });
+  if (verifyModules) {
+    await verifyContract({
+      label: "Membership module",
+      address: membershipModuleAddress,
+      contract: "contracts/TemplMembership.sol:TemplMembershipModule",
+      retries,
+      delayMs
+    });
+    await verifyContract({
+      label: "Treasury module",
+      address: treasuryModuleAddress,
+      contract: "contracts/TemplTreasury.sol:TemplTreasuryModule",
+      retries,
+      delayMs
+    });
+    await verifyContract({
+      label: "Governance module",
+      address: governanceModuleAddress,
+      contract: "contracts/TemplGovernance.sol:TemplGovernanceModule",
+      retries,
+      delayMs
+    });
+    await verifyContract({
+      label: "Council module",
+      address: councilModuleAddress,
+      contract: "contracts/TemplCouncil.sol:TemplCouncilModule",
+      retries,
+      delayMs
+    });
+  } else {
+    console.log("[verify] Skipping module verification (set VERIFY_MODULES=true to enable).");
+  }
   await verifyContract({
     label: "TEMPL",
     address: templAddress,
     contract: "contracts/TEMPL.sol:TEMPL",
-    constructorArguments
+    constructorArguments,
+    retries,
+    delayMs
   });
 }
 
@@ -931,6 +977,8 @@ async function main() {
   const isLocalChain = network.chainId === 31337n || network.chainId === 1337n;
   const autoVerify = shouldAutoVerify();
   const hasVerifyKey = hasVerifyApiKey(networkName);
+  const verifyModules = shouldVerifyModules();
+  const verifySettings = resolveVerifySettings();
   let autoVerifySucceeded = false;
   if (autoVerify && !isLocalChain) {
     if (!hasVerifyKey) {
@@ -943,7 +991,10 @@ async function main() {
           membershipModuleAddress,
           treasuryModuleAddress,
           governanceModuleAddress,
-          councilModuleAddress
+          councilModuleAddress,
+          verifyModules,
+          retries: verifySettings.retries,
+          delayMs: verifySettings.delayMs
         });
         autoVerifySucceeded = true;
       } catch (err) {
