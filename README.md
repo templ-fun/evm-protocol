@@ -6,8 +6,8 @@ Templ lets anyone create on-chain, token‑gated groups (“templs”) that accr
 
 
 - Protocol Documentation: https://docs.templ.fun/
-- [TEMPL Factory v0.71 Ethereum Mainnet (not permissionless yet)](https://etherscan.io/address/0xDC370D07A4828a113804401202Af72c4a15309bD)
-- [TEMPL Factory v0.71 Base (not permissionless yet)](https://basescan.org/address/0xDC370D07A4828a113804401202Af72c4a15309bD)
+- TEMPL Factory v0.71 Ethereum Mainnet (not permissionless yet): [`0xDC370D07A4828a113804401202Af72c4a15309bD`](https://etherscan.io/address/0xDC370D07A4828a113804401202Af72c4a15309bD)
+- TEMPL Factory v0.71 Base (not permissionless yet): [`0xDC370D07A4828a113804401202Af72c4a15309bD`](https://basescan.org/address/0xDC370D07A4828a113804401202Af72c4a15309bD)
 
 ## Protocol Guide
 
